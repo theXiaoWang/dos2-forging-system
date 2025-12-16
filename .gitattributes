@@ -1,0 +1,19 @@
+# Git attributes for DOS2 mod files
+
+# Text files (source code, configs, documentation)
+*.lsx text eol=lf
+*.lsf text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
+
+# Ensure consistent line endings
+*.xml text eol=lf
+
+# Binary files (should be ignored, but if needed)
+*.data binary
+*.bin binary
+*.lsb binary
+*.pak binary
+*.dds binary
+*.gr2 binary
+

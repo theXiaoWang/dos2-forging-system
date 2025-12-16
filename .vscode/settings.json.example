@@ -1,0 +1,11 @@
+{
+    // Example VS Code settings for DOS2 mod development
+    // Copy this file to settings.json and update the path to match your local installation
+    
+    // For BG3 Mod Helper (if using):
+    // "bg3ModHelper.rootModPath": "C:\\Path\\To\\Your\\DOS2\\DefEd\\Data\\Mods\\forging_system_d581d214-2dd4-4690-bb44-e371432f1bfc"
+    
+    // Or use workspace-relative path:
+    // "bg3ModHelper.rootModPath": "${workspaceFolder}"
+}
+
