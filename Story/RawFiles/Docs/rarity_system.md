@@ -58,7 +58,7 @@ Before calculating averages or stability, the system checks for the presence of 
 ### 4.1. Logic Description
 The forge creates a "Stability Curve" centered on the mathematical average of the two input rarities.
 
-We use an adjusted **Gaussian Distribution** where the "Spread" ($\sigma$) is dynamic. A wider gap between input items creates a stronger "gravity" effect (a tighter curve), forcing the result toward the middle and punishing extremes.
+We use an adjusted **Gaussian Distribution** where the "Spread" ($\sigma$) is dynamic. A wider input gap increases the distance from the mean for the extremes, so the overall result is still strongly pulled toward the middle and extreme outcomes stay unlikely.
 
 ### 4.2. Boundary Rules
 The result is strictly clamped between the input rarities.
@@ -93,6 +93,15 @@ $$Weight_t = e^{-\frac{(t - M)^2}{2\sigma^2}}$$
 | **Legendary (5)** | **14.2%** | **Lucky** |
 | **Divine (6)** | **2.7%** | **Jackpot** (Keep Divine) |
 
+#### Scenario 2: The "Narrow Gap" (Epic + Legendary)
+* **Input:** Rarity 4 + Rarity 5
+* **Outcome:** With only two possible results (clamped between inputs), the distribution is evenly split.
+
+| Candidate Rarity | Normalized % | Outcome Verdict |
+| :--- | :--- | :--- |
+| **Epic (4)** | **50.0%** | **Likely Outcome** |
+| **Legendary (5)** | **50.0%** | **Lucky** (Upgrade) |
+
 ---
 
 ## 5. Mechanism B: Rarity Break (Ascension)
@@ -108,13 +117,13 @@ Identical rarities create a highly stable environment (~88% chance to remain the
 * `σ (Sigma)` = `0.5` (Fixed constant)
 * `Max Rarity Bound` = `Rarity_A + 1`
 
-### 5.3. Example Scenario (Rare + Rare)
-* **Input:** Rarity 3 + Rarity 3
+### 5.3. Example Scenario (Legendary + Legendary)
+* **Input:** Rarity 5 + Rarity 5
 
 | Candidate Rarity | Normalized % | Outcome Verdict |
 | :--- | :--- | :--- |
-| **Rare (3)** | **88.1%** | **Stability** (No Change) |
-| **Epic (4)** | **11.9%** | **Ascension** (Free Upgrade) |
+| **Legendary (5)** | **88.1%** | **Stability** (No Change) |
+| **Divine (6)** | **11.9%** | **Ascension** (Free Upgrade) |
 
 ---
 
