@@ -7,19 +7,19 @@ This system aims to deliver a more RPG-like forging experience, one that can be 
 
 When you forge two items, this system decides which and how **blue text stats** are inherited by the new forged item.
 - If both items share the same stat line, you’re more likely to **keep the overlapping stat** (it’s safer).
-- If both items share the same stat **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as a **shared stat**, but the forged item will **merge the numbers** into a new  value.
+- If both items share the same stat **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as a **shared stat**, but the forged item will **merge the numbers** into a new  value based on the parents' value.
 - If both items are very different, it’s **riskier but can be more rewarding** (there are more possible outcomes).
-- You’ll usually get a **steady, average** result, but you can still get **lucky** or **unlucky** streaks.
+- Depending on your forging strategy, You could get a **steady, average** result, or a **unpredictable, volatile** result which can get **lucky** or **unlucky** streaks.
 
 In short: 
 - **More matching lines = more predictable forging**, and **vice versa** 
-- **Matching stats values = merged numbers more consistent**.
+- **Closer stats values = merged numbers more consistent**.
 
 *Below is the technical breakdown for players who want the exact maths.*
 
 ---
 ## 2. Forging steps
-1. **Rarity first**: run the **[Rarity System](rarity_system.md)** to get the item’s **max stat slots**.
+1. **Rarity first**: run the **[Rarity System](rarity_system.md)** to decide the forged item's rarity and get the item’s **max stat slots**.
 2. **Stats second**: work out which stats carry over and what are the numbers (shared + rolled from pool).
 3. **Cap last**: if the result has more stats than the **max stat slots**, remove extra stats (pool-derived ones first).
 
@@ -47,7 +47,9 @@ Defined by the **[Rarity System](rarity_system.md)**:
 
 ---
 
-## 3. Inheritance rules (stats)
+## 3. Stats Inheritance rules
+
+Two rules define inheritance: the [Merging rule](#31-merging-rule-how-numbers-are-merged) and the [Selection rule](#32-selection-rule-shared--pool--cap).
 
 #### Key values
 
@@ -63,7 +65,7 @@ Defined by the **[Rarity System](rarity_system.md)**:
 - **Final**: stat lines after the cap is applied.
 
 ---
-### 3.1. Shared stat values rule (how numbers are merged)
+### 3.1. Merging rule (how numbers are merged)
 
 Sometimes both parents have the **same stat**, but the **numbers** are different:
 - `+10% Critical Chance` vs `+14% Critical Chance`
@@ -75,7 +77,7 @@ In this system, those are still treated as **Shared stats (S)** (same stat **key
 - **Stat key**: the identity of the stat (e.g. `CriticalChance`, `Strength`). This ignores the number.
 - **Stat value**: the numeric magnitude (e.g. `10`, `14`, `3`, `4`).
 
-#### Merge formula (RPG-style: centred, but volatile)
+#### Merge formula (RPG-style)
 
 Given parent values $a$ and $b$ for the same stat key:
 
@@ -144,7 +146,7 @@ Using Example A (`+10%` vs `+14%` Critical Chance):
    - $value = clamp(12 \times 0.90,\ 8.5,\ 16.1) = 10.8$ → rounds to **11%**
 
 ---
-### 3.2. Stat inheritance rule (shared + pool + cap)
+### 3.2. Selection rule (shared + pool + cap)
 
 Now that **Shared stats (S)** includes the value-merge behaviour above (same stat key, merged number if needed), the next step:
 - Count how many shared stats you have (**S**).

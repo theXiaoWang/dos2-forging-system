@@ -6,11 +6,11 @@ A comprehensive item (Weapon/Shield) forging system for Divinity: Original Sin 2
 
 This mod adds a sophisticated forging system that allows players to combine items with a balanced probability distribution system. The system prevents exploitation while maintaining the excitement of crafting through two main mechanisms:
 
-- **Gravity Well (Different Tiers)**: When combining items of different tiers, the resulting tier is pulled towards the average (with higher odds of landing near the middle rather than always upgrading).
-- **Tier Break (Same Tiers)**: When combining items of the same tier, there is a chance to ascend to the next tier (a “breakthrough” outcome).
-- **Shared vs Pool stats**: Stats that appear on both items are treated as shared (kept), while non-overlapping stats form a pool that is rolled from (risk/reward).
-- **Shared stat value merge**: If a shared stat exists on both items but with different numbers (e.g. `+10%` vs `+14%`), the new item rolls a merged value using a tight/wide RNG model.
-- **Rarity cap clean-up**: After inheritance, if the stat count exceeds the tier’s max stat slots, excess stats are removed (pool-derived stats first).
+- **Gravity Well (Different Rarity)**: When combining items of different rarity, the resulting rarity is pulled towards the average (with higher odds of landing near the middle rather than always upgrading).
+- **Rarity Break (Same Rarity)**: When combining items of the same rarity, there is a chance to ascend to the next rarity (a “breakthrough” outcome).
+- **Merging rule (shared stat values)**: If a shared stat exists on both items but with different numbers (e.g. `+10%` vs `+14%`), the new item rolls a merged value using a tight/wide RNG model.
+- **Selection rule (shared vs pool stats)**: Stats that appear on both items are treated as shared (kept), while non-overlapping stats form a pool that is rolled from (risk/reward).
+- **Rarity cap clean-up**: After inheritance, if the stat count exceeds the rarity’s max stat slots, excess stats are removed (pool-derived stats first).
 
 ## Mod Information
 
@@ -28,29 +28,29 @@ This mod adds a sophisticated forging system that allows players to combine item
 See `Story/RawFiles/Docs/` for detailed system documentation:
 
 - [`rarity_system.md`](Story/RawFiles/Docs/rarity_system.md) – Rarity inheritance and stability system specification
-- [`stats_inheritance_system.md`](Story/RawFiles/Docs/stats_inheritance_system.md) – Stat inheritance rules (shared/pool logic and value merge maths)
+- [`stats_inheritance_system.md`](Story/RawFiles/Docs/stats_inheritance_system.md) – Stats inheritance rules (merging + selection)
 
 ### Functional Summary: Stat Inheritance System (v3.0)
 
 #### 1. Core Philosophy
-The system balances **predictability** (Smart Crafting) with **volatility** (Chaos Crafting) to create a thrilling RPG forging experience.
+The system balances **predictability** (Safe Forging) with **volatility** (YOLO Forging) to create a thrilling RPG forging experience.
 
-- **Smart Crafting**: Combining items with matching stats allows players to "lock in" desired traits and merge numeric values safely.
-- **Chaos Crafting**: Combining mismatched items creates a large "Pool" of potential stats, introducing high variance where players might lose stats or hit a "Jackpot."
+- **Safe Forging**: Combining items with matching stats allows players to "lock in" desired stats and merge numeric values safely.
+- **YOLO Forging**: Combining mismatched items creates a large "Pool" of potential stats, introducing high variance where players might lose stats or hit a "Jackpot."
 
 ---
 
 #### 2. The Forging Process (3-Step Flow)
 
 ##### Step 1: Rarity First (The Container)
-Before stats are calculated, the **Rarity System** determines the item's tier. This sets the **Max Stat Slots** (Cap), which serves as the hard limit for the item.
+Before stats are calculated, the **[Rarity System](Story/RawFiles/Docs/rarity_system.md)** determines the item's tier. This sets the **Max Stat Slots** (Cap), which serves as the hard limit for the item.
 
 | Rarity | Common | Uncommon | Rare | Epic | Legendary | Divine | Unique |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Cap** | 1 | 2 | 4 | 6 | 7 | 8 | 10 |
 
 ##### Step 2: Stats Second (The Content)
-The system sorts all stats from the parent items into two buckets: **Shared Stats** (guaranteed) and **Pool Stats** (gambled).
+The system sorts all stats from the parent items into two buckets: **Shared Stats** (guaranteed) and **Pool Stats** (gambled). For the full rules, see **[Stats Inheritance System](Story/RawFiles/Docs/stats_inheritance_system.md)**.
 
 ##### Step 3: Cap Last (The Cleanup)
 If the total number of inherited stats exceeds the **Max Stat Slots** defined in Step 1, the system removes excess stats, strictly prioritising the removal of **Pool Stats** first to protect the **Shared Stats**.

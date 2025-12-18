@@ -2,7 +2,7 @@
 
 ## 1. System Overview
 
-This module determines the **Rarity (Color)** of any item created in the forge. It operates independently of the item's stats and replaces linear upgrades with a probability distribution system.
+This module determines the **Rarity (Color)** of any forged item. It operates independently of the item's stats and replaces linear upgrades with a probability distribution system.
 
 The system follows three core rules, evaluated in order:
 
