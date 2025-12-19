@@ -1,17 +1,22 @@
-# Functional Specification: Rarity Determination System (v1.5)
+# Rarity System
 
 ## 1. System Overview
 
 This module determines the **Rarity (Color)** of any forged item. It operates independently of the item's stats and replaces linear upgrades with a probability distribution system.
 
+#### Multiplayer + RNG note (implementation)
+If you sample an actual rarity outcome from the probabilities in this document at runtime, do it **host-authoritatively** and drive the sampling from the forge’s deterministic seed (`forgeSeed`), then replicate the final result to clients.
+
 The system follows three core rules, evaluated in order:
 
 ### 1.0. Ingredient eligibility (hard rule)
-Weapons that have **any rune socket effects** must **not** be accepted as forging ingredients.
+Weapons with **socketed runes** must **not** be accepted as forging ingredients.
 
 Reject an ingredient if it has:
 - Any **runes inserted** into sockets, and/or
 - Any **stats modifiers or granted skills originating from rune sockets**.
+
+Empty rune slots are allowed.
 
 ### 1.1. The "Unique Dominance" (Global Override)
 If **any** ingredient used in the forge is of **Unique** rarity, the forging process shifts logic entirely. The Unique item **consumes** the other ingredient as "fuel."
@@ -139,54 +144,5 @@ Identical rarities create a highly stable environment (~88% chance to remain the
 
 ---
 
-## 6. Implementation Plan (Pseudocode)
-
-```python
-FUNCTION GetRarityDistribution(Rarity_A, Rarity_B):
-
-    UNIQUE_ID = 8
-    GLOBAL_MAX_CAP = 6  # Divine Rarity ID
-
-    # 1. GLOBAL OVERRIDE: UNIQUE DOMINANCE
-    # If either item is Unique, it consumes the other. 
-    # The output rarity is strictly Unique.
-    IF Rarity_A == UNIQUE_ID OR Rarity_B == UNIQUE_ID:
-        RETURN { UNIQUE_ID : 1.0 }
-
-    # 2. DEFINE BOUNDS
-    Min_T = MIN(Rarity_A, Rarity_B)
-
-    # 3. HANDLING SAME RARITY SCENARIOS
-    IF Rarity_A == Rarity_B:
-        # EXCEPTION: Divine + Divine = 100% Divine
-        IF Rarity_A >= GLOBAL_MAX_CAP:
-            RETURN { Rarity_A : 1.0 }
-
-        # Standard Rarity Break
-        Max_T = Rarity_A + 1
-        Sigma = 0.5  # Fixed tight spread for stability
-
-    # 4. HANDLING DIFF RARITY SCENARIOS
-    ELSE:
-        Max_T = MAX(Rarity_A, Rarity_B)
-        Gap = ABS(Rarity_A - Rarity_B)
-        # 0.12 Multiplier strengthens gravity for wider gaps
-        Sigma = 0.5 + (0.12 * Gap)
-
-    # 5. CALCULATE WEIGHTS (Gaussian Loop)
-    Mean = (Rarity_A + Rarity_B) / 2
-    Weights = {}
-    Total_Weight = 0
-
-    FOR t FROM Min_T TO Max_T:
-        # Formula: e^(-((x-u)^2) / (2s^2))
-        Raw_W = EXP( -1 * ((t - Mean)^2) / (2 * Sigma^2) )
-        Weights[t] = Raw_W
-        Total_Weight = Total_Weight + Raw_W
-
-    # 6. NORMALIZE TO PERCENTAGE
-    Final_Probs = {}
-    FOR t FROM Min_T TO Max_T:
-        Final_Probs[t] = Weights[t] / Total_Weight
-
-    RETURN Final_Probs
+## 6. Implementation reference
+- [forging_system_implementation_blueprint_se.md → Appendix: Pseudocode reference](forging_system_implementation_blueprint_se.md#appendix-pseudocode-reference)

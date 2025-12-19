@@ -1,1 +1,0 @@
-Apart from stats, need to think about skills, how are them going to be inherited. Skills and stats are separate, so the inheritance logic should be not too different, but because it's skill, it appears much less than stats, for example, a unique can mostly have 3 skills. Brainstorm ideas for the skills inheritance mechanism 

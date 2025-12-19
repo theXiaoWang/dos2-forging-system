@@ -20,16 +20,18 @@ In short:
 ---
 ## 2. Forging steps
 ### 2.0. Ingredient eligibility (hard rule)
-Weapons that have **any rune socket effects** must **not** be accepted as forging ingredients.
+Weapons with **socketed runes** must **not** be accepted as forging ingredients.
 
 Reject an ingredient if it has:
 - Any **runes inserted** into sockets, and/or
 - Any **stats modifiers or granted skills originating from rune sockets**.
 
+Empty rune slots are allowed.
+
 1. **Rarity first**: run the **[Rarity System](rarity_system.md)** to decide the forged item's rarity and get the item’s **max stat slots**.
 2. **Stats second**: work out which stats carry over and what are the numbers (shared + rolled from pool).
 3. **Cap last**: if the result has more stats than the **max stat slots**, remove extra stats (pool-derived ones first).
-4. **Granted skills (separate cap)**: granted skills are inherited using a **separate, vanilla-aligned cap**. See **[Section 5](#5-granted-skill-inheritance-vanilla-aligned)**.
+4. **Granted skills (separate cap)**: granted skills are inherited using a **separate, vanilla-aligned cap**. See **[Section 5](#5-granted-skill-inheritance)**.
 
 ### 2.1. The two stat lists
 - **Shared stats (S)**: stats on **both** parents (guaranteed).
@@ -40,6 +42,23 @@ Reject an ingredient if it has:
 A "Two-Handed Greatsword" could appear at different rarities.  
 - If the sword is **Rare** (Rarity ID 3), it can have up to **5 blue stats** (for example: +12% Critical Chance, +2 Strength, +1 Warfare, 10% chance to set Bleeding, +1 Two-Handed).
 - If the same sword is **Epic** (Rarity ID 4), it can have up to **6 blue stats**.  
+
+### 2.3. Rune slots (simple inheritance rule)
+Rune slots are inherited separately from blue stats and granted skills.
+
+If both parents have **empty** rune slots (no runes socketed), the forged item’s rune slots are:
+
+Take the average of the two parents’ rune slot counts, then **round up**.
+
+$$RuneSlots_{out} = \lceil (RuneSlots_A + RuneSlots_B) / 2 \rceil$$
+
+Examples:
+
+| Parent A slots | Parent B slots | Forged slots |
+| :---: | :---: | :---: |
+| 1 | 2 | 2 |
+| 2 | 3 | 3 |
+| 1 | 3 | 2 |
 
 Defined by the **[Rarity System](rarity_system.md)**:
 
@@ -211,6 +230,9 @@ The system rolls a **luck adjustment** which is essentially a **variance** that 
 - **Good roll**: you try to keep 1 more, and you may chain further up.
 
 **Safety rule (always true):** you can’t keep fewer than **0** pool stats, and you can’t keep more than the **pool size**.
+
+Multiplayer note:
+- This luck roll (and the later random selection of which pool stats you actually take) should be rolled **host-authoritatively** and driven by the forge’s deterministic seed (`forgeSeed`), for consistency.
 
 ### Step 5: Build the result and apply the cap
 1. **Plan total stats**:
@@ -595,121 +617,17 @@ Before the rarity cap, the forged item ends up with between **2** and **14** sta
 
 ---
 
-## 4. Implementation details
-
-### 4.1. Name mapping (doc terms → pseudocode variables)
-
-| Doc term | Pseudocode name | Meaning |
-| :--- | :--- | :--- |
-| Shared stats | `sharedStats` | Stats present on both parents |
-| Pool stats | `poolStats` | Stats that are not shared (unique to either parent) |
-| Pool size | `poolCount` | How many stats are in the pool |
-| Shared count | `sharedCount` | How many shared stats you have |
-| Expected baseline | `expectedPoolPicks` | Half the pool, rounded up |
-| Luck adjustment | `luckShift` | Luck adding/removing pool picks (can chain) |
-| Max stat slots | `maxAllowed` | Max stat slots allowed by rarity |
-
-### 4.2. Pseudocode
-
-```python
-FUNCTION ExecuteForging(Item_A, Item_B):
-
-    # Name mapping used in this pseudocode:
-    # - SharedStats: stats on both parents (guaranteed)
-    # - PoolStats:   stats that are not shared between parents (unique to either parent)
-    # - ExpectedPoolPicks: round_up(PoolCount / 2)
-    # - LuckShift: adjustment to the pool picks (can chain, but is capped)
-    # - PlannedTotalRaw: SharedCount + ExpectedPoolPicks + LuckShift
-    # - PoolPicks: clamp(ExpectedPoolPicks + LuckShift, 0, PoolCount)
-    # - PlannedTotal: SharedCount + PoolPicks (before rarity cap)
-    # - MaxAllowed: max stat slots allowed by the rarity system
-
-    # 1. RARITY FIRST (sets MaxAllowed)
-    rarityId = RaritySystem.Calculate(Item_A, Item_B)
-    maxAllowed = GetCap(rarityId)
-
-    # 2. SPLIT STATS
-    # Shared stats are defined by stat KEY (not exact string match).
-    # If both parents have the same key but different values, roll a merged value (see section 3.1).
-    poolStats = PoolByKey(Item_A.Stats, Item_B.Stats)  # keys that exist on only one parent
-    poolCount = Length(poolStats)
-
-    # Value merge volatility is global (see section 3.1), so it does not depend on Tier.
-    sharedStats = SharedByKeyWithMergedValues(Item_A.Stats, Item_B.Stats)
-
-    sharedCount = Length(sharedStats)
-    # Expected baseline: round_up(poolCount / 2), except poolCount == 1 uses 0 (50/50 keep-or-lose)
-    expectedPoolPicks = (poolCount + 1) // 2  # round_up(poolCount / 2)
-    IF poolCount == 1:
-        expectedPoolPicks = 0
-
-    # LuckShift caps (so you never try to pick fewer than 0 or more than poolCount)
-    minLuckShift = -expectedPoolPicks
-    maxLuckShift = poolCount - expectedPoolPicks
-
-    # 3. DETERMINE TIER & CONSTANTS
-    tier = 1
-    IF poolCount >= 8: tier = 4
-    ELSE IF poolCount >= 5: tier = 3
-    ELSE IF poolCount >= 2: tier = 2
-
-    # [Bad, Neutral, Good] in percentages
-    firstRollChances = [0, 50, 50]
-    IF tier == 2: firstRollChances = [12, 50, 38]
-    IF tier == 3: firstRollChances = [28, 50, 22]
-    IF tier == 4: firstRollChances = [45, 40, 15]
-
-    # [DownChainChance, UpChainChance] in percentages
-    chainChances = [0, 0]
-    IF tier == 2: chainChances = [12, 22]
-    IF tier == 3: chainChances = [28, 30]
-    IF tier == 4: chainChances = [45, 30]
-
-    # 4. ROLL LuckShift (the chain)
-    luckShift = 0
-    roll = Random(0, 100)
-
-    # BAD (down chain)
-    IF roll < firstRollChances[0]:
-        luckShift = -1
-        WHILE (luckShift > minLuckShift AND Random(0, 100) < chainChances[0]):
-            luckShift -= 1
-
-    # NEUTRAL
-    ELSE IF roll < (firstRollChances[0] + firstRollChances[1]):
-        luckShift = 0
-
-    # GOOD (up chain)
-    ELSE:
-        luckShift = 1
-        # If the pool is too small, good luck cannot increase picks beyond maxLuckShift.
-        IF luckShift > maxLuckShift:
-            luckShift = maxLuckShift
-
-        WHILE (luckShift < maxLuckShift AND Random(0, 100) < chainChances[1]):
-            luckShift += 1
-
-    poolPicks = Clamp(expectedPoolPicks + luckShift, 0, poolCount)
-
-    # 5. BUILD FINAL STATS
-    finalStats = sharedStats.Copy()
-    IF poolPicks > 0:
-        AddRandom(finalStats, poolStats, poolPicks)
-
-    # 6. APPLY RARITY CAP LAST (remove pool-picked stats first)
-    IF Length(finalStats) > maxAllowed:
-        Resize(finalStats, maxAllowed)
-
-    RETURN finalStats
-```
+## 4. Implementation reference
+- [forging_system_implementation_blueprint_se.md → Appendix: Pseudocode reference](forging_system_implementation_blueprint_se.md#appendix-pseudocode-reference)
 
 ---
-## 5. Granted skill inheritance (vanilla-aligned)
+## 5. Granted skill inheritance
 This section adds **granted skills** as a **separate inheritance channel** from normal “blue stats”.
 
 - **Vanilla-aligned caps**: skills are tightly capped by rarity (Epic 1, Legendary 1, Divine 2).
 - **Separate from stat slots**: granted skills do **not** consume your normal **Max stat slots (this mod)**.
 - **Stable randomness**: selection/trimming is **random but seeded per forge**, so it is stable for that forge.
+- **Multiplayer consistency**: use the same `forgeSeed` approach as stats, and roll skills **host-authoritatively** (clients receive the final result).
 
 ### 5.1. What counts as a “granted skill”
 
@@ -776,7 +694,7 @@ We define a per-attempt gain chance:
 Where:
 - `base(Epic) = 25%`
 - `base(Legendary) = 25%`
-- `base(Divine) = 28%` (minor bump over Epic/Legendary)
+- `base(Divine) = 28%`
 
 And the pool-size multiplier is:
 
@@ -784,15 +702,16 @@ And the pool-size multiplier is:
 | :---: | :---: |
 | 1 | 1.0 |
 | 2 | 1.4 |
-| 3+ | 1.8 |
+| 3 | 1.6 |
+| 4+ | 2.4 |
 
 So the actual per-attempt gain chances are:
 
-| Output rarity | `P_remaining=1` | `P_remaining=2` | `P_remaining=3` |
-| :--- | :---: | :---: | :---: |
-| Epic | 25.0% | 35.0% | 45.0% |
-| Legendary | 25.0% | 35.0% | 45.0% |
-| Divine | 28.0% | 39.2% | 50.4% |
+| Output rarity | `P_remaining=1` | `P_remaining=2` | `P_remaining=3` | `P_remaining=4+` |
+| :--- | :---: | :---: | :---: | :---: |
+| Epic | 25.0% | 35.0% | 40.0% | 60.0% |
+| Legendary | 25.0% | 35.0% | 40.0% | 60.0% |
+| Divine | 28.0% | 39.2% | 44.8% | 67.2% |
 
 #### Seeded, stable-per-forge randomness
 All randomness in this section must be driven by a single forge seed:
@@ -802,6 +721,10 @@ All randomness in this section must be driven by a single forge seed:
   - trimming when over cap.
 
 This makes outcomes random, but **stable for that forge** (deterministic for multiplayer + debugging).
+
+Notes:
+- **Host-authoritative**: the host/server should be the only machine that rolls this seeded randomness. Clients should receive the final skills/stats result from the host.
+- **Save/load fishing**: if `forgeSeed` changes each attempt, a player can save before forging and reload to try for different outcomes. Seeding alone does not prevent that unless `forgeSeed` is also stable across reload for the same pre-forge state.
 
 ### 5.5. Applying the cap (including overflow handling)
 
@@ -828,7 +751,7 @@ Notes:
 - They **ignore the optional 5% replace roll**, because replace mainly changes *which* skill you have, not the cap itself.
 - Weapon pools only contain weapon skills; shield pools only contain shield skills.
 
-#### Scenario A: `Sₛ = 0`, `Pₛ = 1` (no shared, one in pool)
+#### Scenario A: `Sₛ = 0`, `Pₛ = 1`
 
 Weapon example pool: `{Projectile_SkyShot}`
 Shield example pool: `{Projectile_BouncingShield}`
@@ -839,7 +762,7 @@ Shield example pool: `{Projectile_BouncingShield}`
 | Legendary (cap 1) | **75.0%** | **25.0%** | 0% |
 | Divine (cap 2) | **51.84%** | **48.16%** | 0% |
 
-#### Scenario B: `Sₛ = 0`, `Pₛ = 2` (no shared, two in pool)
+#### Scenario B: `Sₛ = 0`, `Pₛ = 2`
 
 Weapon example pool: `{Projectile_SkyShot, Target_SerratedEdge}`
 Shield example pool: `{Projectile_BouncingShield, Shout_Taunt}`
@@ -850,17 +773,27 @@ Shield example pool: `{Projectile_BouncingShield, Shout_Taunt}`
 | Legendary (cap 1) | **65.0%** | **35.0%** | 0% |
 | Divine (cap 2) | **36.97%** | **52.06%** | **10.98%** |
 
-#### Scenario C (weapon-only max in strict vanilla): `Sₛ = 0`, `Pₛ = 3`
+#### Scenario C: `Sₛ = 0`, `Pₛ = 3`
 
 Weapon example pool: `{Shout_Whirlwind, Projectile_SkyShot, Target_SerratedEdge}`
 
 | Output rarity | Final 0 skills | Final 1 skill | Final 2 skills |
 | :--- | ---: | ---: | ---: |
-| Epic (cap 1) | **55.0%** | **45.0%** | 0% |
-| Legendary (cap 1) | **55.0%** | **45.0%** | 0% |
-| Divine (cap 2) | **24.60%** | **55.64%** | **19.76%** |
+| Epic (cap 1) | **60.0%** | **40.0%** | 0% |
+| Legendary (cap 1) | **60.0%** | **40.0%** | 0% |
+| Divine (cap 2) | **30.47%** | **51.97%** | **17.56%** |
 
-#### Scenario D: `Sₛ = 1`, `Pₛ = 1` (one shared, one in pool)
+#### Scenario D: `Sₛ = 0`, `Pₛ = 4`
+
+Weapon example pool: `{Shout_Whirlwind, Projectile_SkyShot, Target_SerratedEdge, Shout_BattleStomp}`
+
+| Output rarity | Final 0 skills | Final 1 skill | Final 2 skills |
+| :--- | ---: | ---: | ---: |
+| Epic (cap 1) | **40.0%** | **60.0%** | 0% |
+| Legendary (cap 1) | **40.0%** | **60.0%** | 0% |
+| Divine (cap 2) | **10.76%** | **59.13%** | **30.11%** |
+
+#### Scenario E: `Sₛ = 1`, `Pₛ = 1` (one shared, one in pool)
 
 Weapon example:
 - Shared: `{Shout_Whirlwind}`
@@ -872,7 +805,7 @@ Weapon example:
 | Legendary (cap 1) | **100%** | 0% |
 | Divine (cap 2) | **72.0%** | **28.0%** |
 
-#### Scenario E: `Sₛ = 1`, `Pₛ = 2` (one shared, two in pool)
+#### Scenario F: `Sₛ = 1`, `Pₛ = 2` (one shared, two in pool)
 
 Weapon example:
 - Shared: `{Shout_Whirlwind}`
@@ -923,48 +856,8 @@ Apply `SkillCap = 2`:
 - If you did not gain a pool skill: you stay at 1 skill.
 
 Result:
-- The forged Divine item can still roll up to **8 normal blue stats** (your mod’s cap),
-- but it will have at most **2 granted skills** (vanilla-aligned).
+- The forged Divine item can still roll up to **8 normal blue stats** (the mod’s cap),
+- But it will have at most **2 granted skills** (vanilla-aligned).
 
-### 5.8. Pseudocode (skills channel plug-in)
-
-This is intentionally parallel to the stat logic:
-
-```python
-# GRANTED SKILLS (SEPARATE CHANNEL, VANILLA-ALIGNED)
-# - Identify granted skills by skill ID (from boost definitions with a Skills field).
-# - Only include vanilla rarity-roll skill boosts (BoostType == "Legendary").
-# - Use seeded randomness per forge so results are stable for that forge.
-
-skillCap = GetSkillCap(rarityId)  # Section 5.2 table
-
-sharedSkills = SharedSkillsById(Item_A.GrantedSkills, Item_B.GrantedSkills)
-poolSkills = PoolSkillsById(Item_A.GrantedSkills, Item_B.GrantedSkills)
-
-finalSkills = Dedup(sharedSkills)
-
-# If shared skills exceed cap (rare; typically from previous forging chains), trim seeded.
-IF Length(finalSkills) > skillCap:
-    finalSkills = TrimToCapSeeded(finalSkills, skillCap, forgeSeed)
-
-freeSlots = skillCap - Length(finalSkills)
-
-# Fill free slots with gated gain rolls (skills are precious).
-WHILE (freeSlots > 0 AND Length(poolSkills) > 0):
-    P_remaining = Length(poolSkills)
-    p_attempt = SkillGainChance(rarityId, P_remaining)  # base(rarity) * m(P_remaining), Section 5.4
-    IF RollPercentSeeded(forgeSeed, p_attempt):
-        gained = PickOneSeeded(poolSkills, forgeSeed)
-        finalSkills.Add(gained)
-        poolSkills.Remove(gained)
-    freeSlots -= 1
-
-# Optional replace roll (seeded): 5%
-IF (Length(poolSkills) > 0 AND Length(finalSkills) > 0 AND RollPercentSeeded(forgeSeed, 5)):
-    removed = PickOneSeeded(finalSkills, forgeSeed)
-    added = PickOneSeeded(poolSkills, forgeSeed)
-    finalSkills.Remove(removed)
-    finalSkills.Add(added)
-
-ApplyGrantedSkillsToForgedItem(finalSkills)
-```
+### 5.8. Implementation reference
+- [forging_system_implementation_blueprint_se.md → Appendix: Pseudocode reference](forging_system_implementation_blueprint_se.md#appendix-pseudocode-reference)

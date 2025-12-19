@@ -11,6 +11,26 @@
 - **Story/Osiris hook (control plane)**: detects that your forge recipe was executed and passes GUIDs to Lua.
 - **Lua (Script Extender) logic (data plane)**: reads both parent items, computes rarity + inherited rolls, spawns/updates the result item, and consumes parents.
 
+## Determinism, authority, and seeding (multiplayer + save/load)
+
+This is the core consistency rule for a robust RPG forging system:
+
+- **Host-authoritative**: the host/server is the only place that rolls randomness for forging.
+  - Clients must not roll stats/skills locally.
+  - The host replicates the **final forged item** (rarity, rolled stats, granted skills) to all clients.
+- **Deterministic RNG on the host**: all randomness is driven by a deterministic PRNG seeded once per forge:
+  - rarity selection (sampling from `rarity_system.md` distributions, if you sample at runtime),
+  - shared-stat value merge rolls (Section 3.1 logic in `inheritance_system.md`),
+  - pool stat selection + trimming under the rarity cap,
+  - granted-skill gated fill + trimming under the skill cap.
+
+### Save/load fishing (player behaviour)
+If **forgeSeed changes per attempt** (for example, based on time, a volatile RNG state, or a per-attempt random seed that is not preserved across reload), players can save before forging and reload to try again for different results.
+
+This blueprint assumes:
+- seeded RNG is used for **multiplayer consistency** and **debug reproducibility**;
+- save/load fishing may still be possible unless you deliberately make `forgeSeed` stable across reload for the same pre-forge state.
+
 ## Core concepts you must keep distinct
 
 ### Innate (non-rollable) weapon identity
@@ -50,12 +70,21 @@ You will not read these `.stats` files at runtime via Story. Use Script Extender
 
 ## Implementation blueprint (step-by-step)
 
-## Step 0: Ingredient eligibility (reject rune-modified weapons)
-Hard rule: **weapons that have any rune socket effects must not be accepted as forging ingredients**.
+## Step 0: Ingredient eligibility
+Hard rule: **weapons with socketed runes must not be accepted as forging ingredients**.
 
 Reject an ingredient if **either** is true:
 - **Runes are inserted** into any socket (even if the rune only grants “utility” effects).
 - The weapon has **any stats modifiers and/or granted skills originating from rune sockets**.
+
+Empty rune slots are allowed. The forged item’s rune slot count should be inherited separately:
+- Take the average of the two parents’ rune slot counts, then **round up**: `ceil((A + B) / 2)`
+
+| Parent A slots | Parent B slots | Forged slots |
+| :---: | :---: | :---: |
+| 1 | 2 | 2 |
+| 2 | 3 | 3 |
+| 1 | 3 | 2 |
 
 Implementation notes (SE):
 - Treat this as an early guard (before rarity and stat processing). If invalid, abort the craft and return items unchanged.
@@ -244,7 +273,7 @@ Also add a “dump item” dev command that prints:
 | Status-chance proc | `Set Blinded… 20%…` | Yes | Boost; payload encoded via boost `ExtraProperties` |
 | Elemental wand/staff surface behaviour | “Creates Ice surface…” / “Ignite;Melt” | No | Archetype `ExtraProperties` (weapon identity) |
 | Granted skill | `Staff of Magus` | No | Archetype `Skills` |
-| Rune slot lines | “Empty slot” | Usually no | Typically tracked separately via `RuneSlots`; treat as its own system |
+| Rune slot lines | “Empty slot” | Yes (separate rule) | Not a blue stat; inherit rune slot count as `ceil((A + B) / 2)` if both parents have empty sockets |
 
 ## Example walk-through (slot 1 staff, slot 2 wand)
 Slot 1: Fire staff (base identity; keep Ignite/Melt + Staff of Magus)
@@ -273,4 +302,209 @@ Output:
 - Mapping merged continuous values to tiered boosts must be defined.
 - Unique items (rarity 8) require special handling per your doc (identity preservation + “fuel” behaviour).
 
+---
+
+## Appendix: Pseudocode reference
+
+This appendix consolidates all forging-related pseudocode in one place.
+
+### Rarity system pseudocode (distribution weights)
+
+```python
+FUNCTION GetRarityDistribution(Rarity_A, Rarity_B):
+
+    UNIQUE_ID = 8
+    GLOBAL_MAX_CAP = 6  # Divine Rarity ID
+
+    # 1. GLOBAL OVERRIDE: UNIQUE DOMINANCE
+    # If either item is Unique, it consumes the other.
+    # The output rarity is strictly Unique.
+    IF Rarity_A == UNIQUE_ID OR Rarity_B == UNIQUE_ID:
+        RETURN { UNIQUE_ID : 1.0 }
+
+    # 2. DEFINE BOUNDS
+    Min_T = MIN(Rarity_A, Rarity_B)
+
+    # 3. HANDLING SAME RARITY SCENARIOS
+    IF Rarity_A == Rarity_B:
+        # EXCEPTION: Divine + Divine = 100% Divine
+        IF Rarity_A >= GLOBAL_MAX_CAP:
+            RETURN { Rarity_A : 1.0 }
+
+        # Standard Rarity Break
+        Max_T = Rarity_A + 1
+        Sigma = 0.5  # Fixed tight spread for stability
+
+    # 4. HANDLING DIFF RARITY SCENARIOS
+    ELSE:
+        Max_T = MAX(Rarity_A, Rarity_B)
+        Gap = ABS(Rarity_A - Rarity_B)
+        # 0.12 Multiplier strengthens gravity for wider gaps
+        Sigma = 0.5 + (0.12 * Gap)
+
+    # 5. CALCULATE WEIGHTS (Gaussian Loop)
+    Mean = (Rarity_A + Rarity_B) / 2
+    Weights = {}
+    Total_Weight = 0
+
+    FOR t FROM Min_T TO Max_T:
+        # Formula: e^(-((x-u)^2) / (2s^2))
+        Raw_W = EXP( -1 * ((t - Mean)^2) / (2 * Sigma^2) )
+        Weights[t] = Raw_W
+        Total_Weight = Total_Weight + Raw_W
+
+    # 6. NORMALIZE TO PERCENTAGE
+    Final_Probs = {}
+    FOR t FROM Min_T TO Max_T:
+        Final_Probs[t] = Weights[t] / Total_Weight
+
+    RETURN Final_Probs
+```
+
+### Stat inheritance pseudocode (doc term mapping + core routine)
+
+#### Name mapping (doc terms → pseudocode variables)
+
+| Doc term | Pseudocode name | Meaning |
+| :--- | :--- | :--- |
+| Shared stats | `sharedStats` | Stats present on both parents |
+| Pool stats | `poolStats` | Stats that are not shared (unique to either parent) |
+| Pool size | `poolCount` | How many stats are in the pool |
+| Shared count | `sharedCount` | How many shared stats you have |
+| Expected baseline | `expectedPoolPicks` | Half the pool, rounded up |
+| Luck adjustment | `luckShift` | Luck adding/removing pool picks (can chain) |
+| Max stat slots | `maxAllowed` | Max stat slots allowed by rarity |
+
+```python
+FUNCTION ExecuteForging(Item_A, Item_B):
+
+    # Name mapping used in this pseudocode:
+    # - SharedStats: stats on both parents (guaranteed)
+    # - PoolStats:   stats that are not shared between parents (unique to either parent)
+    # - ExpectedPoolPicks: round_up(PoolCount / 2)
+    # - LuckShift: adjustment to the pool picks (can chain, but is capped)
+    # - PlannedTotalRaw: SharedCount + ExpectedPoolPicks + LuckShift
+    # - PoolPicks: clamp(ExpectedPoolPicks + LuckShift, 0, PoolCount)
+    # - PlannedTotal: SharedCount + PoolPicks (before rarity cap)
+    # - MaxAllowed: max stat slots allowed by the rarity system
+
+    # 1. RARITY FIRST (sets MaxAllowed)
+    rarityId = RaritySystem.Calculate(Item_A, Item_B)
+    maxAllowed = GetCap(rarityId)
+
+    # 2. SPLIT STATS
+    # Shared stats are defined by stat KEY (not exact string match).
+    # If both parents have the same key but different values, roll a merged value (see section 3.1).
+    poolStats = PoolByKey(Item_A.Stats, Item_B.Stats)  # keys that exist on only one parent
+    poolCount = Length(poolStats)
+
+    # Value merge volatility is global (see section 3.1), so it does not depend on Tier.
+    sharedStats = SharedByKeyWithMergedValues(Item_A.Stats, Item_B.Stats)
+
+    sharedCount = Length(sharedStats)
+    # Expected baseline: round_up(poolCount / 2), except poolCount == 1 uses 0 (50/50 keep-or-lose)
+    expectedPoolPicks = (poolCount + 1) // 2  # round_up(poolCount / 2)
+    IF poolCount == 1:
+        expectedPoolPicks = 0
+
+    # LuckShift caps (so you never try to pick fewer than 0 or more than poolCount)
+    minLuckShift = -expectedPoolPicks
+    maxLuckShift = poolCount - expectedPoolPicks
+
+    # 3. DETERMINE TIER & CONSTANTS
+    tier = 1
+    IF poolCount >= 8: tier = 4
+    ELSE IF poolCount >= 5: tier = 3
+    ELSE IF poolCount >= 2: tier = 2
+
+    # [Bad, Neutral, Good] in percentages
+    firstRollChances = [0, 50, 50]
+    IF tier == 2: firstRollChances = [12, 50, 38]
+    IF tier == 3: firstRollChances = [28, 50, 22]
+    IF tier == 4: firstRollChances = [45, 40, 15]
+
+    # [DownChainChance, UpChainChance] in percentages
+    chainChances = [0, 0]
+    IF tier == 2: chainChances = [12, 22]
+    IF tier == 3: chainChances = [28, 30]
+    IF tier == 4: chainChances = [45, 30]
+
+    # 4. ROLL LuckShift (the chain)
+    luckShift = 0
+    roll = Random(0, 100)
+
+    # BAD (down chain)
+    IF roll < firstRollChances[0]:
+        luckShift = -1
+        WHILE (luckShift > minLuckShift AND Random(0, 100) < chainChances[0]):
+            luckShift -= 1
+
+    # NEUTRAL
+    ELSE IF roll < (firstRollChances[0] + firstRollChances[1]):
+        luckShift = 0
+
+    # GOOD (up chain)
+    ELSE:
+        luckShift = 1
+        # If the pool is too small, good luck cannot increase picks beyond maxLuckShift.
+        IF luckShift > maxLuckShift:
+            luckShift = maxLuckShift
+
+        WHILE (luckShift < maxLuckShift AND Random(0, 100) < chainChances[1]):
+            luckShift += 1
+
+    poolPicks = Clamp(expectedPoolPicks + luckShift, 0, poolCount)
+
+    # 5. BUILD FINAL STATS
+    finalStats = sharedStats.Copy()
+    IF poolPicks > 0:
+        AddRandom(finalStats, poolStats, poolPicks)
+
+    # 6. APPLY RARITY CAP LAST (remove pool-picked stats first)
+    IF Length(finalStats) > maxAllowed:
+        Resize(finalStats, maxAllowed)
+
+    RETURN finalStats
+```
+
+### Granted skills pseudocode (skills channel plug-in)
+
+```python
+# GRANTED SKILLS (SEPARATE CHANNEL, VANILLA-ALIGNED)
+# - Identify granted skills by skill ID (from boost definitions with a Skills field).
+# - Only include vanilla rarity-roll skill boosts (BoostType == "Legendary").
+# - Use seeded randomness per forge so results are stable for that forge.
+
+skillCap = GetSkillCap(rarityId)  # Section 5.2 table
+
+sharedSkills = SharedSkillsById(Item_A.GrantedSkills, Item_B.GrantedSkills)
+poolSkills = PoolSkillsById(Item_A.GrantedSkills, Item_B.GrantedSkills)
+
+finalSkills = Dedup(sharedSkills)
+
+# If shared skills exceed cap (rare; typically from previous forging chains), trim seeded.
+IF Length(finalSkills) > skillCap:
+    finalSkills = TrimToCapSeeded(finalSkills, skillCap, forgeSeed)
+
+freeSlots = skillCap - Length(finalSkills)
+
+# Fill free slots with gated gain rolls (skills are precious).
+WHILE (freeSlots > 0 AND Length(poolSkills) > 0):
+    P_remaining = Length(poolSkills)
+    p_attempt = SkillGainChance(rarityId, P_remaining)  # base(rarity) * m(P_remaining), Section 5.4
+    IF RollPercentSeeded(forgeSeed, p_attempt):
+        gained = PickOneSeeded(poolSkills, forgeSeed)
+        finalSkills.Add(gained)
+        poolSkills.Remove(gained)
+    freeSlots -= 1
+
+# Optional replace roll (seeded): 5%
+IF (Length(poolSkills) > 0 AND Length(finalSkills) > 0 AND RollPercentSeeded(forgeSeed, 5)):
+    removed = PickOneSeeded(finalSkills, forgeSeed)
+    added = PickOneSeeded(poolSkills, forgeSeed)
+    finalSkills.Remove(removed)
+    finalSkills.Add(added)
+
+ApplyGrantedSkillsToForgedItem(finalSkills)
+```
 
