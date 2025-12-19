@@ -6,6 +6,13 @@ This module determines the **Rarity (Color)** of any forged item. It operates in
 
 The system follows three core rules, evaluated in order:
 
+### 1.0. Ingredient eligibility (hard rule)
+Weapons that have **any rune socket effects** must **not** be accepted as forging ingredients.
+
+Reject an ingredient if it has:
+- Any **runes inserted** into sockets, and/or
+- Any **stats modifiers or granted skills originating from rune sockets**.
+
 ### 1.1. The "Unique Dominance" (Global Override)
 If **any** ingredient used in the forge is of **Unique** rarity, the forging process shifts logic entirely. The Unique item **consumes** the other ingredient as "fuel."
 * **The Logic:** Unique items acts as a dominant base. They are not "mixed" with other items; they are fed by them.
@@ -29,17 +36,22 @@ When combining two items of the exact same quality (and neither is Unique), the 
 
 Each item rarity is assigned a numeric `RarityID` used for calculation.
 
-| Rarity ID | Rarity Name | Max Stat Cap | Usage Note |
-| :--- | :--- | :--- | :--- |
-| **1** | Common | 1 | Lowest bound. |
-| **2** | Uncommon | 2 | |
-| **3** | Rare | 4 | |
-| **4** | Epic | 6 | |
-| **5** | Legendary | 7 | |
-| **6** | Divine | 8 | **Hard Cap** for standard inheritance. |
-| **8** | Unique | 10 | **Dominant Rarity.** Acts as the "Consumer." |
+| Rarity ID | Rarity Name | Max Stat Cap (this mod) | Vanilla rollable boost slots (non-rune) | Usage Note |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | Common | 1 | 0..0 | Lowest bound. |
+| **2** | Uncommon | 4 | 2..4 | |
+| **3** | Rare | 5 | 3..5 | |
+| **4** | Epic | 6 | 4..6 | |
+| **5** | Legendary | 7 | 4..6 | |
+| **6** | Divine | 8 | 5..7 | **Hard Cap** for standard inheritance. |
+| **8** | Unique | 10 | 0..0 | **Dominant Rarity.** Acts as the "Consumer." |
 
 ---
+
+#### Notes on “Vanilla rollable boost slots”
+- These values come from `DefEd/Data/Editor/Mods/Shared/Stats/ItemTypes/ItemTypes.stats`.
+- They represent the **min..max count of non-rune boost picks** (i.e. excluding `RuneEmpty`) across the level-dependent `_substat_*` rows.
+- Vanilla **Unique** items are largely hand-authored rather than generated from this roll-slot system, hence `0..0` here.
 
 ## 3. Global Override: Unique Preservation
 *Trigger Condition: `Rarity_A == 8` OR `Rarity_B == 8`*
