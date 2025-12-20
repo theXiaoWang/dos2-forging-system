@@ -1,6 +1,6 @@
 ﻿# Inheritance System
 
-## 1. What this system does
+## What this system does
 
 
 This system aims to deliver a more RPG-like forging experience, one that can be calculated, but with enough RNG to allow for that YOLO.
@@ -15,12 +15,63 @@ In short:
 - **More matching lines = more predictable forging**, and **vice versa** 
 - **Closer stats values = merged numbers more consistent**.
 
-*Below is the technical breakdown for players who want the exact maths.*
+<details>
+<summary><strong>Contents (click to expand)</strong></summary>
+
+<details>
+<summary><strong><a href="#1-forge-preconditions">1. Forge preconditions</a></strong></summary>
+
+- [1.0. Ingredient eligibility](#10-ingredient-eligibility)
+- [1.1. Forge flow overview](#11-forge-flow-overview)
+</details>
+
+<details>
+<summary><strong><a href="#2-innate-damage-and-armour-inheritance">2. Innate damage and armour inheritance</a></strong></summary>
+
+- [2.1. Innate chassis (definition)](#21-innate-chassis-definition)
+- [2.2. Output rules (level/type/rarity)](#22-output-rules-leveltyperarity)
+- [2.3. Parameters (tuning knobs)](#23-parameters-tuning-knobs)
+- [2.4. Measuring innate values (no rune/boost pollution)](#24-measuring-innate-values-no-runeboost-pollution)
+- [2.5. Normalisation (q → percentile p)](#25-normalisation-q--percentile-p)
+- [2.6. Cross-type merging (w + conversionLoss)](#26-cross-type-merging-w--conversionloss)
+- [2.7. Worked examples (tables)](#27-worked-examples-tables)
+</details>
+
+<details>
+<summary><strong><a href="#3-blue-stat-modifiers-inheritance">3. Blue stat modifiers inheritance</a></strong></summary>
+
+- [3.1. Modifier cap for each rarity](#31-modifier-cap-for-each-rarity)
+- [3.2. The two stat lists](#32-the-two-stat-lists)
+- [3.3. Merging rule (how numbers are merged)](#33-merging-rule-how-numbers-are-merged)
+- [3.4. Selection rule (shared + pool + cap)](#34-selection-rule-shared--pool--cap)
+</details>
+
+<details>
+<summary><strong><a href="#4-granted-skill-inheritance">4. Granted skill inheritance</a></strong></summary>
+
+- [4.1. Granted skills (definition)](#41-granted-skills-definition)
+- [4.2. Skill cap by rarity](#42-skill-cap-by-rarity)
+- [4.3. Shared vs pool skills](#43-shared-vs-pool-skills)
+- [4.4. How skills are gained (gated fill)](#44-how-skills-are-gained-gated-fill)
+- [4.5. Overflow + replace (5%)](#45-overflow--replace-5)
+- [4.6. Scenario tables](#46-scenario-tables)
+- [4.7. Worked example (Divine)](#47-worked-example-divine)
+</details>
+
+<details>
+<summary><strong><a href="#5-rune-slots-inheritance">5. Rune slots inheritance</a></strong></summary>
+</details>
+
+<details>
+<summary><strong><a href="#6-implementation-reference">6. Implementation reference</a></strong></summary>
+</details>
+
+</details>
 
 ---
-## 2. Forging steps
-### 2.0. Ingredient eligibility (hard rule)
-Weapons with **socketed runes** must **not** be accepted as forging ingredients.
+## 1. Forge preconditions
+### 1.0. Ingredient eligibility
+Items with **socketed runes** must **not** be accepted as forging ingredients.
 
 Reject an ingredient if it has:
 - Any **runes inserted** into sockets, and/or
@@ -28,38 +79,299 @@ Reject an ingredient if it has:
 
 Empty rune slots are allowed.
 
-1. **Rarity first**: run the **[Rarity System](rarity_system.md)** to decide the forged item's rarity and get the item’s **max stat slots**.
-2. **Stats second**: work out which stats carry over and what are the numbers (shared + rolled from pool).
-3. **Cap last**: if the result has more stats than the **max stat slots**, remove extra stats (pool-derived ones first).
-4. **Granted skills (separate cap)**: granted skills are inherited using a **separate, vanilla-aligned cap**. See **[Section 5](#5-granted-skill-inheritance)**.
+Additionally, enforce **item-type compatibility**:
+- **Weapons**: weapon can forge with weapon (cross weapon sub-types allowed, e.g. dagger ↔ axe).
+- **Shields**: shield can only forge with shield.
+- **Armour**: each armour slot only forges with the same slot (boots ↔ boots, helmet ↔ helmet, gloves ↔ gloves, chest ↔ chest, pants ↔ pants).
+- **Jewellery**: ring ↔ ring, amulet ↔ amulet.
+ 
+#### Output type selection
+The forged output item is always the same **item type/slot** as the ingredient in the **first forge slot**.
 
-### 2.1. The two stat lists
-- **Shared stats (S)**: stats on **both** parents (guaranteed).
-- **Pool stats (P)**: stats that are **not shared** (unique to either parent). This is the combined pool from both parents.
+| Forge slot 1 | Forge slot 2 | Output type | Notes |
+| :--- | :--- | :--- | :--- |
+| Boots | Boots | Boots | Armour is slot-locked (boots ↔ boots only). |
+| Dagger | One-handed axe | Dagger | Cross weapon sub-types are allowed, but the output still follows slot 1. |
 
-### 2.2. The rarity cap (max stat lines for each rarity)
-**Example**:  
-A "Two-Handed Greatsword" could appear at different rarities.  
-- If the sword is **Rare** (Rarity ID 3), it can have up to **5 blue stats** (for example: +12% Critical Chance, +2 Strength, +1 Warfare, 10% chance to set Bleeding, +1 Two-Handed).
-- If the same sword is **Epic** (Rarity ID 4), it can have up to **6 blue stats**.  
+### 1.1. Forge flow overview
+This document splits forging into independent “channels”, because vanilla item generation works the same way:
 
-### 2.3. Rune slots (simple inheritance rule)
-Rune slots are inherited separately from blue stats and granted skills.
+- **Innate chassis** (base damage / armour / magic armour): determined by **item type + level + rarity**.
+- **Blue stat modifiers** (boosts): rollable modifiers (eg attributes, crit, “chance to set status”) bounded by rarity modifier caps.
+- **Granted skills**: a separate, rarity-capped channel (vanilla-aligned).
+- **Rune slots**: a separate channel (only when empty; rune effects are forbidden as ingredients).
 
-If both parents have **empty** rune slots (no runes socketed), the forged item’s rune slots are:
+High-level forge order:
+1. Decide the output’s **rarity** using the **[Rarity System](rarity_system.md)**.
+2. Decide the output’s **innate chassis** (damage/armour) using **[Section 2](#2-innate-damage-and-armour-inheritance)**.
+3. Inherit **blue stat modifiers** using **[Section 3](#3-blue-stat-modifiers-inheritance)** (including the modifier cap table).
+4. Inherit **granted skills** using **[Section 4](#4-granted-skill-inheritance)**.
+5. Inherit **rune slots** using **[Section 5](#5-rune-slots-inheritance)**.
 
-Take the average of the two parents’ rune slot counts, then **round up**.
+*Below is the technical breakdown for players who want the exact maths.*
 
-$$RuneSlots_{out} = \lceil (RuneSlots_A + RuneSlots_B) / 2 \rceil$$
+---
+## 2. Innate damage and armour inheritance
 
-Examples:
+This section defines how to merge **raw numeric power** (weapon damage, shield armour) in a way that:
 
-| Parent A slots | Parent B slots | Forged slots |
-| :---: | :---: | :---: |
-| 1 | 2 | 2 |
-| 2 | 3 | 3 |
-| 1 | 3 | 2 |
+- Always outputs an item at the **player’s current level**.
+- Prevents “cross-type budget stealing” (e.g. importing a two-handed axe’s raw budget into a dagger).
+- Avoids nonsense when ingredient levels are far apart (e.g. level 6 + level 13).
+- Ensures the output stays **capped by its own (type, level, rarity)** budget.
 
+This is a **separate** step from “blue stats” inheritance:
+- Section 3 governs rollable stat lines (boosts).
+- Section 4 governs granted skills (separate cap).
+- Section 5 governs rune slots (separate channel).
+- This section governs the item’s **innate/base numeric chassis** only.
+
+### 2.1. Innate chassis (definition)
+This normalisation model is intentionally generic: it works for any item that has a meaningful **innate numeric chassis** (raw template numbers, not boosts).
+
+- **Weapons**: innate/base damage range.
+- **Shields**: innate/base armour and innate/base magic armour.
+- **Armour pieces** (helmets/chest/gloves/boots/pants): innate/base armour and innate/base magic armour.
+- **Slots that have no meaningful chassis** (e.g. if both base armour and base magic armour are `0`): Section 2 is a **no-op** for those numeric channels (do not attempt to normalise/divide by a `0` baseline).
+
+Quick “what is chassis vs what is rollable?” table (vanilla-backed examples):
+
+| Equipment category | Innate chassis (Section 2) | Rollable numeric examples (Section 3 blue boosts) |
+| :--- | :--- | :--- |
+| Weapon | Damage range (`D_min..D_max`) | Initiative on weapons (e.g. `_Boost_Weapon_Secondary_Initiative_Normal` / `_Boost_Weapon_Secondary_Initiative_Small`) |
+| Shield | `Armor Defense Value`, `Magic Armor Value` | Blocking (e.g. `_Boost_Shield_Special_Block_Shield` applies `Blocking=10`, with Medium/Large variants), plus shield initiative/movement boosts (`_Boost_Shield_Secondary_Initiative_*`, `_Boost_Shield_Secondary_MovementSpeed_*`) |
+| Armour pieces (helmet/chest/gloves/boots/pants) | `Armor Defense Value`, `Magic Armor Value` | Boots: movement (`_Boost_Armor_Boots_Secondary_MovementSpeed` applies `Movement=50`, Medium `Movement=75`, Large `Movement=100`) and initiative (`_Boost_Armor_Boots_Secondary_Initiative_*`); Belt: initiative (`_Boost_Armor_Belt_Secondary_Initiative` applies `Initiative=2`, Medium `Initiative=4`, Large `Initiative=6`) |
+| Jewellery (rings/amulets) | Usually no meaningful chassis (often `Armor Defense Value=0` / `Magic Armor Value=0` on the base template) | Jewellery can still roll numeric boosts, including armour/magic armour via boosts (e.g. `_Boost_Armor_Ring_Armour_Magical` applies `Magic Armor Value=10`, Medium `20`, Large `30`; `_Boost_Armor_Amulet_Secondary_MovementSpeed_*` applies `Movement=50/75/100`) |
+
+- `DeltaModifier.stats` shows the same “boost slot” concept is used across slots (`SlotType` includes boots/helmet/ring/amulet/belt), which strongly suggests “blue stats” are universally boost-driven.
+- Armour/jewellery may have **different boost pools**, but the **cap model** (rarity → number of boost slots) remains the same pattern; only the eligible boosts change by `SlotType` and `ModifierType`.
+
+The key idea is always the same:
+- Measure a parent’s innate value relative to a **baseline for the same (type, level, rarity)**.
+- Merge in **percentile space**.
+- Re-apply to the output’s baseline at the player’s level, then clamp to the output band.
+
+### 2.2. Output rules (level/type/rarity)
+- **Output level**: always the forger’s level.
+  - `Level_out = Level_player`
+- **Output type**: always the item in the **first forge slot**.
+- **Output rarity**: decided by the **[Rarity System](rarity_system.md)**.
+- **Capped result**: the output’s raw numeric values must not exceed what is allowed for the output’s **type + level + rarity**.
+
+### 2.3. Parameters (tuning knobs)
+These are the only “balance knobs” you should tune for the numeric chassis merge.
+
+| Parameter | Meaning | Suggested default | Notes |
+| :--- | :--- | :---: | :--- |
+| `w` | Slot 1 dominance when merging percentiles | **0.70** | Keeps the output feeling like “slot 1’s type”, even cross-type. |
+| `conversionLoss` | Donor effectiveness when types differ | See table below | Prevents cross-type budget stealing. |
+| `[L_r, H_r]` | Allowed innate numeric roll band for rarity `r` | See band table below | Clamp both parents and output to rarity-appropriate bands. |
+| Unique baseline | How to normalise Unique parents | **Use Legendary baseline** | Unique is too bespoke; this is normalisation only. |
+
+##### Suggested conversion-loss table (cross-type safety)
+Use this when the two parents are not the same exact weapon type.
+
+| Case | `conversionLoss` | Rationale |
+| :--- | :---: | :--- |
+| Same weapon type | **1.00** | Safe: no budget conversion needed. |
+| Different types, both 1H melee (non-dagger) | **0.85** | Similar budget family; mild loss. |
+| 1H ↔ 2H | **0.70** | Stops 2H raw budget from over-influencing 1H. |
+| Dagger involved (either side) | **0.60** | Daggers are the easiest exploit vector; stricter loss. |
+| Melee ↔ ranged (if you ever allow it) | **0.60** | Different combat patterns; strict loss. |
+
+##### Suggested innate numeric roll bands (shared across equipment for now)
+These bands define what “bottom roll” and “top roll” mean for the **innate numeric chassis** at a given rarity.
+
+They are intentionally narrow to keep a vanilla feel (most of the “power” still comes from level + rarity, then blue stats).
+
+| Rarity | `[L_r, H_r]` | Interpretation |
+| :--- | :---: | :--- |
+| Common | `[0.97, 1.03]` | Small variance only. |
+| Uncommon | `[0.97, 1.04]` | Slightly wider. |
+| Rare | `[0.96, 1.06]` | Noticeable, still controlled. |
+| Epic | `[0.96, 1.07]` | A bit wider. |
+| Legendary | `[0.95, 1.08]` | “Good rolls matter”. |
+| Divine | `[0.95, 1.09]` | Top-end, still capped. |
+| Unique | `[0.95, 1.08]` | Use Legendary band for now (normalisation is already special-cased). |
+
+### 2.4. Measuring innate values (no rune/boost pollution)
+When computing a parent’s “base numeric power”, ignore anything that is not part of the item’s innate template.
+
+Specifically, exclude:
+- Rune socket effects (already blocked by **1.0 Ingredient eligibility**).
+- Any rollable boost-driven effects (anything coming from `DeltaModifier.stats` / `_Boost_*`).
+- Any forging-system-injected boosts (your mod’s own “forged” metadata/bonuses).
+
+Practical rule of thumb:
+- Do not try to subtract unknown modifiers from a live weapon.
+- Instead, compute innate values by using a **boost-free** reference (a stripped clone or a clean spawn of the same template), so the measurement is not contaminated.
+
+### 2.5. Normalisation (q → percentile p)
+This converts “how good is this item for its own type/level/rarity” into a stable percentile in \([0,1]\).
+
+#### Definitions (weapons)
+For a weapon:
+- `D_min`, `D_max`: the displayed physical damage range (or the relevant damage type range if you choose to normalise elemental weapons differently).
+- `D_avg = (D_min + D_max) / 2`
+
+For parent weapon `i`:
+- `Type_i`: the weapon type (dagger, two-handed axe, etc.).
+- `Rarity_i`: item rarity.
+- `Level_i`: item level.
+- `D_innate_i`: the weapon’s **innate-only** average damage at `Level_i` (boost-free measurement).
+- `D_base_i`: a **baseline** innate-only average damage for `(Type_i, Level_i, Rarity_i)` (also boost-free).
+- `q_i = D_innate_i / D_base_i`: the parent’s innate-only quality ratio.
+
+Then convert `q_i` into a percentile `p_i` within the allowed “innate damage roll band” for that rarity:
+
+- Choose a band `[L_r, H_r]` per rarity `r` (design parameter; keep bands narrow for vanilla feel).
+- `p_i = clamp((q_i - L_r) / (H_r - L_r), 0, 1)`
+
+Interpretation:
+- `p_i = 0.0` means “bottom of the allowed innate-damage band for that rarity”.
+- `p_i = 1.0` means “top of the allowed innate-damage band for that rarity”.
+
+#### Definitions (shields)
+Shields do not have weapon damage; they primarily have:
+- `Armour`: `Armor Defense Value`
+- `MagicArmour`: `Magic Armor Value`
+
+Treat each numeric channel the same way:
+- Compute `q_armour`, `p_armour` using baseline normalisation.
+- Compute `q_magic`, `p_magic` likewise.
+
+#### Baseline selection (same rarity baseline, plus the Unique normalisation rule)
+You requested “baseline percentile uses the same rarity as the parent”. Use:
+- `D_base_i = baseline(Type_i, Level_i, Rarity_i)`
+
+Special case for Unique:
+- **Unique baseline = Legendary baseline**, purely for normalisation:
+  - If `Rarity_i` is Unique, use `Rarity_base = Legendary` when computing `D_base_i`.
+  - This avoids “bespoke Unique templates” making baseline comparisons meaningless.
+
+Note: this does not change the item’s displayed rarity; it only defines the reference curve for normalisation.
+
+### 2.6. Cross-type merging (w + conversionLoss)
+Never merge raw damage numbers across types. Merge **percentiles** (or quality ratios) and then re-express the result on the output type’s baseline.
+
+1) Compute `p_1` and `p_2` from the two parents (as above).
+2) Apply a “cross-type conversion loss” if the weapon types differ:
+   - `conversionLoss = 1.0` if `Type_1 == Type_2`
+   - Otherwise `conversionLoss < 1.0` (design parameter) to prevent importing a donor’s strength too efficiently.
+3) Weighted merge where slot 1 is dominant:
+   - `p_out = clamp(w * p_1 + (1 - w) * p_2 * conversionLoss, 0, 1)`
+   - Recommended starting point: `w = 0.70`
+4) Convert `p_out` back into an output quality ratio within the output rarity band:
+   - `q_out = L_out + p_out * (H_out - L_out)`
+5) Re-express at player level on the output type’s baseline:
+   - `Level_out = Level_player`
+   - `D_base_out = baseline(Type_out, Level_out, Rarity_out)`
+   - `D_target_out = D_base_out * q_out`
+6) Apply clamping again to guarantee the output stays within the output band.
+
+This achieves your “latter” requirement:
+- Players can chase better raw numbers by feeding better-percentile parents.
+- But the output is still bounded by the output’s own (type, level, rarity) budget.
+
+#### Step-by-step summary (weapons and shields)
+Use this as the “mental model” for the process.
+
+| Step | What you compute | Why |
+| :---: | :--- | :--- |
+| 1 | Decide output `Type_out` (slot 1), `Rarity_out` (rarity system), `Level_out` (player level) | The output budget is defined here. |
+| 2 | Measure each parent’s innate-only numeric value(s) (`D_innate`, or `Armour_innate`/`Magic_innate`) | Avoid boost/rune pollution. |
+| 3 | Measure each parent’s baseline numeric value(s) for `(Type_i, Level_i, Rarity_i)` | Defines “what is normal for that parent”. |
+| 4 | Convert to quality ratios `q_i = innate/base`, then to percentiles `p_i` using `[L_r, H_r]` | Puts all items on a comparable 0..1 scale. |
+| 5 | Merge percentiles into `p_out` (slot 1 weight `w`, cross-type `conversionLoss`) | Prevents cross-type budget stealing. |
+| 6 | Convert back to output quality `q_out`, then apply to output baseline at player level | Makes the output “a good roll of its own type”. |
+| 7 | Clamp to output band `[L_out, H_out]` | Enforces the “capped by output budget” rule. |
+
+#### Why this avoids exploits (failure modes addressed)
+- **Level gap**: because each parent is normalised against its own `(type, level, rarity)` baseline, a level 13 item does not directly inject level 13 raw damage into a level 10 output.
+- **Cross-type budget stealing**: the donor only contributes a percentile, and that percentile is re-expressed on the output type’s baseline; a dagger remains “a very good dagger”, not “a dagger with two-handed damage”.
+- **Boost leakage**: by measuring `D_innate` and `D_base` using boost-free references, you do not accidentally include DeltaModifier boosts, runes, or mod-injected effects.
+
+### 2.7. Worked examples (tables)
+All numbers below are illustrative; the structure and clamping rules are what matter.
+
+##### Example 1: Same type weapon (simple case)
+Player level is 10. Both parents are Rare daggers (slot 1 decides output type: dagger). Output is level 10 Rare dagger.
+
+Assume the Rare band is `[L_r, H_r] = [0.96, 1.06]`, and `w = 0.70`.
+
+| Value | Slot 1 parent (Rare dagger, level 10) | Slot 2 parent (Rare dagger, level 10) |
+| :--- | ---: | ---: |
+| `D_innate` | 23.0 | 25.2 |
+| `D_base` | 24.0 | 24.0 |
+| `q = D_innate / D_base` | 0.958 | 1.050 |
+| `p = clamp((q - 0.96) / 0.10)` | 0.00 | 0.90 |
+
+Merge (same type → `conversionLoss = 1.00`):
+- `p_out = clamp(0.70 * 0.00 + 0.30 * 0.90 * 1.00) = 0.27`
+- `q_out = 0.96 + 0.27 * 0.10 = 0.987`
+- Output baseline (player level): `D_base_out = baseline(dagger, 10, Rare) = 24.0`
+- `D_target_out = 24.0 * 0.987 = 23.69`
+
+Interpretation:
+- The output becomes a level 10 Rare dagger that is slightly below average in innate damage (because slot 1’s innate roll was poor and slot 1 dominates).
+
+##### Example 2: Cross-type + big level gap (the “why normalisation exists” case)
+Player level is 10. Slot 1 is a Rare dagger (level 13). Slot 2 is a Rare two-handed axe (level 6). Output is level 10 Rare dagger.
+
+Assume Rare band `[0.96, 1.06]`, `w = 0.70`, and because types differ (and dagger is involved) `conversionLoss = 0.60`.
+
+| Value | Slot 1 parent (Rare dagger, level 13) | Slot 2 parent (Rare 2H axe, level 6) |
+| :--- | ---: | ---: |
+| `D_innate` | 26.0 | 18.0 |
+| `D_base` | 24.0 | 20.0 |
+| `q = D_innate / D_base` | 1.083 | 0.900 |
+| `p = clamp((q - 0.96) / 0.10)` | 1.00 | 0.00 |
+
+Merge (cross-type):
+- `p_out = clamp(0.70 * 1.00 + 0.30 * 0.00 * 0.60) = 0.70`
+- `q_out = 0.96 + 0.70 * 0.10 = 1.03`
+- Output baseline is at player level: `D_base_out = baseline(dagger, 10, Rare) = 24.0`
+- `D_target_out = 24.0 * 1.03 = 24.72`
+
+Interpretation:
+- The level 13 dagger does not “force” a level 13 output; it only contributes that it was a high-quality dagger for its own baseline.
+- The level 6 axe cannot inject two-handed raw budget into a dagger because its contribution is percentile-based and conversion-limited.
+
+##### Example 3: Shields (two numeric channels)
+Player level is 12. Both parents are Rare shields (slot 1 decides output type: shield). Output is a level 12 Rare shield.
+
+Use the same Rare band `[0.96, 1.06]`, `w = 0.70`, `conversionLoss = 1.00` (same type family).
+
+Assume these are the boost-free baselines for a Rare shield at level 12:
+- `Armour_base_out = 150`
+- `Magic_base_out = 120`
+
+Compute per-channel percentiles:
+
+| Channel | Slot 1 `innate` | Slot 1 `base` | Slot 1 `p` | Slot 2 `innate` | Slot 2 `base` | Slot 2 `p` |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Armour | 160 | 150 | 1.00 | 150 | 150 | 0.40 |
+| Magic armour | 110 | 120 | 0.00 | 132 | 120 | 1.00 |
+
+Merge per channel:
+- Armour:
+  - `p_out = 0.70 * 1.00 + 0.30 * 0.40 = 0.82`
+  - `q_out = 0.96 + 0.82 * 0.10 = 1.042`
+  - `Armour_target_out = 150 * 1.042 = 156.3`
+- Magic armour:
+  - `p_out = 0.70 * 0.00 + 0.30 * 1.00 = 0.30`
+  - `q_out = 0.96 + 0.30 * 0.10 = 0.99`
+  - `Magic_target_out = 120 * 0.99 = 118.8`
+
+Interpretation:
+- Slot 1 heavily influences both channels.
+- You can “mix and match” a parent that is good on armour with a parent that is good on magic armour, but the result is still capped within Rare expectations.
+
+---
+
+## 3. Blue stat modifiers inheritance
+
+### 3.1. Modifier cap for each rarity
 Defined by the **[Rarity System](rarity_system.md)**:
 
 | Rarity ID | Name | Max stat slots (this mod) | Vanilla rollable boost slots (non-rune) |
@@ -72,11 +384,15 @@ Defined by the **[Rarity System](rarity_system.md)**:
 | **6** | Divine | **8** | 5..7 |
 | **8** | Unique | **10** | 0..0 |
 
----
+**Example:**  
+A shield can appear at different rarities too.  
+- If the shield is **Rare** (Rarity ID 3), it can have up to **5 blue stats** (for example: `Blocking +15`, `+2 Constitution`, `+1 Warfare`, `+10% Fire Resistance`, `+1 Retribution`).  
+  - Vanilla reference: `Shield.stats` defines `_Boost_Shield_Special_Block_Shield_*` boosts that apply the `Blocking` stat (e.g. `Blocking=10/15/20`).
+- If the same shield is **Epic** (Rarity ID 4), it can have up to **6 blue stats**.
 
-## 3. Stats Inheritance rules
-
-Two rules define inheritance: the [Merging rule](#31-merging-rule-how-numbers-are-merged) and the [Selection rule](#32-selection-rule-shared--pool--cap).
+### 3.2. The two stat lists
+- **Shared stats (S)**: stats on **both** parents (guaranteed).
+- **Pool stats (P)**: stats that are **not shared** (unique to either parent). This is the combined pool from both parents.
 
 #### Key values
 
@@ -92,13 +408,22 @@ Two rules define inheritance: the [Merging rule](#31-merging-rule-how-numbers-ar
 - **Final**: stat lines after the cap is applied.
 
 ---
-### 3.1. Merging rule (how numbers are merged)
+**Two rules define inheritance:**
+- [Merging rule](#33-merging-rule-how-numbers-are-merged)
+- [Selection rule](#34-selection-rule-shared--pool--cap)
+
+### 3.3. Merging rule (how numbers are merged)
 
 Sometimes both parents have the **same stat**, but the **numbers** are different:
 - `+10% Critical Chance` vs `+14% Critical Chance`
 - `+3 Strength` vs `+4 Strength`
 
 In this system, those are still treated as **Shared stats (S)** (same stat **key**), but the forged item will roll a **merged value** for that stat.
+
+Slot note:
+- These “blue stat” keys are not limited to weapons/shields. Armour/jewellery can roll numeric blue stats too, for example:
+  - Movement speed via `_Boost_Armor_Boots_Secondary_MovementSpeed` (applies `Movement=50`, Medium `75`, Large `100`)
+  - Initiative via `_Boost_Armor_Belt_Secondary_Initiative` (applies `Initiative=2`, Medium `4`, Large `6`)
 
 #### Definitions
 - **Stat key**: the identity of the stat (e.g. `CriticalChance`, `Strength`). This ignores the number.
@@ -142,13 +467,13 @@ Then format the number back into a stat line using the stat’s rounding rules.
 - Tight roll range is $12 \times [0.85, 1.15] = [10.2, 13.8]$ → roughly **10%–14%** after rounding.
 - Wide roll range is $12 \times [0.70, 1.30] = [8.4, 15.6]$ → **9%–16%** after rounding (low end clamps to 8.5).
 
-**Example B: `+5` vs `+6` Strength**
-- $a=5,\ b=6 \Rightarrow m=5.5$
-- $lo = 4.25,\ hi = 6.9$
-- Tight roll gives **5–6**.
-- Wide roll can reach **4–7**:
-  - Low end: $m \times 0.70 = 3.85$ clamps to $4.25$ → rounds to **4**.
-  - High end: $m \times 1.30 = 7.15$ clamps to $6.9$ → rounds to **7**.
+**Example B (shield): `Blocking +10` vs `Blocking +15`**
+- $a=10,\ b=15 \Rightarrow m=12.5$
+- $lo = 8.5,\ hi = 17.25$
+- Tight roll gives roughly **11–14** after rounding.
+- Wide roll can reach roughly **9–16** after rounding:
+  - Low end: $m \times 0.70 = 8.75$ (already above $lo=8.5$) → rounds to **9**
+  - High end: $m \times 1.30 = 16.25$ (below $hi=17.25$) → rounds to **16**
 
 **Example C: `+3` vs `+4` Strength (small integers can still spike)**
 - $a=3,\ b=4 \Rightarrow m=3.5$
@@ -164,16 +489,15 @@ Then format the number back into a stat line using the stat’s rounding rules.
 
 #### Quick “one forge” walk-through (shows what the 50% wide-roll chance means)
 Using Example A (`+10%` vs `+14%` Critical Chance):
-1. Roll a random number to choose the roll type:
-   - If it is in the **wide 50%**, use $Tri(0.70, 1.00, 1.30)$
-   - Otherwise use the **tight 50%**, $Tri(0.85, 1.00, 1.15)$
-2. Suppose you roll **wide**, then roll $r = 1.22$:
-   - $value = clamp(12 \times 1.22,\ 8.5,\ 16.1) = 14.64$ → rounds to **15%**
-3. Suppose instead you roll **tight**, then roll $r = 0.90$:
-   - $value = clamp(12 \times 0.90,\ 8.5,\ 16.1) = 10.8$ → rounds to **11%**
+
+| Step | Roll | Calculation | Result (rounded) |
+| :---: | :--- | :--- | :--- |
+| 1 | Choose roll type | 50% tight vs 50% wide | Tight or Wide |
+| 2A | Wide case | `r=1.22` → `value = clamp(12×1.22, 8.5, 16.1) = 14.64` | `15%` |
+| 2B | Tight case | `r=0.90` → `value = clamp(12×0.90, 8.5, 16.1) = 10.8` | `11%` |
 
 ---
-### 3.2. Selection rule (shared + pool + cap)
+### 3.4. Selection rule (shared + pool + cap)
 
 Now that **Shared stats (S)** includes the value-merge behaviour above (same stat key, merged number if needed), the next step:
 - Count how many shared stats you have (**S**).
@@ -200,7 +524,7 @@ $$Final = \min(T,\ Cap)$$
 ### Step 1: Separate shared vs pool stats
 Compare the two parents:
 - For all the **shared stats** from both items (same stat **key**), put into **Shared stats (S)**.
-  - If the values differ, use the **value merge** rules in **3.1** to roll the merged number for the forged item.
+  - If the values differ, use the **value merge** rules in **3.3** to roll the merged number for the forged item.
 - For all the **non-shared stats** from both items, put into **Pool stats (P)**.
 
 ### Step 2: Set the expected baseline (E)
@@ -242,25 +566,25 @@ Multiplayer note:
 3. **Apply the cap last**:
    - If the total is above the item’s **max stat slots**, remove extra stats until you reach the limit (remove pool-picked stats first).
 
-Imagine you’re forging these two weapons:
+Imagine you’re forging these two **boots** (boots can only forge with boots):
 
 ```
-Parent A: Steel Longsword
- - +1 Warfare
- - +10% Critical Chance
- - +2 Strength
- - +1 Two-Handed
+Parent A: Ranger’s Boots
+ - +1 Finesse
+ - +0.5m Movement
+ - +10% Fire Resistance
+ - +1 Sneaking
 
-Parent B: Knight’s Greatsword
- - +1 Warfare
- - +10% Critical Chance
- - +1 Necromancer
- - +12% Fire Resistance
+Parent B: Scout’s Boots
+ - +1 Finesse
+ - +0.5m Movement
+ - +2 Initiative
+ - +10% Air Resistance
 ```
 
 Split into lists:
-- Shared stats (on both): `+1 Warfare`, `+10% Critical Chance` → **S = 2**
-- Pool stats (not shared): `+2 Strength`, `+1 Two-Handed`, `+1 Necromancer`, `+12% Fire Resistance` → **P = 4**
+- Shared stats (on both): `+1 Finesse`, `+0.5m Movement` → **S = 2**
+- Pool stats (not shared): `+10% Fire Resistance`, `+1 Sneaking`, `+2 Initiative`, `+10% Air Resistance` → **P = 4**
 
 Now calculate how many pool stats you keep:
 - Expected baseline: **E = ceil(P / 2) = ceil(4 / 2) = 2**
@@ -286,17 +610,17 @@ The tables below are examples only. They apply the formulas above to show what y
 
 **Example 1:**
 ```
-Item A: Rusty Longsword
- - +1 Strength
- - +5% Accuracy
+Item A: Traveller’s Amulet
+ - +1 Aerotheurge
+ - +0.5m Movement
 
-Item B: Old Longsword
- - +1 Strength
+Item B: Scout’s Amulet
+ - +1 Aerotheurge
 ─────────────────────────────────────────
 Shared stats:
- - +1 Strength
+ - +1 Aerotheurge
 Pool stats:
- - +5% Accuracy
+ - +0.5m Movement
 ```
 
 Inputs for this example:
@@ -304,58 +628,30 @@ Inputs for this example:
 - **Pool size (P):** 1
 - **Expected baseline (E):** 0  *(special case for P = 1)*
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
 | 0 | 0 | 1 | $50\%$ (cap) | **50.00%** |
 | +1 | 1 | 2 | $50\%$ (cap) | **50.00%** |
-
-**Example 2 (same pool size, same tier):**
-```
-Item A: Soldier’s Axe
- - +1 Strength
- - +1 Warfare
- - +10% Critical Chance
-
-Item B: Soldier’s Sword
- - +1 Strength
- - +1 Warfare
-─────────────────────────────────────────
-Shared stats:
- - +1 Strength
- - +1 Warfare
-Pool stats:
- - +10% Critical Chance
-```
-
-Inputs for this example:
-- **Shared stats (S):** 2
-- **Pool size (P):** 1
-- **Expected baseline (E):** 0  *(special case for P = 1)*
-
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| 0 | 0 | 2 | $50\%$ (cap) | **50.00%** |
-| +1 | 1 | 3 | $50\%$ (cap) | **50.00%** |
 
 ### Tier 2 (Pool size = 2–4)
 
 **Example 1 (Pool size = 3):**
 ```
-Item A: Traveller’s Dagger
- - +1 Strength
- - +1 Finesse
- - 10% chance to set Bleeding
+Item A: Mage’s Helmet
+ - +2 Intelligence
+ - +10% Fire Resistance
+ - +1 Loremaster
 
-Item B: Scout’s Dagger
- - +1 Strength
- - +1 Wits
+Item B: Scholar’s Helmet
+ - +2 Intelligence
+ - +10% Water Resistance
 ─────────────────────────────────────────
 Shared stats:
- - +1 Strength
+ - +2 Intelligence
 Pool stats:
- - +1 Finesse
- - 10% chance to set Bleeding
- - +1 Wits
+ - +10% Fire Resistance
+ - +1 Loremaster
+ - +10% Water Resistance
 ```
 
 Inputs for this example:
@@ -365,35 +661,35 @@ Inputs for this example:
 
 Before the rarity cap, the forged item ends up with between **1** and **4** stats (**1** shared + **0–3** from the pool).
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
 | -2 | 0 | 1 | $12\% \times 12\%$ (cap) | **1.44%** |
 | -1 | 1 | 2 | $12\% \times 88\%$ | **10.56%** |
 | 0 | 2 | 3 | $50\%$ | **50.00%** |
 | +1 | 3 | 4 | $38\%$ (cap) | **38.00%** |
 
-**Example 2 (Pool size = 4):**
+**Example 2 (Pool size = 4, weapon-only cross-subtype allowed):**
 ```
-Item A: Magister’s Mace
- - +1 Strength
- - +1 Finesse
+Item A: Knight’s Dagger
+ - +1 Warfare
  - +10% Critical Chance
- - 10% chance to set Blinded
-
-Item B: Scholar’s Mace
- - +1 Strength
  - +1 Finesse
- - +1 Wits
- - +10% Cleave chance
+ - +2 Initiative
+
+Item B: Soldier’s One-Handed Axe
+ - +1 Warfare
+ - +10% Critical Chance
+ - +12% Fire Resistance
+ - 10% chance to set Bleeding
 ─────────────────────────────────────────
 Shared stats:
- - +1 Strength
- - +1 Finesse
-Pool stats:
+ - +1 Warfare
  - +10% Critical Chance
- - 10% chance to set Blinded
- - +1 Wits
- - +10% Cleave chance
+Pool stats:
+ - +1 Finesse
+ - +2 Initiative
+ - +12% Fire Resistance
+ - 10% chance to set Bleeding
 ```
 
 Inputs for this example:
@@ -403,7 +699,7 @@ Inputs for this example:
 
 Before the rarity cap, the forged item ends up with between **2** and **6** stats (**2** shared + **0–4** from the pool).
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
 | -2 | 0 | 2 | $12\% \times 12\%$ (cap) | **1.44%** |
 | -1 | 1 | 3 | $12\% \times 88\%$ | **10.56%** |
@@ -415,28 +711,28 @@ Before the rarity cap, the forged item ends up with between **2** and **6** stat
 
 **Example 1 (Pool size = 5):**
 ```
-Item A: Veteran’s Spear
- - +1 Strength
+Item A: Ranger’s Boots
  - +1 Finesse
- - +1 Constitution
- - +10% Critical Chance
- - 10% chance to set Bleeding
+ - +0.5m Movement
+ - +2 Initiative
+ - +10% Fire Resistance
+ - +1 Sneaking
 
-Item B: Battle Spear
- - +1 Strength
+Item B: Scout’s Boots
  - +1 Finesse
- - +1 Warfare
- - +1 Pyrokinetic
+ - +0.5m Movement
+ - +10% Air Resistance
+ - +10% Earth Resistance
 ─────────────────────────────────────────
 Shared stats:
- - +1 Strength
  - +1 Finesse
+ - +0.5m Movement
 Pool stats:
- - +1 Constitution
- - +10% Critical Chance
- - 10% chance to set Bleeding
- - +1 Warfare
- - +1 Pyrokinetic
+ - +2 Initiative
+ - +10% Fire Resistance
+ - +1 Sneaking
+ - +10% Air Resistance
+ - +10% Earth Resistance
 ```
 
 Inputs for this example:
@@ -446,7 +742,7 @@ Inputs for this example:
 
 Before the rarity cap, the forged item ends up with between **2** and **7** stats (**2** shared + **0–5** from the pool).
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
 | -3 | 0 | 2 | $28\% \times (28\%)^{2}$ (cap) | **2.20%** |
 | -2 | 1 | 3 | $28\% \times 28\% \times 72\%$ | **5.64%** |
@@ -457,32 +753,42 @@ Before the rarity cap, the forged item ends up with between **2** and **7** stat
 
 **Example 2 (Pool size = 7):**
 ```
-Item A: Enchanted Halberd
+Item A: Enchanted Greatsword
  - +1 Strength
- - +1 Finesse
- - +1 Constitution
- - +2 Initiative
- - +10% Critical Chance
- - 10% chance to set Silenced
-
-Item B: Elemental Halberd
- - +1 Strength
- - +1 Finesse
  - +1 Warfare
+ - +10% Critical Chance
+ - +1 Two-Handed
+ - +15% Accuracy
+ - +2 Strength
+ - +1 Necromancer
+ - 10% chance to set Bleeding
+
+Item B: Champion’s Greatsword
+ - +1 Strength
+ - +1 Warfare
+ - +12% Fire Resistance
  - +1 Pyrokinetic
- - +1 Hydrosophist
+ - +1 Aerotheurge
+ - +1 Huntsman
+ - 10% chance to set Blinded
+ - 10% chance to set Silenced
 ─────────────────────────────────────────
 Shared stats:
  - +1 Strength
- - +1 Finesse
-Pool stats:
- - +1 Constitution
- - +2 Initiative
- - +10% Critical Chance
- - 10% chance to set Silenced
  - +1 Warfare
+Pool stats:
+ - +10% Critical Chance
+ - +1 Two-Handed
+ - +15% Accuracy
+ - +2 Strength
+ - +1 Necromancer
+ - 10% chance to set Bleeding
+ - +12% Fire Resistance
  - +1 Pyrokinetic
- - +1 Hydrosophist
+ - +1 Aerotheurge
+ - +1 Huntsman
+ - 10% chance to set Blinded
+ - 10% chance to set Silenced
 ```
 
 Inputs for this example:
@@ -492,7 +798,7 @@ Inputs for this example:
 
 Before the rarity cap, the forged item ends up with between **2** and **9** stats (**2** shared + **0–7** from the pool).
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
 | -4 | 0 | 2 | $28\% \times (28\%)^{3}$ (cap) | **0.61%** |
 | -3 | 1 | 3 | $28\% \times (28\%)^{2} \times 72\%$ | **1.58%** |
@@ -505,90 +811,44 @@ Before the rarity cap, the forged item ends up with between **2** and **9** stat
 
 ### Tier 4 (Pool size = 8+)
 
-**Example 1 (Pool size = 1):**
+**Example 1 (Pool size = 12):**
 ```
-Item A: Archmage’s Staff
+Item A: Tower Shield
+ - +2 Constitution
+ - Blocking +15
+ - +2 Initiative
+ - +10% Fire Resistance
+ - +10% Water Resistance
+ - +10% Air Resistance
+ - +20% Poison Resistance
  - +1 Strength
- - +1 Warfare
- - +10% Critical Chance
- - +20% Air Resistance
- - +2 Intelligence
- - +1 Two-Handed
- - +15% Accuracy
 
-Item B: Battlemage’s Staff
- - +1 Strength
- - +1 Warfare
- - +10% Critical Chance
- - +20% Air Resistance
- - +2 Intelligence
- - +1 Two-Handed
- - +15% Accuracy
- - +1 Pyrokinetic
+Item B: Kite Shield
+ - Blocking +15
+ - +10% Fire Resistance
+ - +10% Earth Resistance
+ - +1 Leadership
+ - +1 Persuasion
+ - +0.5m Movement
+ - +1 Bartering
+ - +1 Loremaster
 ─────────────────────────────────────────
 Shared stats:
- - +1 Strength
- - +1 Warfare
- - +10% Critical Chance
- - +20% Air Resistance
- - +2 Intelligence
- - +1 Two-Handed
- - +15% Accuracy
+ - Blocking +15
+ - +10% Fire Resistance
 Pool stats:
- - +1 Pyrokinetic
-```
-
-Inputs for this example:
-- **Shared stats (S):** 7
-- **Pool size (P):** 1
-- **Expected baseline (E):** 0  *(special case for P = 1)*
-
-Before the rarity cap, the forged item ends up with between **7** and **8** stats (**7** shared + **0–1** from the pool).
-  - This is “safer crafting” in practice: more shared stats means fewer “unknown” stats in the pool.
-
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| 0 | 0 | 7 | $50\%$ (cap) | **50.00%** |
-| +1 | 1 | 8 | $50\%$ (cap) | **50.00%** |
-
-**Example 2 (Pool size = 12):**
-```
-Item A: Champion’s Greatsword
+ - +2 Constitution
+ - +2 Initiative
  - +1 Strength
- - +1 Warfare
- - +10% Critical Chance
- - +15% Accuracy
- - +1 Two-Handed
- - +2 Strength
- - +1 Necromancer
- - 10% chance to set Bleeding
-
-Item B: Assassin’s Greatsword
- - +1 Strength
- - +1 Warfare
- - +12% Fire Resistance
- - +1 Pyrokinetic
- - +1 Aerotheurge
- - +1 Huntsman
- - 10% chance to set Blinded
- - 10% chance to set Silenced
-─────────────────────────────────────────
-Shared stats:
- - +1 Strength
- - +1 Warfare
-Pool stats:
- - +10% Critical Chance
- - +15% Accuracy
- - +1 Two-Handed
- - +2 Strength
- - +1 Necromancer
- - 10% chance to set Bleeding
- - +12% Fire Resistance
- - +1 Pyrokinetic
- - +1 Aerotheurge
- - +1 Huntsman
- - 10% chance to set Blinded
- - 10% chance to set Silenced
+ - +10% Water Resistance
+ - +10% Air Resistance
+ - +20% Poison Resistance
+ - +10% Earth Resistance
+ - +1 Leadership
+ - +1 Persuasion
+ - +0.5m Movement
+ - +1 Bartering
+ - +1 Loremaster
 ```
 
 Inputs for this example:
@@ -616,12 +876,7 @@ Before the rarity cap, the forged item ends up with between **2** and **14** sta
 | +6 | 12 | 14 | $15\% \times 0.30^{5}$ (cap) | **0.04%** |
 
 ---
-
-## 4. Implementation reference
-- [forging_system_implementation_blueprint_se.md → Appendix: Pseudocode reference](forging_system_implementation_blueprint_se.md#appendix-pseudocode-reference)
-
----
-## 5. Granted skill inheritance
+## 4. Granted skill inheritance
 This section adds **granted skills** as a **separate inheritance channel** from normal “blue stats”.
 
 - **Vanilla-aligned caps**: skills are tightly capped by rarity (Epic 1, Legendary 1, Divine 2).
@@ -629,11 +884,12 @@ This section adds **granted skills** as a **separate inheritance channel** from 
 - **Stable randomness**: selection/trimming is **random but seeded per forge**, so it is stable for that forge.
 - **Multiplayer consistency**: use the same `forgeSeed` approach as stats, and roll skills **host-authoritatively** (clients receive the final result).
 
-### 5.1. What counts as a “granted skill”
+### 4.1. Granted skills (definition)
 
 - **Granted skill (rollable)**: any rollable boost/stat line that grants entries via a `Skills` field in its boost definition.
   - Weapon example: `_Boost_Weapon_Skill_Whirlwind` → `Shout_Whirlwind`
   - Shield example: `_Boost_Shield_Skill_BouncingShield` → `Projectile_BouncingShield`
+  - Armour/jewellery example: `_Boost_Armor_Gloves_Skill_Restoration` → `Target_Restoration` (defined in `Armor.stats`)
 - **Not a granted skill (innate)**: a `Skills` entry baked into the base weapon stat entry (not a rolled boost), e.g. staff base skills like `Projectile_StaffOfMagus` (**innate-only; never enters `poolSkills`**).
 
 **Vanilla scope note:**
@@ -647,7 +903,7 @@ This section adds **granted skills** as a **separate inheritance channel** from 
   - A **shield** must only ever roll/inherit **shield skill boosts**.
 - If you ever encounter “mixed” skills in runtime data, treat that as invalid input (or ignore the mismatched skill boosts).
 
-### 5.2. Skill caps (vanilla rules + this mod’s Unique override)
+### 4.2. Skill cap by rarity
 
 This is the maximum number of **granted skills** on the forged item:
 
@@ -661,7 +917,7 @@ This is the maximum number of **granted skills** on the forged item:
 | **6** | Divine | **2** |
 | **8** | Unique | **3** |
 
-### 5.3. The two skill lists (mirrors the stat system)
+### 4.3. Shared vs pool skills
 
 Split granted skills into two lists:
 
@@ -671,7 +927,7 @@ Split granted skills into two lists:
 #### Skill identity (dedupe key)
 Use the **skill ID** as the identity key (e.g. `Shout_Whirlwind`, `Projectile_BouncingShield`), not the boost name.
 
-### 5.4. Selection rule (shared + pool + cap), with seeded RNG
+### 4.4. How skills are gained (gated fill)
 
 Skills are **more precious than stats**, so the skill channel does **not** use the stat-style “keep half the pool” baseline.
 
@@ -683,7 +939,7 @@ Instead, skills use a **cap + gated fill** model:
 #### Key values (skills)
 - **Sₛ**: number of shared rollable skills (present on both parents).
 - **Pₛ**: number of pool rollable skills (present on only one parent).
-- **SkillCap**: from Section 5.2.
+- **SkillCap**: from Section 4.2.
 - **FreeSlots**: `max(0, SkillCap - min(Sₛ, SkillCap))`
 
 #### Gain chance model (rarity + pool size)
@@ -726,7 +982,7 @@ Notes:
 - **Host-authoritative**: the host/server should be the only machine that rolls this seeded randomness. Clients should receive the final skills/stats result from the host.
 - **Save/load fishing**: if `forgeSeed` changes each attempt, a player can save before forging and reload to try for different outcomes. Seeding alone does not prevent that unless `forgeSeed` is also stable across reload for the same pre-forge state.
 
-### 5.5. Applying the cap (including overflow handling)
+### 4.5. Overflow + replace (5%)
 
 1. Build `sharedSkills` (deduped) and `poolSkills` (deduped).
 2. Keep shared first:
@@ -735,14 +991,14 @@ Notes:
 4. Fill free slots with gated gain rolls (seeded):
    - For each free slot (at most `freeSlots` attempts):
      - Let `P_remaining = len(poolSkills)`
-     - Roll a seeded random number; success chance is `p_attempt = base(rarity) * m(P_remaining)` (Section 5.4).
+     - Roll a seeded random number; success chance is `p_attempt = base(rarity) * m(P_remaining)` (Section 4.4).
      - If success: pick 1 random skill from `poolSkills` (seeded), add to `finalSkills`, remove it from `poolSkills`, and decrement `freeSlots`.
      - If failure: do nothing for that slot (skills are precious; you do not retry the same slot).
 5. Optional “replace” roll (seeded): **5% chance**
    - If `poolSkills` is not empty and `finalSkills` is not empty:
      - With 5% chance, replace 1 random skill in `finalSkills` with 1 random skill from remaining `poolSkills` (both seeded).
 
-### 5.6. Scenario tables (common cases)
+### 4.6. Scenario tables
 
 These tables show the probability of ending with **0 / 1 / 2 rollable granted skills** under this skill model.
 
@@ -817,7 +1073,7 @@ Weapon example:
 | Legendary (cap 1) | **100%** | 0% |
 | Divine (cap 2) | **60.8%** | **39.2%** |
 
-### 5.7. Worked example (Divine output)
+### 4.7. Worked example (Divine)
 
 This is a **weapon** example (weapon-only skill boosts).
 
@@ -859,5 +1115,22 @@ Result:
 - The forged Divine item can still roll up to **8 normal blue stats** (the mod’s cap),
 - But it will have at most **2 granted skills** (vanilla-aligned).
 
-### 5.8. Implementation reference
-- [forging_system_implementation_blueprint_se.md → Appendix: Pseudocode reference](forging_system_implementation_blueprint_se.md#appendix-pseudocode-reference)
+---
+## 5. Rune slots inheritance
+Rune slots are inherited by taking the average of the two parents’ rune slot counts, then **rounding up**.
+
+$$RuneSlots_{out} = \lceil (RuneSlots_A + RuneSlots_B) / 2 \rceil$$
+
+Examples:
+
+| Parent A slots | Parent B slots | Forged slots |
+| :---: | :---: | :---: |
+| 0 | 0 | 0 |
+| 0 | 1 | 1 |
+| 1 | 2 | 2 |
+| 1 | 3 | 2 |
+| 2 | 3 | 3 |
+
+---
+## 6. Implementation reference 
+[forging_system_implementation_blueprint_se.md → Appendix: Pseudocode reference](forging_system_implementation_blueprint_se.md#appendix-pseudocode-reference)
