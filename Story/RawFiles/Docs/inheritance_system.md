@@ -21,8 +21,8 @@ In short:
 <details>
 <summary><strong><a href="#1-forge-preconditions">1. Forge preconditions</a></strong></summary>
 
-- [1.0. Ingredient eligibility](#10-ingredient-eligibility)
-- [1.1. Forge flow overview](#11-forge-flow-overview)
+- [1.1. Ingredient eligibility](#11-ingredient-eligibility)
+- [1.2. Forge flow overview](#12-forge-flow-overview)
 </details>
 
 <details>
@@ -70,7 +70,7 @@ In short:
 
 ---
 ## 1. Forge preconditions
-### 1.0. Ingredient eligibility
+### 1.1. Ingredient eligibility
 Items with **socketed runes** must **not** be accepted as forging ingredients.
 
 Reject an ingredient if it has:
@@ -93,7 +93,7 @@ The forged output item is always the same **item type/slot** as the ingredient i
 | Boots | Boots | Boots | Armour is slot-locked (boots ↔ boots only). |
 | Dagger | One-handed axe | Dagger | Cross weapon sub-types are allowed, but the output still follows slot 1. |
 
-### 1.1. Forge flow overview
+### 1.2. Forge flow overview
 This document splits forging into independent “channels”, because vanilla item generation works the same way:
 
 - **Innate chassis** (base damage / armour / magic armour): determined by **item type + level + rarity**.
@@ -630,8 +630,8 @@ Inputs for this example:
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| 0 | 0 | 1 | $50\%$ (cap) | **50.00%** |
-| +1 | 1 | 2 | $50\%$ (cap) | **50.00%** |
+| 0 | 0 | 1 | 50% (cap) | **50.00%** |
+| +1 | 1 | 2 | 50% (cap) | **50.00%** |
 
 ### Tier 2 (Pool size = 2–4)
 
@@ -663,10 +663,10 @@ Before the rarity cap, the forged item ends up with between **1** and **4** stat
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -2 | 0 | 1 | $12\% \times 12\%$ (cap) | **1.44%** |
-| -1 | 1 | 2 | $12\% \times 88\%$ | **10.56%** |
-| 0 | 2 | 3 | $50\%$ | **50.00%** |
-| +1 | 3 | 4 | $38\%$ (cap) | **38.00%** |
+| -2 | 0 | 1 | 12% × 12% (cap) | **1.44%** |
+| -1 | 1 | 2 | 12% × 88% | **10.56%** |
+| 0 | 2 | 3 | 50% | **50.00%** |
+| +1 | 3 | 4 | 38% (cap) | **38.00%** |
 
 **Example 2 (Pool size = 4, weapon-only cross-subtype allowed):**
 ```
@@ -701,11 +701,11 @@ Before the rarity cap, the forged item ends up with between **2** and **6** stat
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -2 | 0 | 2 | $12\% \times 12\%$ (cap) | **1.44%** |
-| -1 | 1 | 3 | $12\% \times 88\%$ | **10.56%** |
-| 0 | 2 | 4 | $50\%$ | **50.00%** |
-| +1 | 3 | 5 | $38\% \times 78\%$ | **29.64%** |
-| +2 | 4 | 6 | $38\% \times 22\%$ (cap) | **8.36%** |
+| -2 | 0 | 2 | 12% × 12% (cap) | **1.44%** |
+| -1 | 1 | 3 | 12% × 88% | **10.56%** |
+| 0 | 2 | 4 | 50% | **50.00%** |
+| +1 | 3 | 5 | 38% × 78% | **29.64%** |
+| +2 | 4 | 6 | 38% × 22% (cap) | **8.36%** |
 
 ### Tier 3 (Pool size = 5–7)
 
@@ -744,12 +744,12 @@ Before the rarity cap, the forged item ends up with between **2** and **7** stat
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -3 | 0 | 2 | $28\% \times (28\%)^{2}$ (cap) | **2.20%** |
-| -2 | 1 | 3 | $28\% \times 28\% \times 72\%$ | **5.64%** |
-| -1 | 2 | 4 | $28\% \times 72\%$ | **20.16%** |
-| 0 | 3 | 5 | $50\%$ | **50.00%** |
-| +1 | 4 | 6 | $22\% \times 70\%$ | **15.40%** |
-| +2 | 5 | 7 | $22\% \times 30\%$ (cap) | **6.60%** |
+| -3 | 0 | 2 | 28% × (28%)^2 (cap) | **2.20%** |
+| -2 | 1 | 3 | 28% × 28% × 72% | **5.64%** |
+| -1 | 2 | 4 | 28% × 72% | **20.16%** |
+| 0 | 3 | 5 | 50% | **50.00%** |
+| +1 | 4 | 6 | 22% × 70% | **15.40%** |
+| +2 | 5 | 7 | 22% × 30% (cap) | **6.60%** |
 
 **Example 2 (Pool size = 7):**
 ```
@@ -800,14 +800,14 @@ Before the rarity cap, the forged item ends up with between **2** and **9** stat
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -4 | 0 | 2 | $28\% \times (28\%)^{3}$ (cap) | **0.61%** |
-| -3 | 1 | 3 | $28\% \times (28\%)^{2} \times 72\%$ | **1.58%** |
-| -2 | 2 | 4 | $28\% \times 28\% \times 72\%$ | **5.64%** |
-| -1 | 3 | 5 | $28\% \times 72\%$ | **20.16%** |
-| 0 | 4 | 6 | $50\%$ | **50.00%** |
-| +1 | 5 | 7 | $22\% \times 70\%$ | **15.40%** |
-| +2 | 6 | 8 | $22\% \times 30\% \times 70\%$ | **4.62%** |
-| +3 | 7 | 9 | $22\% \times (30\%)^{2}$ (cap) | **1.98%** |
+| -4 | 0 | 2 | 28% × (28%)^3 (cap) | **0.61%** |
+| -3 | 1 | 3 | 28% × (28%)^2 × 72% | **1.58%** |
+| -2 | 2 | 4 | 28% × 28% × 72% | **5.64%** |
+| -1 | 3 | 5 | 28% × 72% | **20.16%** |
+| 0 | 4 | 6 | 50% | **50.00%** |
+| +1 | 5 | 7 | 22% × 70% | **15.40%** |
+| +2 | 6 | 8 | 22% × 30% × 70% | **4.62%** |
+| +3 | 7 | 9 | 22% × (30%)^2 (cap) | **1.98%** |
 
 ### Tier 4 (Pool size = 8+)
 
@@ -861,19 +861,19 @@ Before the rarity cap, the forged item ends up with between **2** and **14** sta
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -6 | 0 | 2 | $45\% \times 0.45^{5}$ (cap) | **0.83%** |
-| -5 | 1 | 3 | $45\% \times 0.45^{4} \times 0.55$ | **1.01%** |
-| -4 | 2 | 4 | $45\% \times 0.45^{3} \times 0.55$ | **2.26%** |
-| -3 | 3 | 5 | $45\% \times 0.45^{2} \times 0.55$ | **5.01%** |
-| -2 | 4 | 6 | $45\% \times 0.45 \times 0.55$ | **11.14%** |
-| -1 | 5 | 7 | $45\% \times 0.55$ | **24.75%** |
-| 0 | 6 | 8 | $40\%$ | **40.00%** |
-| +1 | 7 | 9 | $15\% \times 70\%$ | **10.50%** |
-| +2 | 8 | 10 | $15\% \times 30\% \times 70\%$ | **3.15%** |
-| +3 | 9 | 11 | $0.15 \times 0.30^{2} \times 0.70$ | **0.95%** |
-| +4 | 10 | 12 | $0.15 \times 0.30^{3} \times 0.70$ | **0.28%** |
-| +5 | 11 | 13 | $0.15 \times 0.30^{4} \times 0.70$ | **0.09%** |
-| +6 | 12 | 14 | $15\% \times 0.30^{5}$ (cap) | **0.04%** |
+| -6 | 0 | 2 | 45% × (45%)^5 (cap) | **0.83%** |
+| -5 | 1 | 3 | 45% × (45%)^4 × 55% | **1.01%** |
+| -4 | 2 | 4 | 45% × (45%)^3 × 55% | **2.26%** |
+| -3 | 3 | 5 | 45% × (45%)^2 × 55% | **5.01%** |
+| -2 | 4 | 6 | 45% × 45% × 55% | **11.14%** |
+| -1 | 5 | 7 | 45% × 55% | **24.75%** |
+| 0 | 6 | 8 | 40% | **40.00%** |
+| +1 | 7 | 9 | 15% × 70% | **10.50%** |
+| +2 | 8 | 10 | 15% × 30% × 70% | **3.15%** |
+| +3 | 9 | 11 | 15% × (30%)^2 × 70% | **0.95%** |
+| +4 | 10 | 12 | 15% × (30%)^3 × 70% | **0.28%** |
+| +5 | 11 | 13 | 15% × (30%)^4 × 70% | **0.09%** |
+| +6 | 12 | 14 | 15% × (30%)^5 (cap) | **0.04%** |
 
 ---
 ## 4. Granted skill inheritance
