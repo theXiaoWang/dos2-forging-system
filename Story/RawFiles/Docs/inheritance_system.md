@@ -506,17 +506,18 @@ Now that **Shared stats (S)** includes the value-merge behaviour above (same sta
 
 These are the same rules as above, written as formulas:
 
-
-For the expected baseline:
+For the expected baseline (**make non-shared stats harder to keep**):
 
 $$E =
 \begin{cases}
-0 & \text{if } P = 1 \\
-\lceil P / 2 \rceil & \text{otherwise}
+0 & \text{if } P = 0 \text{ or } P = 1 \\
+\lfloor (P + 1) / 3 \rfloor & \text{otherwise}
 \end{cases}
 $$
 
-$$K = \min(\max(E + V,\ 0),\ P)\ \text{or}\ K = E + V\ \ (0 \le E + V \le P)$$
+Then:
+
+$$K = \min(\max(E + V,\ 0),\ P)$$
 
 $$T = S + K$$
 
@@ -529,12 +530,14 @@ Compare the two parents:
 
 ### Step 2: Set the expected baseline (E)
 Now work out your starting point for the pool.
-You begin at **about half the pool**, rounded up (this is the “expected baseline”, E).
+You begin at **about one-third of the pool**, rounded down (this is the “expected baseline”, E). This makes **non-shared** stats noticeably harder to keep, while **shared** stats remain stable.
 
 Examples:
 - Pool size 1 → baseline is 0 (then you 50/50 roll to keep it or lose it)
-- Pool size 4 → expect to keep 2
-- Pool size 7 → expect to keep 4
+- Pool size 3 → expect to keep 1
+- Pool size 4 → expect to keep 1
+- Pool size 7 → expect to keep 2
+- Pool size 12 → expect to keep 4
 
 ### Step 3: Choose the tier (sets luck odds)
 The tier depends only on **pool size**:
@@ -587,24 +590,154 @@ Split into lists:
 - Pool stats (not shared): `+10% Fire Resistance`, `+1 Sneaking`, `+2 Initiative`, `+10% Air Resistance` → **P = 4**
 
 Now calculate how many pool stats you keep:
-- Expected baseline: **E = ceil(P / 2) = ceil(4 / 2) = 2**
+- Expected baseline: **E = floor((P + 1) / 3) = floor(5 / 3) = 1**
 - Suppose your luck adjustment roll comes out as **V = +1**
-- Pool stats kept (from the pool): **K = clamp(E + V, 0, P) = clamp(2 + 1, 0, 4) = 3**
-- Planned total before cap: **T = S + K = 2 + 3 = 5**
+- Pool stats kept (from the pool): **K = clamp(E + V, 0, P) = clamp(1 + 1, 0, 4) = 2**
+- Planned total before cap: **T = S + K = 2 + 2 = 4**
 
 Finally apply the rarity cap:
 - Assume the rarity system gives the new item **Rare** → **Cap = 5**
-- Final total: **Final = min(T, Cap) = min(5, 5) = 5**
+- Final total: **Final = min(T, Cap) = min(4, 5) = 4**
 
 So you end up with:
 - The 2 shared stats (always)
-- Plus 3 of the pool stats (no trimming needed in this example)
+- Plus 2 of the pool stats (no trimming needed in this example)
 
 ---
 
 ### Examples
 
 The tables below are examples only. They apply the formulas above to show what you can roll in each pool-size tier.
+
+### Safe vs YOLO forging (intuition extremes)
+
+These two standalone examples are meant to build intuition:
+- **Safe forging**: many shared stats → stable outcomes (pool stats are just “bonus”).
+- **YOLO forging**: zero shared stats → pure variance (rare spikes are possible, but unreliable).
+
+**Safe Forging (Pool size = 2, 2× Divine items with high shared stats):**
+```
+Item A: Divine Warhammer
+ - +3 Strength
+ - +2 Warfare
+ - +15% Critical Chance
+ - +20% Fire Resistance
+ - +20% Poison Resistance
+ - +2 Constitution
+ - +1 Leadership
+ - +1 Persuasion
+
+Item B: Divine Warhammer
+ - +3 Strength
+ - +2 Warfare
+ - +15% Critical Chance
+ - +20% Fire Resistance
+ - +20% Poison Resistance
+ - +2 Constitution
+ - +1 Leadership
+ - +1 Bartering
+─────────────────────────────────────────
+Shared stats:
+ - +3 Strength
+ - +2 Warfare
+ - +15% Critical Chance
+ - +20% Fire Resistance
+ - +20% Poison Resistance
+ - +2 Constitution
+ - +1 Leadership
+Pool stats:
+ - +1 Persuasion
+ - +1 Bartering
+```
+
+Inputs for this example:
+- **Shared stats (S):** 7
+- **Pool size (P):** 2
+- **Expected baseline (E):** floor((P + 1) / 3) = floor(3 / 3) = 1
+- **Rarity:** Divine for both
+
+This is the perfect example for **Safe Forging**:
+- With **7 shared stats**, you’re already very close to the Divine cap (8). The pool only adds 0–2 more stats, so even losing all pool stats still gives you a near-max item.
+
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
+| :---: | :---: | :---: | :---: | :---: |
+| -1 | 0 | 7 | 12% (cap) | **12.00%** |
+| 0 | 1 | 8 | 50% | **50.00%** |
+| +1 | 2 | 9 | 38% × 78% | **29.64%** |
+| +2 | 2 | 9 | 38% × 22% (cap) | **8.36%** |
+
+After applying the **Divine cap (8)**:
+- **T = 7** → Final = 7 (no trimming)
+- **T = 8** → Final = 8 (at cap)
+- **T = 9** → Final = 8 (trim 1 pool stat)
+
+Chance to end with a **Divine item with 8 stats** (Final = 8):
+- `P(T >= 8) = P(A = 0) + P(A = +1) + P(A = +2) = 50% + 29.64% + 8.36% = 88%`
+
+**Key insight:** With **very high shared stats (7)**, you’re guaranteed a near-max item even if you lose all pool stats.
+
+**YOLO forging (Common + Divine, 0 shared, everything in the pool):**
+```
+Item A: Divine Warhammer (8 stats)
+ - +3 Strength
+ - +2 Warfare
+ - +2 Two-Handed
+ - +15% Critical Chance
+ - +15% Accuracy
+ - +20% Fire Resistance
+ - +20% Poison Resistance
+ - +2 Constitution
+
+Item B: Common Warhammer (1 stat)
+ - +1 Aerotheurge
+─────────────────────────────────────────
+Shared stats:
+ (none)
+Pool stats:
+ - +3 Strength
+ - +2 Warfare
+ - +2 Two-Handed
+ - +15% Critical Chance
+ - +15% Accuracy
+ - +20% Fire Resistance
+ - +20% Poison Resistance
+ - +2 Constitution
+ - +1 Aerotheurge
+```
+
+Inputs for this example:
+- **Shared stats (S):** 0
+- **Pool size (P):** 9
+- **Expected baseline (E):** floor((P + 1) / 3) = floor(10 / 3) = 3
+- **Tier used:** Tier 4 odds (because `P = 9` is `8+`)
+- **Assume output rarity:** Divine
+
+This is the perfect example for **YOLO forging**:
+- With **0 shared stats**, you have **no guarantees**. Everything is a roll from the pool.
+- You can still (rarely) hit a “full” Divine statline (Final = 8), but it requires multiple good chains.
+
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
+| :---: | :---: | :---: | :---: | :---: |
+| -3 | 0 | 0 | 45% × (45%)^2 (cap) | **9.11%** |
+| -2 | 1 | 1 | 45% × 45% × 55% | **11.14%** |
+| -1 | 2 | 2 | 45% × 55% | **24.75%** |
+| 0 | 3 | 3 | 40% | **40.00%** |
+| +1 | 4 | 4 | 15% × 70% | **10.50%** |
+| +2 | 5 | 5 | 15% × 30% × 70% | **3.15%** |
+| +3 | 6 | 6 | 15% × (30%)^2 × 70% | **0.95%** |
+| +4 | 7 | 7 | 15% × (30%)^3 × 70% | **0.28%** |
+| +5 | 8 | 8 | 15% × (30%)^4 × 70% | **0.09%** |
+| +6 | 9 | 9 | 15% × (30%)^5 (cap) | **0.04%** |
+
+After applying the **Divine cap (8)**:
+- **T = 0–7** → Final = T
+- **T = 8** → Final = 8 (at cap)
+- **T = 9** → Final = 8 (trim 1 pool stat)
+
+Chance to end with a **Divine item with 8 stats** (Final = 8):
+- `P(T ≥ 8) = P(A = +5) + P(A = +6) = 0.09% + 0.04% ≈ 0.12%`
+
+**Key insight:** YOLO forging can still “spike” into a full Divine statline, but it’s intentionally **very rare** when you have **0 shared stats**.
 
 ### Tier 1 (Pool size = 1, no chains)
 
@@ -657,16 +790,16 @@ Pool stats:
 Inputs for this example:
 - **Shared stats (S):** 1
 - **Pool size (P):** 3
-- **Expected baseline (E):** ceil(P / 2) = 2
+- **Expected baseline (E):** floor((P + 1) / 3) = floor(4 / 3) = 1
 
 Before the rarity cap, the forged item ends up with between **1** and **4** stats (**1** shared + **0–3** from the pool).
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -2 | 0 | 1 | 12% × 12% (cap) | **1.44%** |
-| -1 | 1 | 2 | 12% × 88% | **10.56%** |
-| 0 | 2 | 3 | 50% | **50.00%** |
-| +1 | 3 | 4 | 38% (cap) | **38.00%** |
+| -1 | 0 | 1 | 12% (cap) | **12.00%** |
+| 0 | 1 | 2 | 50% | **50.00%** |
+| +1 | 2 | 3 | 38% × 78% | **29.64%** |
+| +2 | 3 | 4 | 38% × 22% (cap) | **8.36%** |
 
 **Example 2 (Pool size = 4, weapon-only cross-subtype allowed):**
 ```
@@ -695,18 +828,17 @@ Pool stats:
 Inputs for this example:
 - **Shared stats (S):** 2
 - **Pool size (P):** 4
-- **Expected baseline (E):** ceil(P / 2) = 2
+- **Expected baseline (E):** floor((P + 1) / 3) = floor(5 / 3) = 1
 
 Before the rarity cap, the forged item ends up with between **2** and **6** stats (**2** shared + **0–4** from the pool).
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -2 | 0 | 2 | 12% × 12% (cap) | **1.44%** |
-| -1 | 1 | 3 | 12% × 88% | **10.56%** |
-| 0 | 2 | 4 | 50% | **50.00%** |
-| +1 | 3 | 5 | 38% × 78% | **29.64%** |
-| +2 | 4 | 6 | 38% × 22% (cap) | **8.36%** |
-
+| -1 | 0 | 2 | 12% (cap) | **12.00%** |
+| 0 | 1 | 3 | 50% | **50.00%** |
+| +1 | 2 | 4 | 38% × 78% | **29.64%** |
+| +2 | 3 | 5 | 38% × 22% × 78% | **6.54%** |
+| +3 | 4 | 6 | 38% × (22%)^2 (cap) | **1.84%** |
 ### Tier 3 (Pool size = 5–7)
 
 **Example 1 (Pool size = 5):**
@@ -738,18 +870,18 @@ Pool stats:
 Inputs for this example:
 - **Shared stats (S):** 2
 - **Pool size (P):** 5
-- **Expected baseline (E):** ceil(P / 2) = 3
+- **Expected baseline (E):** floor((P + 1) / 3) = floor(6 / 3) = 2
 
 Before the rarity cap, the forged item ends up with between **2** and **7** stats (**2** shared + **0–5** from the pool).
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -3 | 0 | 2 | 28% × (28%)^2 (cap) | **2.20%** |
-| -2 | 1 | 3 | 28% × 28% × 72% | **5.64%** |
-| -1 | 2 | 4 | 28% × 72% | **20.16%** |
-| 0 | 3 | 5 | 50% | **50.00%** |
-| +1 | 4 | 6 | 22% × 70% | **15.40%** |
-| +2 | 5 | 7 | 22% × 30% (cap) | **6.60%** |
+| -2 | 0 | 2 | 28% × 28% (cap) | **7.84%** |
+| -1 | 1 | 3 | 28% × 72% | **20.16%** |
+| 0 | 2 | 4 | 50% | **50.00%** |
+| +1 | 3 | 5 | 22% × 70% | **15.40%** |
+| +2 | 4 | 6 | 22% × 30% × 70% | **4.62%** |
+| +3 | 5 | 7 | 22% × (30%)^2 (cap) | **1.98%** |
 
 **Example 2 (Pool size = 7):**
 ```
@@ -794,20 +926,20 @@ Pool stats:
 Inputs for this example:
 - **Shared stats (S):** 2
 - **Pool size (P):** 7
-- **Expected baseline (E):** ceil(P / 2) = 4
+- **Expected baseline (E):** floor((P + 1) / 3) = floor(8 / 3) = 2
 
 Before the rarity cap, the forged item ends up with between **2** and **9** stats (**2** shared + **0–7** from the pool).
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -4 | 0 | 2 | 28% × (28%)^3 (cap) | **0.61%** |
-| -3 | 1 | 3 | 28% × (28%)^2 × 72% | **1.58%** |
-| -2 | 2 | 4 | 28% × 28% × 72% | **5.64%** |
-| -1 | 3 | 5 | 28% × 72% | **20.16%** |
-| 0 | 4 | 6 | 50% | **50.00%** |
-| +1 | 5 | 7 | 22% × 70% | **15.40%** |
-| +2 | 6 | 8 | 22% × 30% × 70% | **4.62%** |
-| +3 | 7 | 9 | 22% × (30%)^2 (cap) | **1.98%** |
+| -2 | 0 | 2 | 28% × 28% (cap) | **7.84%** |
+| -1 | 1 | 3 | 28% × 72% | **20.16%** |
+| 0 | 2 | 4 | 50% | **50.00%** |
+| +1 | 3 | 5 | 22% × 70% | **15.40%** |
+| +2 | 4 | 6 | 22% × 30% × 70% | **4.62%** |
+| +3 | 5 | 7 | 22% × (30%)^2 × 70% | **1.39%** |
+| +4 | 6 | 8 | 22% × (30%)^3 × 70% | **0.42%** |
+| +5 | 7 | 9 | 22% × (30%)^4 (cap) | **0.18%** |
 
 ### Tier 4 (Pool size = 8+)
 
@@ -854,26 +986,26 @@ Pool stats:
 Inputs for this example:
 - **Shared stats (S):** 2
 - **Pool size (P):** 12
-- **Expected baseline (E):** ceil(P / 2) = 6
+- **Expected baseline (E):** floor((P + 1) / 3) = floor(13 / 3) = 4
 
 Before the rarity cap, the forged item ends up with between **2** and **14** stats (**2** shared + **0–12** from the pool).
   - This is “riskier crafting” in practice: fewer shared stats means more “unknown” stats in the pool.
 
 | Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
 | :---: | :---: | :---: | :---: | :---: |
-| -6 | 0 | 2 | 45% × (45%)^5 (cap) | **0.83%** |
-| -5 | 1 | 3 | 45% × (45%)^4 × 55% | **1.01%** |
-| -4 | 2 | 4 | 45% × (45%)^3 × 55% | **2.26%** |
-| -3 | 3 | 5 | 45% × (45%)^2 × 55% | **5.01%** |
-| -2 | 4 | 6 | 45% × 45% × 55% | **11.14%** |
-| -1 | 5 | 7 | 45% × 55% | **24.75%** |
-| 0 | 6 | 8 | 40% | **40.00%** |
-| +1 | 7 | 9 | 15% × 70% | **10.50%** |
-| +2 | 8 | 10 | 15% × 30% × 70% | **3.15%** |
-| +3 | 9 | 11 | 15% × (30%)^2 × 70% | **0.95%** |
-| +4 | 10 | 12 | 15% × (30%)^3 × 70% | **0.28%** |
-| +5 | 11 | 13 | 15% × (30%)^4 × 70% | **0.09%** |
-| +6 | 12 | 14 | 15% × (30%)^5 (cap) | **0.04%** |
+| -4 | 0 | 2 | 45% × (45%)^3 (cap) | **4.10%** |
+| -3 | 1 | 3 | 45% × (45%)^2 × 55% | **5.01%** |
+| -2 | 2 | 4 | 45% × 45% × 55% | **11.14%** |
+| -1 | 3 | 5 | 45% × 55% | **24.75%** |
+| 0 | 4 | 6 | 40% | **40.00%** |
+| +1 | 5 | 7 | 15% × 70% | **10.50%** |
+| +2 | 6 | 8 | 15% × 30% × 70% | **3.15%** |
+| +3 | 7 | 9 | 15% × (30%)^2 × 70% | **0.95%** |
+| +4 | 8 | 10 | 15% × (30%)^3 × 70% | **0.28%** |
+| +5 | 9 | 11 | 15% × (30%)^4 × 70% | **0.09%** |
+| +6 | 10 | 12 | 15% × (30%)^5 × 70% | **0.03%** |
+| +7 | 11 | 13 | 15% × (30%)^6 × 70% | **0.01%** |
+| +8 | 12 | 14 | 15% × (30%)^7 (cap) | **0.03%** |
 
 ---
 ## 4. Granted skill inheritance
