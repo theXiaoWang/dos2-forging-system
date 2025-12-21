@@ -132,19 +132,7 @@ This normalisation model is intentionally generic: it works for any item that ha
 - **Jewellery** (rings/amulets): base magic armour.
 - **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): Section 2 is a **no-op** for those numeric channels (do not attempt to normalise/divide by a `0` baseline).
 
-Quick "what is base values vs what is rollable?" table (vanilla-backed examples):
-
-| Equipment category | Base values (Section 2) | Rollable numeric examples (Section 3 stats boosts) |
-| :--- | :--- | :--- |
-| Weapon | Damage range (`D_min..D_max`) | Initiative on weapons (e.g. `_Boost_Weapon_Secondary_Initiative_Normal` / `_Boost_Weapon_Secondary_Initiative_Small`) |
-| Shield | `Armor Defense Value`, `Magic Armor Value` | Blocking (e.g. `_Boost_Shield_Special_Block_Shield` applies `Blocking=10`, with Medium/Large variants), plus shield initiative/movement boosts (`_Boost_Shield_Secondary_Initiative_*`, `_Boost_Shield_Secondary_MovementSpeed_*`) |
-| Armour pieces (helmet/chest/gloves/boots/pants) | `Armor Defense Value`, `Magic Armor Value` | Boots: movement (`_Boost_Armor_Boots_Secondary_MovementSpeed` applies `Movement=50`, Medium `Movement=75`, Large `Movement=100`) and initiative (`_Boost_Armor_Boots_Secondary_Initiative_*`); Belt: initiative (`_Boost_Armor_Belt_Secondary_Initiative` applies `Initiative=2`, Medium `Initiative=4`, Large `Initiative=6`) |
-| Jewellery (rings/amulets) | Usually no meaningful base values (often `Armor Defense Value=0` / `Magic Armor Value=0` on the base template) | Jewellery can still roll numeric boosts, including armour/magic armour via boosts (e.g. `_Boost_Armor_Ring_Armour_Magical` applies `Magic Armor Value=10`, Medium `20`, Large `30`; `_Boost_Armor_Amulet_Secondary_MovementSpeed_*` applies `Movement=50/75/100`) |
-
-- `DeltaModifier.stats` shows the same “boost slot” concept is used across slots (`SlotType` includes boots/helmet/ring/amulet/belt), which strongly suggests “blue stats” are universally boost-driven.
-- Armour/jewellery may have **different boost pools**, but the **cap model** (rarity → number of boost slots) remains the same pattern; only the eligible boosts change by `SlotType` and `ModifierType`.
-
-The key idea is always the same:
+Key ideas:
 - Measure a parent's base value relative to a **baseline for the same (type, level, rarity)**.
 - Merge in **percentile space**.
 - Re-apply to the output's baseline at the player's level, then clamp to the output band.
