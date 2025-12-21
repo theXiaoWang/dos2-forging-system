@@ -138,8 +138,7 @@ Key ideas:
 - Re-apply to the output's baseline at the player's level, then clamp to the output band.
 
 ### 2.2. Output rules (level/type/rarity)
-- **Output level**: always the forger’s level.
-  - `Level_out = Level_player`
+- **Output level**: always the forger’s level, `Level_out = Level_player`.
 - **Output type**: always the item in the **main forge slot** (first slot).
 - **Output rarity**: decided by the **[Rarity System](rarity_system.md)**.
 - **Capped result**: the output’s raw numeric values must not exceed what is allowed for the output’s **type + level + rarity**.
