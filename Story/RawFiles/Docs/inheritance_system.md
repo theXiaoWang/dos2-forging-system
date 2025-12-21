@@ -2,14 +2,17 @@
 
 ## What this system does
 
-
 This system aims to deliver a more RPG-like forging experience, one that can be calculated, but with enough RNG to allow for that YOLO.
 
-When you forge two items, this system decides which and how **blue text stats** are inherited by the new forged item.
+When you forge two items, this system decides **which and how stats are inherited** by the new forged item.
+- It also inherits the item’s **innate chassis**: weapon **base damage** and armour/shield **base armour & magic armour**, using **levelled, type-safe normalisation** (prevents cross-type “budget stealing”).
 - If both items share the same stat line, you’re more likely to **keep the overlapping stat** (it’s safer).
-- If both items share the same stat **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as a **shared stat**, but the forged item will **merge the numbers** into a new  value based on the parents' value.
-- If both items are very different, it’s **riskier but can be more rewarding** (there are more possible outcomes).
-- Depending on your forging strategy, You could get a **steady, average** result, or a **unpredictable, volatile** result which can get **lucky** or **unlucky** streaks.
+- If both items share the same stat **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as a **shared stat**, but the forged item will **merge the numbers** into a new value.
+- If a stat line is **not shared**, it goes into the **pool**, and keeping it is **more RNG** (risk/reward).
+- If both items are very different, it’s **riskier but can be more rewarding** (more possible outcomes).
+- Depending on your forging strategy, You could get a **steady, average** 
+result, or a **unpredictable, volatile** result which can get **lucky** or 
+**unlucky** streaks.
 
 In short: 
 - **More matching lines = more predictable forging**, and **vice versa** 
