@@ -5,10 +5,10 @@
 This system aims to deliver a more RPG-like forging experience, one that can be calculated, but with enough RNG to allow for that YOLO.
 
 When you forge two items, this system decides **which and how stats are inherited** by the new forged item.
-- It also inherits the item’s **innate chassis**: weapon **base damage** and armour/shield **base armour & magic armour**, using **levelled, type-safe normalisation** (prevents cross-type “budget stealing”).
-- If both items share the same stat line, you’re more likely to **keep the overlapping stat** (it’s safer).
-- If both items share the same stat **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as a **shared stat**, but the forged item will **merge the numbers** into a new value.
-- If a stat line is **not shared**, it goes into the **pool**, and keeping it is **more RNG** (risk/reward).
+- It also inherits the item's **base values**: weapon **base damage** and armour/shield **base armour & magic armour**, using **levelled, type-safe normalisation** (prevents cross-type "budget stealing").
+- If both items share the same stats line, you're more likely to **keep the overlapping stats** (it's safer).
+- If both items share the same stats **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as **shared stats**, but the forged item will **merge the numbers** into a new value.
+- If a stats line is **not shared**, it goes into the **pool**, and keeping it is **more RNG** (risk/reward).
 - If both items are very different, it’s **riskier but can be more rewarding** (more possible outcomes).
 - Depending on your forging strategy, You could get a **steady, average** 
 result, or a **unpredictable, volatile** result which can get **lucky** or 
@@ -29,28 +29,28 @@ In short:
 </details>
 
 <details>
-<summary><strong><a href="#2-innate-damage-and-armour-inheritance">2. Innate damage and armour inheritance</a></strong></summary>
+<summary><strong><a href="#2-base-values-inheritance">2. Base values Inheritance</a></strong></summary>
 
-- [2.1. Innate chassis (definition)](#21-innate-chassis-definition)
+- [2.1. Base values (definition)](#21-base-values-definition)
 - [2.2. Output rules (level/type/rarity)](#22-output-rules-leveltyperarity)
 - [2.3. Parameters (tuning knobs)](#23-parameters-tuning-knobs)
-- [2.4. Measuring innate values (no rune/boost pollution)](#24-measuring-innate-values-no-runeboost-pollution)
+- [2.4. Measuring base values (no rune/boost pollution)](#24-measuring-base-values-no-runeboost-pollution)
 - [2.5. Normalisation (q → percentile p)](#25-normalisation-q--percentile-p)
 - [2.6. Cross-type merging (w + conversionLoss)](#26-cross-type-merging-w--conversionloss)
 - [2.7. Worked examples (tables)](#27-worked-examples-tables)
 </details>
 
 <details>
-<summary><strong><a href="#3-blue-stat-modifiers-inheritance">3. Blue stat modifiers inheritance</a></strong></summary>
+<summary><strong><a href="#3-stats-modifiers-inheritance">3. Stats modifiers inheritance</a></strong></summary>
 
-- [3.1. Modifier cap for each rarity](#31-modifier-cap-for-each-rarity)
-- [3.2. The two stat lists](#32-the-two-stat-lists)
+- [3.1. Stats modifiers (definition)](#31-stats-modifiers-definition)
+- [3.2. The two stats lists](#32-the-two-stats-lists)
 - [3.3. Merging rule (how numbers are merged)](#33-merging-rule-how-numbers-are-merged)
 - [3.4. Selection rule (shared + pool + cap)](#34-selection-rule-shared--pool--cap)
 </details>
 
 <details>
-<summary><strong><a href="#4-granted-skill-inheritance">4. Granted skill inheritance</a></strong></summary>
+<summary><strong><a href="#4-skills-inheritance">4. Skills inheritance</a></strong></summary>
 
 - [4.1. Granted skills (definition)](#41-granted-skills-definition)
 - [4.2. Skill cap by rarity](#42-skill-cap-by-rarity)
@@ -89,70 +89,64 @@ Additionally, enforce **item-type compatibility**:
 - **Jewellery**: ring ↔ ring, amulet ↔ amulet.
  
 #### Output type selection
-The forged output item is always the same **item type/slot** as the ingredient in the **first forge slot**.
+The forged output item is always the same **item type/slot** as the ingredient in the **Main Slot** (first forge slot).
 
-| Forge slot 1 | Forge slot 2 | Output type | Notes |
+| (Main Slot) Forge slot 1 | (Secondary Slot) Forge slot 2 | Output type | Notes |
 | :--- | :--- | :--- | :--- |
-| Boots | Boots | Boots | Armour is slot-locked (boots ↔ boots only). |
-| Dagger | One-handed axe | Dagger | Cross weapon sub-types are allowed, but the output still follows slot 1. |
+| Boots | Boots | Boots | Armour pieces are slot-locked (boots ↔ boots only). |
+| Dagger | One-handed axe | Dagger | Cross weapon sub-types are allowed, but the output still follows main slot. |
 
 ### 1.2. Forge flow overview
 This document splits forging into independent “channels”, because vanilla item generation works the same way:
 
-- **Innate chassis** (base damage / armour / magic armour): determined by **item type + level + rarity**.
-- **Blue stat modifiers** (boosts): rollable modifiers (eg attributes, crit, “chance to set status”) bounded by rarity modifier caps.
+- **Base values** (base damage / armour / magic armour): determined by **item type + level + rarity**.
+- **Stats modifiers** (boosts): rollable modifiers (eg attributes, crit, "chance to set status") bounded by rarity modifier caps.
 - **Granted skills**: a separate, rarity-capped channel (vanilla-aligned).
 - **Rune slots**: a separate channel (only when empty; rune effects are forbidden as ingredients).
 
 High-level forge order:
 1. Decide the output’s **rarity** using the **[Rarity System](rarity_system.md)**.
-2. Decide the output’s **innate chassis** (damage/armour) using **[Section 2](#2-innate-damage-and-armour-inheritance)**.
-3. Inherit **blue stat modifiers** using **[Section 3](#3-blue-stat-modifiers-inheritance)** (including the modifier cap table).
-4. Inherit **granted skills** using **[Section 4](#4-granted-skill-inheritance)**.
+2. Decide the output's **base values** (damage/armour) using **[Section 2](#2-base-values-inheritance)**.
+3. Inherit **stats modifiers** using **[Section 3](#3-stats-modifiers-inheritance)** (including the modifier cap table).
+4. Inherit **skills** using **[Section 4](#4-skills-inheritance)**.
 5. Inherit **rune slots** using **[Section 5](#5-rune-slots-inheritance)**.
 
 *Below is the technical breakdown for players who want the exact maths.*
 
 ---
-## 2. Innate damage and armour inheritance
+## 2. Base values Inheritance
 
-This section defines how to merge **raw numeric power** (weapon damage, shield armour) in a way that:
+This section defines how to merge **raw numeric power** (weapon damage, armour/magic armour from shields, other armour pieces, jewellery):
 
 - Always outputs an item at the **player’s current level**.
 - Prevents “cross-type budget stealing” (e.g. importing a two-handed axe’s raw budget into a dagger).
 - Avoids nonsense when ingredient levels are far apart (e.g. level 6 + level 13).
 - Ensures the output stays **capped by its own (type, level, rarity)** budget.
 
-This is a **separate** step from “blue stats” inheritance:
-- Section 3 governs rollable stat lines (boosts).
-- Section 4 governs granted skills (separate cap).
-- Section 5 governs rune slots (separate channel).
-- This section governs the item’s **innate/base numeric chassis** only.
+### 2.1. Base values (definition)
+This normalisation model is intentionally generic: it works for any item that has a meaningful **base values** (raw template numbers, not stats modifiers/granted skills/runes).
 
-### 2.1. Innate chassis (definition)
-This normalisation model is intentionally generic: it works for any item that has a meaningful **innate numeric chassis** (raw template numbers, not boosts).
+- **Weapons**: base damage range.
+- **Shields**: base armour and base magic armour.
+- **Armour pieces** (helmets/chest/gloves/boots/pants): base armour and base magic armour.
+- **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): Section 2 is a **no-op** for those numeric channels (do not attempt to normalise/divide by a `0` baseline).
 
-- **Weapons**: innate/base damage range.
-- **Shields**: innate/base armour and innate/base magic armour.
-- **Armour pieces** (helmets/chest/gloves/boots/pants): innate/base armour and innate/base magic armour.
-- **Slots that have no meaningful chassis** (e.g. if both base armour and base magic armour are `0`): Section 2 is a **no-op** for those numeric channels (do not attempt to normalise/divide by a `0` baseline).
+Quick "what is base values vs what is rollable?" table (vanilla-backed examples):
 
-Quick “what is chassis vs what is rollable?” table (vanilla-backed examples):
-
-| Equipment category | Innate chassis (Section 2) | Rollable numeric examples (Section 3 blue boosts) |
+| Equipment category | Base values (Section 2) | Rollable numeric examples (Section 3 stats boosts) |
 | :--- | :--- | :--- |
 | Weapon | Damage range (`D_min..D_max`) | Initiative on weapons (e.g. `_Boost_Weapon_Secondary_Initiative_Normal` / `_Boost_Weapon_Secondary_Initiative_Small`) |
 | Shield | `Armor Defense Value`, `Magic Armor Value` | Blocking (e.g. `_Boost_Shield_Special_Block_Shield` applies `Blocking=10`, with Medium/Large variants), plus shield initiative/movement boosts (`_Boost_Shield_Secondary_Initiative_*`, `_Boost_Shield_Secondary_MovementSpeed_*`) |
 | Armour pieces (helmet/chest/gloves/boots/pants) | `Armor Defense Value`, `Magic Armor Value` | Boots: movement (`_Boost_Armor_Boots_Secondary_MovementSpeed` applies `Movement=50`, Medium `Movement=75`, Large `Movement=100`) and initiative (`_Boost_Armor_Boots_Secondary_Initiative_*`); Belt: initiative (`_Boost_Armor_Belt_Secondary_Initiative` applies `Initiative=2`, Medium `Initiative=4`, Large `Initiative=6`) |
-| Jewellery (rings/amulets) | Usually no meaningful chassis (often `Armor Defense Value=0` / `Magic Armor Value=0` on the base template) | Jewellery can still roll numeric boosts, including armour/magic armour via boosts (e.g. `_Boost_Armor_Ring_Armour_Magical` applies `Magic Armor Value=10`, Medium `20`, Large `30`; `_Boost_Armor_Amulet_Secondary_MovementSpeed_*` applies `Movement=50/75/100`) |
+| Jewellery (rings/amulets) | Usually no meaningful base values (often `Armor Defense Value=0` / `Magic Armor Value=0` on the base template) | Jewellery can still roll numeric boosts, including armour/magic armour via boosts (e.g. `_Boost_Armor_Ring_Armour_Magical` applies `Magic Armor Value=10`, Medium `20`, Large `30`; `_Boost_Armor_Amulet_Secondary_MovementSpeed_*` applies `Movement=50/75/100`) |
 
 - `DeltaModifier.stats` shows the same “boost slot” concept is used across slots (`SlotType` includes boots/helmet/ring/amulet/belt), which strongly suggests “blue stats” are universally boost-driven.
 - Armour/jewellery may have **different boost pools**, but the **cap model** (rarity → number of boost slots) remains the same pattern; only the eligible boosts change by `SlotType` and `ModifierType`.
 
 The key idea is always the same:
-- Measure a parent’s innate value relative to a **baseline for the same (type, level, rarity)**.
+- Measure a parent's base value relative to a **baseline for the same (type, level, rarity)**.
 - Merge in **percentile space**.
-- Re-apply to the output’s baseline at the player’s level, then clamp to the output band.
+- Re-apply to the output's baseline at the player's level, then clamp to the output band.
 
 ### 2.2. Output rules (level/type/rarity)
 - **Output level**: always the forger’s level.
@@ -162,13 +156,13 @@ The key idea is always the same:
 - **Capped result**: the output’s raw numeric values must not exceed what is allowed for the output’s **type + level + rarity**.
 
 ### 2.3. Parameters (tuning knobs)
-These are the only “balance knobs” you should tune for the numeric chassis merge.
+These are the only "balance knobs" you should tune for the base values merge.
 
 | Parameter | Meaning | Suggested default | Notes |
 | :--- | :--- | :---: | :--- |
 | `w` | Slot 1 dominance when merging percentiles | **0.70** | Keeps the output feeling like “slot 1’s type”, even cross-type. |
 | `conversionLoss` | Donor effectiveness when types differ | See table below | Prevents cross-type budget stealing. |
-| `[L_r, H_r]` | Allowed innate numeric roll band for rarity `r` | See band table below | Clamp both parents and output to rarity-appropriate bands. |
+| `[L_r, H_r]` | Allowed base values roll band for rarity `r` | See band table below | Clamp both parents and output to rarity-appropriate bands. |
 | Unique baseline | How to normalise Unique parents | **Use Legendary baseline** | Unique is too bespoke; this is normalisation only. |
 
 ##### Suggested conversion-loss table (cross-type safety)
@@ -182,8 +176,8 @@ Use this when the two parents are not the same exact weapon type.
 | Dagger involved (either side) | **0.60** | Daggers are the easiest exploit vector; stricter loss. |
 | Melee ↔ ranged (if you ever allow it) | **0.60** | Different combat patterns; strict loss. |
 
-##### Suggested innate numeric roll bands (shared across equipment for now)
-These bands define what “bottom roll” and “top roll” mean for the **innate numeric chassis** at a given rarity.
+##### Suggested base values roll bands (shared across equipment for now)
+These bands define what "bottom roll" and "top roll" mean for the **base values** at a given rarity.
 
 They are intentionally narrow to keep a vanilla feel (most of the “power” still comes from level + rarity, then blue stats).
 
@@ -197,8 +191,8 @@ They are intentionally narrow to keep a vanilla feel (most of the “power” st
 | Divine | `[0.95, 1.09]` | Top-end, still capped. |
 | Unique | `[0.95, 1.08]` | Use Legendary band for now (normalisation is already special-cased). |
 
-### 2.4. Measuring innate values (no rune/boost pollution)
-When computing a parent’s “base numeric power”, ignore anything that is not part of the item’s innate template.
+### 2.4. Measuring base values (no rune/boost pollution)
+When computing a parent's base values, ignore anything that is not part of the item's base template.
 
 Specifically, exclude:
 - Rune socket effects (already blocked by **1.0 Ingredient eligibility**).
@@ -207,7 +201,7 @@ Specifically, exclude:
 
 Practical rule of thumb:
 - Do not try to subtract unknown modifiers from a live weapon.
-- Instead, compute innate values by using a **boost-free** reference (a stripped clone or a clean spawn of the same template), so the measurement is not contaminated.
+- Instead, compute base values by using a **boost-free** reference (a stripped clone or a clean spawn of the same template), so the measurement is not contaminated.
 
 ### 2.5. Normalisation (q → percentile p)
 This converts “how good is this item for its own type/level/rarity” into a stable percentile in \([0,1]\).
@@ -221,18 +215,18 @@ For parent weapon `i`:
 - `Type_i`: the weapon type (dagger, two-handed axe, etc.).
 - `Rarity_i`: item rarity.
 - `Level_i`: item level.
-- `D_innate_i`: the weapon’s **innate-only** average damage at `Level_i` (boost-free measurement).
-- `D_base_i`: a **baseline** innate-only average damage for `(Type_i, Level_i, Rarity_i)` (also boost-free).
-- `q_i = D_innate_i / D_base_i`: the parent’s innate-only quality ratio.
+- `D_base_i`: the weapon's **base** average damage at `Level_i` (boost-free measurement).
+- `D_baseline_i`: a **baseline** base average damage for `(Type_i, Level_i, Rarity_i)` (also boost-free).
+- `q_i = D_base_i / D_baseline_i`: the parent's base quality ratio.
 
-Then convert `q_i` into a percentile `p_i` within the allowed “innate damage roll band” for that rarity:
+Then convert `q_i` into a percentile `p_i` within the allowed "base damage roll band" for that rarity:
 
 - Choose a band `[L_r, H_r]` per rarity `r` (design parameter; keep bands narrow for vanilla feel).
 - `p_i = clamp((q_i - L_r) / (H_r - L_r), 0, 1)`
 
 Interpretation:
-- `p_i = 0.0` means “bottom of the allowed innate-damage band for that rarity”.
-- `p_i = 1.0` means “top of the allowed innate-damage band for that rarity”.
+- `p_i = 0.0` means "bottom of the allowed base damage band for that rarity".
+- `p_i = 1.0` means "top of the allowed base damage band for that rarity".
 
 #### Definitions (shields)
 Shields do not have weapon damage; they primarily have:
@@ -282,9 +276,9 @@ Use this as the “mental model” for the process.
 | Step | What you compute | Why |
 | :---: | :--- | :--- |
 | 1 | Decide output `Type_out` (slot 1), `Rarity_out` (rarity system), `Level_out` (player level) | The output budget is defined here. |
-| 2 | Measure each parent’s innate-only numeric value(s) (`D_innate`, or `Armour_innate`/`Magic_innate`) | Avoid boost/rune pollution. |
-| 3 | Measure each parent’s baseline numeric value(s) for `(Type_i, Level_i, Rarity_i)` | Defines “what is normal for that parent”. |
-| 4 | Convert to quality ratios `q_i = innate/base`, then to percentiles `p_i` using `[L_r, H_r]` | Puts all items on a comparable 0..1 scale. |
+| 2 | Measure each parent's base numeric value(s) (`D_base`, or `Armour_base`/`Magic_base`) | Avoid boost/rune pollution. |
+| 3 | Measure each parent's baseline numeric value(s) for `(Type_i, Level_i, Rarity_i)` | Defines "what is normal for that parent". |
+| 4 | Convert to quality ratios `q_i = base/baseline`, then to percentiles `p_i` using `[L_r, H_r]` | Puts all items on a comparable 0..1 scale. |
 | 5 | Merge percentiles into `p_out` (slot 1 weight `w`, cross-type `conversionLoss`) | Prevents cross-type budget stealing. |
 | 6 | Convert back to output quality `q_out`, then apply to output baseline at player level | Makes the output “a good roll of its own type”. |
 | 7 | Clamp to output band `[L_out, H_out]` | Enforces the “capped by output budget” rule. |
@@ -292,7 +286,7 @@ Use this as the “mental model” for the process.
 #### Why this avoids exploits (failure modes addressed)
 - **Level gap**: because each parent is normalised against its own `(type, level, rarity)` baseline, a level 13 item does not directly inject level 13 raw damage into a level 10 output.
 - **Cross-type budget stealing**: the donor only contributes a percentile, and that percentile is re-expressed on the output type’s baseline; a dagger remains “a very good dagger”, not “a dagger with two-handed damage”.
-- **Boost leakage**: by measuring `D_innate` and `D_base` using boost-free references, you do not accidentally include DeltaModifier boosts, runes, or mod-injected effects.
+- **Boost leakage**: by measuring `D_base` and `D_baseline` using boost-free references, you do not accidentally include DeltaModifier boosts, runes, or mod-injected effects.
 
 ### 2.7. Worked examples (tables)
 All numbers below are illustrative; the structure and clamping rules are what matter.
@@ -304,9 +298,9 @@ Assume the Rare band is `[L_r, H_r] = [0.96, 1.06]`, and `w = 0.70`.
 
 | Value | Slot 1 parent (Rare dagger, level 10) | Slot 2 parent (Rare dagger, level 10) |
 | :--- | ---: | ---: |
-| `D_innate` | 23.0 | 25.2 |
-| `D_base` | 24.0 | 24.0 |
-| `q = D_innate / D_base` | 0.958 | 1.050 |
+| `D_base` | 23.0 | 25.2 |
+| `D_baseline` | 24.0 | 24.0 |
+| `q = D_base / D_baseline` | 0.958 | 1.050 |
 | `p = clamp((q - 0.96) / 0.10)` | 0.00 | 0.90 |
 
 Merge (same type → `conversionLoss = 1.00`):
@@ -316,7 +310,7 @@ Merge (same type → `conversionLoss = 1.00`):
 - `D_target_out = 24.0 * 0.987 = 23.69`
 
 Interpretation:
-- The output becomes a level 10 Rare dagger that is slightly below average in innate damage (because slot 1’s innate roll was poor and slot 1 dominates).
+- The output becomes a level 10 Rare dagger that is slightly below average in base damage (because slot 1's base roll was poor and slot 1 dominates).
 
 ##### Example 2: Cross-type + big level gap (the “why normalisation exists” case)
 Player level is 10. Slot 1 is a Rare dagger (level 13). Slot 2 is a Rare two-handed axe (level 6). Output is level 10 Rare dagger.
@@ -325,9 +319,9 @@ Assume Rare band `[0.96, 1.06]`, `w = 0.70`, and because types differ (and dagge
 
 | Value | Slot 1 parent (Rare dagger, level 13) | Slot 2 parent (Rare 2H axe, level 6) |
 | :--- | ---: | ---: |
-| `D_innate` | 26.0 | 18.0 |
-| `D_base` | 24.0 | 20.0 |
-| `q = D_innate / D_base` | 1.083 | 0.900 |
+| `D_base` | 26.0 | 18.0 |
+| `D_baseline` | 24.0 | 20.0 |
+| `q = D_base / D_baseline` | 1.083 | 0.900 |
 | `p = clamp((q - 0.96) / 0.10)` | 1.00 | 0.00 |
 
 Merge (cross-type):
@@ -351,7 +345,7 @@ Assume these are the boost-free baselines for a Rare shield at level 12:
 
 Compute per-channel percentiles:
 
-| Channel | Slot 1 `innate` | Slot 1 `base` | Slot 1 `p` | Slot 2 `innate` | Slot 2 `base` | Slot 2 `p` |
+| Channel | Slot 1 `base` | Slot 1 `baseline` | Slot 1 `p` | Slot 2 `base` | Slot 2 `baseline` | Slot 2 `p` |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Armour | 160 | 150 | 1.00 | 150 | 150 | 0.40 |
 | Magic armour | 110 | 120 | 0.00 | 132 | 120 | 1.00 |
@@ -372,12 +366,22 @@ Interpretation:
 
 ---
 
-## 3. Blue stat modifiers inheritance
+## 3. Stats modifiers inheritance
 
-### 3.1. Modifier cap for each rarity
-Defined by the **[Rarity System](rarity_system.md)**:
+### 3.1. Stats modifiers (definition)
 
-| Rarity ID | Name | Max stat slots (this mod) | Vanilla rollable boost slots (non-rune) |
+**Stats modifiers** are rollable boosts (blue text stats) that appear on items based on their rarity. These include:
+- Attributes (Strength, Finesse, Intelligence, etc.)
+- Combat abilities (Warfare, Scoundrel, etc.)
+- Resistances (Fire, Poison, etc.)
+- Status chance effects ("X% chance to set Y")
+- Other numeric modifiers (Critical Chance, Accuracy, Initiative, Movement, Blocking, etc.)
+
+Stats modifiers are **separate from base values** (Section 2) and **granted skills** (Section 4). They are bounded by rarity-based caps defined in the **[Rarity System](rarity_system.md)**.
+
+#### Modifier cap for each rarity
+
+| Rarity ID | Name | Max stats slots (this mod) | Vanilla rollable boost slots (non-rune) |
 | :--- | :--- | :--- | :--- |
 | **1** | Common | **1** | 0..0 |
 | **2** | Uncommon | **4** | 2..4 |
@@ -389,26 +393,26 @@ Defined by the **[Rarity System](rarity_system.md)**:
 
 **Example:**  
 A shield can appear at different rarities too.  
-- If the shield is **Rare** (Rarity ID 3), it can have up to **5 blue stats** (for example: `Blocking +15`, `+2 Constitution`, `+1 Warfare`, `+10% Fire Resistance`, `+1 Retribution`).  
-  - Vanilla reference: `Shield.stats` defines `_Boost_Shield_Special_Block_Shield_*` boosts that apply the `Blocking` stat (e.g. `Blocking=10/15/20`).
-- If the same shield is **Epic** (Rarity ID 4), it can have up to **6 blue stats**.
+- If the shield is **Rare** (Rarity ID 3), it can have up to **5 stats modifiers** (for example: `Blocking +15`, `+2 Constitution`, `+1 Warfare`, `+10% Fire Resistance`, `+1 Retribution`).  
+  - Vanilla reference: `Shield.stats` defines `_Boost_Shield_Special_Block_Shield_*` boosts that apply the `Blocking` stats (e.g. `Blocking=10/15/20`).
+- If the same shield is **Epic** (Rarity ID 4), it can have up to **6 stats modifiers**.
 
-### 3.2. The two stat lists
+### 3.2. The two stats lists
 - **Shared stats (S)**: stats on **both** parents (guaranteed).
 - **Pool stats (P)**: stats that are **not shared** (unique to either parent). This is the combined pool from both parents.
 
 #### Key values
 
-- **S (Shared stats)**: stat lines both parents share (always carried over).
-- **P (Pool stats)**: stat lines not shared (all unique lines from both parents combined).
+- **S (Shared stats)**: stats lines both parents share (always carried over).
+- **P (Pool stats)**: stats lines not shared (all unique lines from both parents combined).
 - **E (Expected baseline)**: your starting pool pick count (baseline picks from the pool).
   - Default rule: $E = \lceil P / 2 \rceil$ (half the pool, rounded up).
   - Special case: if **P = 1**, use **E = 0** (this enables a clean 50/50 keep-or-lose roll for a single pool stat).
 - **V (Luck adjustment/variance)**: the luck result that nudges E up/down (can chain).
 - **K (Stats from pool)**: how many you actually take from the pool (after luck adjustment, limited to 0–P).
-- **T (Planned total)**: planned stat lines before the rarity cap.
-- **Cap**: the max stat slots from rarity.
-- **Final**: stat lines after the cap is applied.
+- **T (Planned total)**: planned stats lines before the rarity cap.
+- **Cap**: the max stats slots from rarity.
+- **Final**: stats lines after the cap is applied.
 
 ---
 **Two rules define inheritance:**
@@ -417,24 +421,24 @@ A shield can appear at different rarities too.
 
 ### 3.3. Merging rule (how numbers are merged)
 
-Sometimes both parents have the **same stat**, but the **numbers** are different:
+Sometimes both parents have the **same stats**, but the **numbers** are different:
 - `+10% Critical Chance` vs `+14% Critical Chance`
 - `+3 Strength` vs `+4 Strength`
 
-In this system, those are still treated as **Shared stats (S)** (same stat **key**), but the forged item will roll a **merged value** for that stat.
+In this system, those are still treated as **Shared stats (S)** (same stats **key**), but the forged item will roll a **merged value** for those stats.
 
 Slot note:
-- These “blue stat” keys are not limited to weapons/shields. Armour/jewellery can roll numeric blue stats too, for example:
+- These "blue stats" keys are not limited to weapons/shields. Armour/jewellery can roll numeric blue stats too, for example:
   - Movement speed via `_Boost_Armor_Boots_Secondary_MovementSpeed` (applies `Movement=50`, Medium `75`, Large `100`)
   - Initiative via `_Boost_Armor_Belt_Secondary_Initiative` (applies `Initiative=2`, Medium `4`, Large `6`)
 
 #### Definitions
-- **Stat key**: the identity of the stat (e.g. `CriticalChance`, `Strength`). This ignores the number.
-- **Stat value**: the numeric magnitude (e.g. `10`, `14`, `3`, `4`).
+- **Stats key**: the identity of the stats (e.g. `CriticalChance`, `Strength`). This ignores the number.
+- **Stats value**: the numeric magnitude (e.g. `10`, `14`, `3`, `4`).
 
 #### Merge formula (RPG-style)
 
-Given parent values $a$ and $b$ for the same stat key:
+Given parent values $a$ and $b$ for the same stats key:
 
 1. **Midpoint (baseline):**
 
@@ -456,7 +460,7 @@ $$hi = \max(a,b)\times 1.15$$
 
 $$value = clamp(m \times r,\ lo,\ hi)$$
 
-Then format the number back into a stat line using the stat’s rounding rules.
+Then format the number back into a stats line using the stats' rounding rules.
 
 #### Rounding rules
 - **Integer stats** (Attributes, skill levels): round to the nearest integer.
@@ -502,7 +506,7 @@ Using Example A (`+10%` vs `+14%` Critical Chance):
 ---
 ### 3.4. Selection rule (shared + pool + cap)
 
-Now that **Shared stats (S)** includes the value-merge behaviour above (same stat key, merged number if needed), the next step:
+Now that **Shared stats (S)** includes the value-merge behaviour above (same stats key, merged number if needed), the next step:
 - Count how many shared stats you have (**S**).
 - Put everything else into the pool (**P**).
 - Roll how many pool stats you keep (**K**) and apply the rarity cap.
@@ -527,7 +531,7 @@ $$T = S + K$$
 $$Final = \min(T,\ Cap)$$
 ### Step 1: Separate shared vs pool stats
 Compare the two parents:
-- For all the **shared stats** from both items (same stat **key**), put into **Shared stats (S)**.
+- For all the **shared stats** from both items (same stats **key**), put into **Shared stats (S)**.
   - If the values differ, use the **value merge** rules in **3.3** to roll the merged number for the forged item.
 - For all the **non-shared stats** from both items, put into **Pool stats (P)**.
 
@@ -570,7 +574,7 @@ Multiplayer note:
 2. **Build the list**:
    - Start with all **shared stats**, then add that many random stats from the **pool**.
 3. **Apply the cap last**:
-   - If the total is above the item’s **max stat slots**, remove extra stats until you reach the limit (remove pool-picked stats first).
+   - If the total is above the item's **max stats slots**, remove extra stats until you reach the limit (remove pool-picked stats first).
 
 Imagine you’re forging these two **boots** (boots can only forge with boots):
 
@@ -1011,21 +1015,21 @@ Before the rarity cap, the forged item ends up with between **2** and **14** sta
 | +8 | 12 | 14 | 15% × (30%)^7 (cap) | **0.03%** |
 
 ---
-## 4. Granted skill inheritance
+## 4. Skills inheritance
 This section adds **granted skills** as a **separate inheritance channel** from normal “blue stats”.
 
 - **Vanilla-aligned caps**: skills are tightly capped by rarity (Epic 1, Legendary 1, Divine 2).
-- **Separate from stat slots**: granted skills do **not** consume your normal **Max stat slots (this mod)**.
+- **Separate from stats slots**: granted skills do **not** consume your normal **Max stats slots (this mod)**.
 - **Stable randomness**: selection/trimming is **random but seeded per forge**, so it is stable for that forge.
 - **Multiplayer consistency**: use the same `forgeSeed` approach as stats, and roll skills **host-authoritatively** (clients receive the final result).
 
 ### 4.1. Granted skills (definition)
 
-- **Granted skill (rollable)**: any rollable boost/stat line that grants entries via a `Skills` field in its boost definition.
+- **Granted skill (rollable)**: any rollable boost/stats line that grants entries via a `Skills` field in its boost definition.
   - Weapon example: `_Boost_Weapon_Skill_Whirlwind` → `Shout_Whirlwind`
   - Shield example: `_Boost_Shield_Skill_BouncingShield` → `Projectile_BouncingShield`
   - Armour/jewellery example: `_Boost_Armor_Gloves_Skill_Restoration` → `Target_Restoration` (defined in `Armor.stats`)
-- **Not a granted skill (innate)**: a `Skills` entry baked into the base weapon stat entry (not a rolled boost), e.g. staff base skills like `Projectile_StaffOfMagus` (**innate-only; never enters `poolSkills`**).
+- **Not a granted skill (base)**: a `Skills` entry baked into the base weapon stats entry (not a rolled boost), e.g. staff base skills like `Projectile_StaffOfMagus` (**base-only; never enters `poolSkills`**).
 
 **Vanilla scope note:**
 - Only treat **`BoostType="Legendary"`** skill boosts as “vanilla rarity-roll skills”.
@@ -1213,7 +1217,7 @@ Weapon example:
 This is a **weapon** example (weapon-only skill boosts).
 
 Assume the rarity system produces a **Divine** forged item:
-- Normal stat cap (this mod): **8**
+- Normal stats cap (this mod): **8**
 - **SkillCap (Divine)**: **2**
 
 Parent A granted skills:
@@ -1252,20 +1256,26 @@ Result:
 
 ---
 ## 5. Rune slots inheritance
-Rune slots are inherited by taking the average of the two parents’ rune slot counts, then **rounding up**.
+Vanilla-style constraint (important for balance):
+- For **non-Unique** items, treat rune slots as **binary**: you can have **0 or 1** rune slot total.
+- (Unique can be a special case later; do not assume that behaviour here.)
 
-$$RuneSlots_{out} = \lceil (RuneSlots_A + RuneSlots_B) / 2 \rceil$$
+### Default rule (non-Unique)
 
-Examples:
+If **both** parents have `RuneSlots = 1`, then the forged item gets `RuneSlots_out = 1`.
+
+If **exactly one** parent has `RuneSlots = 1`, then the forged item gets `RuneSlots_out = 1` with a **small** chance, otherwise `0`.
+
+$$RuneSlots_{out} \in \{0,1\}$$
+
+Examples (non-Unique):
 
 | Parent A slots | Parent B slots | Forged slots |
-| :---: | :---: | :---: |
+| :---: | :---: | :--- |
 | 0 | 0 | 0 |
-| 0 | 1 | 1 |
-| 1 | 2 | 2 |
-| 1 | 3 | 2 |
-| 2 | 3 | 3 |
-
+| 1 | 1 | 1 |
+| 0 | 1 | 1 with 50%, else 0 |
+| 1 | 0 | 1 with 50%, else 0 |
 ---
 ## 6. Implementation reference 
 [forging_system_implementation_blueprint_se.md → Appendix: Pseudocode reference](forging_system_implementation_blueprint_se.md#appendix-pseudocode-reference)
