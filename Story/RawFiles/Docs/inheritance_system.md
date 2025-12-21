@@ -37,7 +37,7 @@ In short:
 - [2.4. Measuring base values (no rune/boost pollution)](#24-measuring-base-values-no-runeboost-pollution)
 - [2.5. Normalisation (q → percentile p)](#25-normalisation-q--percentile-p)
 - [2.6. Cross-type merging (w + conversionLoss)](#26-cross-type-merging-w--conversionloss)
-- [2.7. Worked examples (tables)](#27-worked-examples-tables)
+- [2.7. Worked examples](#27-worked-examples)
 </details>
 
 <details>
@@ -149,22 +149,60 @@ These are the only "balance knobs" you should tune for the base values merge.
 | Parameter | Meaning | Suggested default | Notes |
 | :--- | :--- | :---: | :--- |
 | `w` | Slot 1 dominance when merging percentiles | **0.70** | Keeps the output feeling like “slot 1’s type”, even cross-type. |
-| `conversionLoss` | Donor effectiveness when types differ | See table below | Prevents cross-type budget stealing. |
+| `conversionLoss` | Donor effectiveness when types differ | See formula below | Prevents cross-type budget stealing. |
 | `[L_r, H_r]` | Allowed base values roll band for rarity `r` | See band table below | Clamp both parents and output to rarity-appropriate bands. |
 | Unique baseline | How to normalise Unique parents | **Use Legendary baseline** | Unique is too bespoke; this is normalisation only. |
 
-##### Suggested conversion-loss table (cross-type safety)
-Use this when the two parents are not the same exact weapon type.
+#### Conversion loss (cross-type safety)
 
-| Case | `conversionLoss` | Rationale |
-| :--- | :---: | :--- |
-| Same weapon type | **1.00** | Safe: no budget conversion needed. |
-| Different types, both 1H melee (non-dagger) | **0.85** | Similar budget family; mild loss. |
-| 1H ↔ 2H | **0.70** | Stops 2H raw budget from over-influencing 1H. |
-| Dagger involved (either side) | **0.60** | Daggers are the easiest exploit vector; stricter loss. |
-| Melee ↔ ranged (if you ever allow it) | **0.60** | Different combat patterns; strict loss. |
+To keep forging **type-safe**, derive `conversionLoss` from the **baseline damage budgets** you already use for normalisation.
 
-##### Suggested base values roll bands (shared across equipment for now)
+Let:
+- `Type_out` be the output weapon type (slot 1).
+- `Type_donor` be the donor weapon type (slot 2).
+- `B(type, level, rarity)` be the **baseline budget** for white damage average (Section 2.4 baseline cache).
+
+Use a baseline-ratio loss:
+
+Why this specific ratio:
+- It compares budgets on the **same level and output rarity curve**, so it is stable and comparable.
+- It does *not* depend on the donor’s own rolled damage (that’s already captured by its percentile).
+
+$$conversionLoss = \min\left(1,\ \left(\frac{B(Type_{out}, Level_{out}, Rarity_{out})}{B(Type_{donor}, Level_{out}, Rarity_{out})}\right)^{\alpha}\right)$$
+
+Recommended:
+- `α = 0.75` (soft but meaningful)
+- Always clamp to `[0, 1]`
+
+This automatically produces different losses for different conversions:
+- Dagger ← 2H Axe (big donor budget) → **smaller ratio → larger loss**
+- Dagger ← Bow (still larger budget than dagger) → **loss, but less than the 2H loss**
+- 1H Sword ← 1H Axe (similar budgets) → **ratio near 1 → small loss**
+
+#### Optional family multiplier (if you want extra guardrails)
+You can multiply the ratio-loss by a small family penalty `g(Type_out, Type_donor)`:
+
+$$conversionLoss = conversionLoss \times g(Type_{out}, Type_{donor})$$
+
+Suggested `g` defaults (apply only when types differ):
+- Same family (see table below): `g = 1.00`
+- Adjacent families: `g = 0.90`
+- Dagger involved: `g = 0.85`
+- Melee ↔ ranged or melee ↔ magic weapons: `g = 0.80`
+
+#### Weapon type families (all vanilla weapon types)
+These families share broadly similar baseline budgets, so the ratio rule should already behave well inside each family:
+
+| Family | Weapon types |
+| :--- | :--- |
+| 1H melee | 1H Sword, 1H Axe, 1H Mace |
+| Dagger | Dagger |
+| 2H melee | 2H Sword, 2H Axe, 2H Mace |
+| Spear | Spear |
+| Magic weapons | Wand, Staff |
+| Ranged weapons | Bow, Crossbow |
+
+#### Suggested base values roll bands (shared across equipment for now)
 These bands define what "bottom roll" and "top roll" mean for the **base values** at a given rarity.
 
 They are intentionally narrow to keep a vanilla feel (most of the “power” still comes from level + rarity, then blue stats).
@@ -180,21 +218,37 @@ They are intentionally narrow to keep a vanilla feel (most of the “power” st
 | Unique | `[0.95, 1.08]` | Use Legendary band for now (normalisation is already special-cased). |
 
 ### 2.4. Measuring base values (no rune/boost pollution)
-When computing a parent's base values, ignore anything that is not part of the item's base template.
+This system is designed so the parent signal for “base values quality” comes from what the player actually has in hand (white tooltip numbers), and fairness comes from normalising against a **baseline budget cache**.
 
-Specifically, exclude:
-- Rune socket effects (already blocked by **1.0 Ingredient eligibility**).
-- Any rollable boost-driven effects (anything coming from `DeltaModifier.stats` / `_Boost_*`).
-- Any forging-system-injected boosts (your mod’s own “forged” metadata/bonuses).
+#### Parent measurement (weapons)
+For each parent weapon:
+- Read the weapon’s white damage range from the item tooltip: `D_min..D_max`
+- Compute the average: `D_avg = (D_min + D_max) / 2`
 
-Practical rule of thumb:
-- Do not try to subtract unknown modifiers from a live weapon.
-- Instead, compute base values by using a **boost-free** reference (a stripped clone or a clean spawn of the same template), so the measurement is not contaminated.
+Important constraints (already enforced elsewhere, but repeated here because they matter for correctness):
+- **Socketed runes are rejected** as ingredients (Section 1.1), so rune damage pollution does not enter the system.
+- Try to measure from a stable state (not mid-combat / not under temporary damage buffs), so the tooltip reflects the item’s own white damage.
+
+#### Baseline cache `B(Type, Level, Rarity)` (runtime-sampled, data-driven)
+To make forging “vanilla-fair” while still letting players chase better rolls, you need a reference budget curve:
+
+- `B(Type, Level, Rarity)`: the **expected** (mean) white damage average for that `(weapon type, level, rarity)` in vanilla.
+
+This is not clearly exposed as a single table in editor `.stats` data, so the baseline should be obtained by **sampling at runtime** (Script Extender), then cached:
+- Spawn (or otherwise obtain) `N` vanilla items for each `(Type, Level, Rarity)` cell.
+- Read `D_avg` for each sample.
+- Store `B` as the sample mean (optionally also store percentiles like p10/p50/p90 for debugging).
+
+Recommended starting point:
+- `N = 200` per cell for stable means (use fewer for dev, more for final tuning).
+
+Note on “Type” for armour:
+- For armour, `Type` should include the **slot** (e.g. Chest) and the **armour archetype/material** (Strength / Finesse / Intelligence families), because those families have intentionally different physical vs magic base budgets.
 
 ### 2.5. Normalisation (q → percentile p)
 This converts “how good is this item for its own type/level/rarity” into a stable percentile in \([0,1]\).
 
-#### Definitions (weapons)
+#### Parameters (weapons)
 For a weapon:
 - `D_min`, `D_max`: the displayed physical damage range (or the relevant damage type range if you choose to normalise elemental weapons differently).
 - `D_avg = (D_min + D_max) / 2`
@@ -203,9 +257,9 @@ For parent weapon `i`:
 - `Type_i`: the weapon type (dagger, two-handed axe, etc.).
 - `Rarity_i`: item rarity.
 - `Level_i`: item level.
-- `D_base_i`: the weapon's **base** average damage at `Level_i` (boost-free measurement).
-- `D_baseline_i`: a **baseline** base average damage for `(Type_i, Level_i, Rarity_i)` (also boost-free).
-- `q_i = D_base_i / D_baseline_i`: the parent's base quality ratio.
+- `D_avg_i`: the weapon’s measured white damage average (Section 2.4).
+- `B_i = B(Type_i, Level_i, Rarity_i)`: the baseline budget for that type/level/rarity (Section 2.4).
+- `q_i = D_avg_i / B_i`: the parent’s base quality ratio.
 
 Then convert `q_i` into a percentile `p_i` within the allowed "base damage roll band" for that rarity:
 
@@ -216,7 +270,7 @@ Interpretation:
 - `p_i = 0.0` means "bottom of the allowed base damage band for that rarity".
 - `p_i = 1.0` means "top of the allowed base damage band for that rarity".
 
-#### Definitions (shields)
+#### Parameters (shields)
 Shields do not have weapon damage; they primarily have:
 - `Armour`: `Armor Defense Value`
 - `MagicArmour`: `Magic Armor Value`
@@ -227,22 +281,22 @@ Treat each numeric channel the same way:
 
 #### Baseline selection (same rarity baseline, plus the Unique normalisation rule)
 You requested “baseline percentile uses the same rarity as the parent”. Use:
-- `D_base_i = baseline(Type_i, Level_i, Rarity_i)`
+- `B_i = B(Type_i, Level_i, Rarity_i)`
 
 Special case for Unique:
 - **Unique baseline = Legendary baseline**, purely for normalisation:
-  - If `Rarity_i` is Unique, use `Rarity_base = Legendary` when computing `D_base_i`.
+  - If `Rarity_i` is Unique, use `Rarity_base = Legendary` when computing `B_i`.
   - This avoids “bespoke Unique templates” making baseline comparisons meaningless.
 
 Note: this does not change the item’s displayed rarity; it only defines the reference curve for normalisation.
 
-### 2.6. Cross-type merging (w + conversionLoss)
+### 2.6. Cross-type merging (`w` + `conversionLoss`)
 Never merge raw damage numbers across types. Merge **percentiles** (or quality ratios) and then re-express the result on the output type’s baseline.
 
-1) Compute `p_1` and `p_2` from the two parents (as above).
+1) Compute `p_1` and `p_2` from the two parents.
 2) Apply a “cross-type conversion loss” if the weapon types differ:
    - `conversionLoss = 1.0` if `Type_1 == Type_2`
-   - Otherwise `conversionLoss < 1.0` (design parameter) to prevent importing a donor’s strength too efficiently.
+   - Otherwise `conversionLoss < 1.0` to prevent importing a donor’s strength too efficiently.
 3) Weighted merge where slot 1 is dominant:
    - `p_out = clamp(w * p_1 + (1 - w) * p_2 * conversionLoss, 0, 1)`
    - Recommended starting point: `w = 0.70`
@@ -250,107 +304,244 @@ Never merge raw damage numbers across types. Merge **percentiles** (or quality r
    - `q_out = L_out + p_out * (H_out - L_out)`
 5) Re-express at player level on the output type’s baseline:
    - `Level_out = Level_player`
-   - `D_base_out = baseline(Type_out, Level_out, Rarity_out)`
-   - `D_target_out = D_base_out * q_out`
+   - `B_out = B(Type_out, Level_out, Rarity_out)`
+   - `D_target_out = B_out * q_out`
 6) Apply clamping again to guarantee the output stays within the output band.
 
-This achieves your “latter” requirement:
+#### Rounding (displayed values)
+The game displays white damage/armour values as integers.
+
+Recommended:
+- Keep calculations in floating point until the end.
+- Round final displayed values to the nearest integer (round halves up).
+
+If you want a player-favour bias:
+- Round **up** (ceiling) when converting the final computed value(s) into the displayed integers.
+
+This achieves the following:
 - Players can chase better raw numbers by feeding better-percentile parents.
 - But the output is still bounded by the output’s own (type, level, rarity) budget.
 
 #### Step-by-step summary (weapons and shields)
-Use this as the “mental model” for the process.
 
 | Step | What you compute | Why |
 | :---: | :--- | :--- |
 | 1 | Decide output `Type_out` (slot 1), `Rarity_out` (rarity system), `Level_out` (player level) | The output budget is defined here. |
-| 2 | Measure each parent's base numeric value(s) (`D_base`, or `Armour_base`/`Magic_base`) | Avoid boost/rune pollution. |
-| 3 | Measure each parent's baseline numeric value(s) for `(Type_i, Level_i, Rarity_i)` | Defines "what is normal for that parent". |
+| 2 | Measure each parent's numeric value(s) from the item tooltip (`D_avg`, or `Armour`/`MagicArmour`) | Uses real items; rune sockets are already rejected. |
+| 3 | Look up baseline budgets `B(Type_i, Level_i, Rarity_i)` from the runtime cache | Defines “what is normal for that parent’s budget”. |
 | 4 | Convert to quality ratios `q_i = base/baseline`, then to percentiles `p_i` using `[L_r, H_r]` | Puts all items on a comparable 0..1 scale. |
 | 5 | Merge percentiles into `p_out` (slot 1 weight `w`, cross-type `conversionLoss`) | Prevents cross-type budget stealing. |
 | 6 | Convert back to output quality `q_out`, then apply to output baseline at player level | Makes the output “a good roll of its own type”. |
 | 7 | Clamp to output band `[L_out, H_out]` | Enforces the “capped by output budget” rule. |
 
-#### Why this avoids exploits (failure modes addressed)
+#### Why this avoids exploits:
 - **Level gap**: because each parent is normalised against its own `(type, level, rarity)` baseline, a level 13 item does not directly inject level 13 raw damage into a level 10 output.
 - **Cross-type budget stealing**: the donor only contributes a percentile, and that percentile is re-expressed on the output type’s baseline; a dagger remains “a very good dagger”, not “a dagger with two-handed damage”.
-- **Boost leakage**: by measuring `D_base` and `D_baseline` using boost-free references, you do not accidentally include DeltaModifier boosts, runes, or mod-injected effects.
+- **Rune/boost pollution**: rune sockets are rejected up-front (Section 1.1), and any remaining variation is handled fairly because all comparisons are made against the sampled baseline budget `B(Type, Level, Rarity)`.
 
-### 2.7. Worked examples (tables)
-All numbers below are illustrative; the structure and clamping rules are what matter.
+### 2.7. Worked examples
+The examples below use real level 20 items you provided (white damage ranges), and combine them with **baseline cache values** `B(Type, 20, Rarity)` that would be obtained from the runtime sampler described in Section 2.4.
 
-##### Example 1: Same type weapon (simple case)
-Player level is 10. Both parents are Rare daggers (slot 1 decides output type: dagger). Output is level 10 Rare dagger.
+Conventions used in the tables:
+- `D_avg` is taken from the parent tooltip (white range average).
+- `B` values shown are **example cache values** (your sampler provides the real ones).
+- Percentiles are always in `[0,1]` so they remain comparable across rarities.
 
-Assume the Rare band is `[L_r, H_r] = [0.96, 1.06]`, and `w = 0.70`.
+#### Example 1: Common crossbow (donor) + Divine crossbow (main), and rarity-weighted chance `c`
+Parents (level 20):
+- Slot 1 (Divine crossbow): `150–157` → `D_avg = 153.5`
+- Slot 2 (Common crossbow): `130–136` → `D_avg = 133.0`
 
-| Value | Slot 1 parent (Rare dagger, level 10) | Slot 2 parent (Rare dagger, level 10) |
+Assume `w = 0.70`, and same type → `conversionLoss = 1.0`.
+
+Example baseline cache for `B(Crossbow, 20, r)`:
+
+| Rarity | `B` (avg) |
+| :--- | ---: |
+| Common | 133.0 |
+| Uncommon | 136.0 |
+| Rare | 142.0 |
+| Epic | 146.0 |
+| Legendary | 150.0 |
+| Divine | 152.0 |
+
+Normalise each parent (each uses its own rarity band):
+| Value | Slot 1 (Divine crossbow) | Slot 2 (Common crossbow) |
 | :--- | ---: | ---: |
-| `D_base` | 23.0 | 25.2 |
-| `D_baseline` | 24.0 | 24.0 |
-| `q = D_base / D_baseline` | 0.958 | 1.050 |
-| `p = clamp((q - 0.96) / 0.10)` | 0.00 | 0.90 |
+| `D_avg` | 153.5 | 133.0 |
+| `B` | 152.0 | 133.0 |
+| `q = D_avg / B` | 1.010 | 1.000 |
+| Band | `[0.95, 1.09]` | `[0.97, 1.03]` |
+| `p = clamp((q - L) / (H - L))` | 0.428 | 0.500 |
 
-Merge (same type → `conversionLoss = 1.00`):
-- `p_out = clamp(0.70 * 0.00 + 0.30 * 0.90 * 1.00) = 0.27`
-- `q_out = 0.96 + 0.27 * 0.10 = 0.987`
-- Output baseline (player level): `D_base_out = baseline(dagger, 10, Rare) = 24.0`
-- `D_target_out = 24.0 * 0.987 = 23.69`
+Merge percentiles:
+- `p_out = 0.70 * 0.428 + 0.30 * 0.500 = 0.450`
+
+Compute output per possible rarity `r`:
+- `q_out(r) = L_r + p_out * (H_r - L_r)`
+- `D_out(r) = B(Crossbow, 20, r) * q_out(r)`
+
+Rarity roll probabilities (from `rarity_system.md` Scenario 1, Common + Divine):
+
+| Output rarity | `P(r)` | `D_out(r)` (avg) | Verdict |
+| :--- | ---: | ---: | :--- |
+| Common | 2.7% | 132.6 | Below both (below 133.0) |
+| Uncommon | 14.2% | 136.2 | Between |
+| Rare | 33.1% | 142.7 | Between |
+| Epic | 33.1% | 147.4 | Between |
+| Legendary | 14.2% | 151.3 | Between |
+| Divine | 2.7% | 154.0 | Above both (above 153.5) |
+
+Chance summary:
+- Rarity-weighted: `c(D_out > both) = 2.7%`, `c(D_out < both) = 2.7%`
+- Fixed-forge (conditional on realised rarity): if `r=Divine`, then `c_fixed(>both)=1`; if `r=Common`, then `c_fixed(<both)=1`; otherwise both are `0`.
+
+#### Example 2: 1H sword (main) + staff (donor), both Divine (level 20)
+Parents (level 20 Divine):
+- Slot 1 (1H sword): `98–108` → `D_avg = 103.0`
+- Slot 2 (staff): `132–160` → `D_avg = 146.0`
+
+Because both parents are Divine, your rarity system forces **100% Divine output** (Divine + Divine stability).
+
+Assume `w = 0.70`, `α = 0.75`, and example baseline cache:
+- `B(1H Sword, 20, Divine) = 102.0`
+- `B(Staff, 20, Divine) = 145.0`
+
+Normalise (Divine band `[0.95, 1.09]`):
+| Value | Slot 1 (1H sword) | Slot 2 (staff) |
+| :--- | ---: | ---: |
+| `D_avg` | 103.0 | 146.0 |
+| `B` | 102.0 | 145.0 |
+| `q = D_avg / B` | 1.010 | 1.007 |
+| `p = clamp((q - 0.95) / 0.14)` | 0.428 | 0.406 |
+
+Cross-type conversion loss (budget ratio on output curve):
+- `conversionLoss = min(1, (B(1H Sword,20,Divine) / B(Staff,20,Divine))^α)`
+- `conversionLoss = (102 / 145)^0.75 ≈ 0.77`
+
+Merge:
+- `p_out = 0.70 * 0.428 + 0.30 * 0.406 * 0.77 = 0.393`
+- `q_out = 0.95 + 0.393 * 0.14 = 1.005`
+- `D_out = B(1H Sword,20,Divine) * q_out = 102.0 * 1.005 = 102.5`
+
+Chance summary:
+- Rarity-weighted: `c(D_out > both) = 0%`, `c(D_out < both) = 0%` (output rarity is fixed at Divine)
+- Fixed-forge (conditional on realised rarity): `c_fixed(r=Divine) = 1`, otherwise `0`
+
+Cross-type note: comparing output vs the **staff’s absolute damage** is not meaningful (different weapon budget). The meaningful comparison is: output vs the **slot 1 parent** (same type).
+
+#### Example 3: Dagger (main) + crossbow (donor), both Divine (level 20)
+Parents (level 20 Divine):
+- Slot 1 (dagger): `83–87` → `D_avg = 85.0`
+- Slot 2 (crossbow): `150–157` → `D_avg = 153.5`
+
+Assume example baseline cache:
+- `B(Dagger, 20, Divine) = 86.0`
+- `B(Crossbow, 20, Divine) = 152.0`
+
+Normalise (Divine band `[0.95, 1.09]`):
+| Value | Slot 1 (dagger) | Slot 2 (crossbow) |
+| :--- | ---: | ---: |
+| `D_avg` | 85.0 | 153.5 |
+| `B` | 86.0 | 152.0 |
+| `q = D_avg / B` | 0.988 | 1.010 |
+| `p = clamp((q - 0.95) / 0.14)` | 0.271 | 0.428 |
+
+Cross-type conversion loss:
+- `conversionLoss = (86 / 152)^0.75 ≈ 0.65`
+
+Merge:
+- `p_out = 0.70 * 0.271 + 0.30 * 0.428 * 0.65 = 0.272`
+- `q_out = 0.95 + 0.272 * 0.14 = 0.988`
+- `D_out = 86.0 * 0.988 = 85.0`
 
 Interpretation:
-- The output becomes a level 10 Rare dagger that is slightly below average in base damage (because slot 1's base roll was poor and slot 1 dominates).
+- A ranged donor cannot “inject” its budget into a dagger; it can only nudge the dagger’s percentile slightly, and that nudge is conversion-limited.
 
-##### Example 2: Cross-type + big level gap (the “why normalisation exists” case)
-Player level is 10. Slot 1 is a Rare dagger (level 13). Slot 2 is a Rare two-handed axe (level 6). Output is level 10 Rare dagger.
+#### Example 4: Spear (main) + 2H sword (donor), both Divine (level 20)
+Parents (level 20 Divine):
+- Slot 1 (spear): `150–157` → `D_avg = 153.5`
+- Slot 2 (2H sword): `153–170` → `D_avg = 161.5`
 
-Assume Rare band `[0.96, 1.06]`, `w = 0.70`, and because types differ (and dagger is involved) `conversionLoss = 0.60`.
+Assume example baseline cache:
+- `B(Spear, 20, Divine) = 152.0`
+- `B(2H Sword, 20, Divine) = 160.0`
 
-| Value | Slot 1 parent (Rare dagger, level 13) | Slot 2 parent (Rare 2H axe, level 6) |
+Normalise (Divine band `[0.95, 1.09]`):
+| Value | Slot 1 (spear) | Slot 2 (2H sword) |
 | :--- | ---: | ---: |
-| `D_base` | 26.0 | 18.0 |
-| `D_baseline` | 24.0 | 20.0 |
-| `q = D_base / D_baseline` | 1.083 | 0.900 |
-| `p = clamp((q - 0.96) / 0.10)` | 1.00 | 0.00 |
+| `D_avg` | 153.5 | 161.5 |
+| `B` | 152.0 | 160.0 |
+| `q = D_avg / B` | 1.010 | 1.009 |
+| `p = clamp((q - 0.95) / 0.14)` | 0.428 | 0.425 |
+
+Cross-type conversion loss:
+- `conversionLoss = (152 / 160)^0.75 ≈ 0.96`
+
+Merge:
+- `p_out = 0.70 * 0.428 + 0.30 * 0.425 * 0.96 = 0.422`
+- `q_out = 0.95 + 0.422 * 0.14 = 1.009`
+- `D_out = 152.0 * 1.009 = 153.4`
+
+Interpretation:
+- Similar-budget 2H families can nudge each other more than dagger/ranged cross-family cases, but the output is still capped to the spear’s own budget.
+
+#### High-roll variant (same types/level/rarity, but a “top roll” donor)
+Same baseline cache and settings, but assume the donor 2H sword is a higher roll (still level 20 Divine):
+- Slot 2 (2H sword): `170–188` → `D_avg = 179.0`
+
+Recompute only the donor percentile:
+- `q_2 = 179.0 / 160.0 = 1.119` → `p_2 = clamp((q_2 - 0.95) / 0.14) = 1.00` (clamped)
 
 Merge (cross-type):
-- `p_out = clamp(0.70 * 1.00 + 0.30 * 0.00 * 0.60) = 0.70`
-- `q_out = 0.96 + 0.70 * 0.10 = 1.03`
-- Output baseline is at player level: `D_base_out = baseline(dagger, 10, Rare) = 24.0`
-- `D_target_out = 24.0 * 1.03 = 24.72`
+- `p_out = 0.70 * 0.428 + 0.30 * 1.00 * 0.96 = 0.588`
+- `q_out = 0.95 + 0.588 * 0.14 = 1.032`
+- `D_out = 152.0 * 1.032 = 156.9`
 
-Interpretation:
-- The level 13 dagger does not “force” a level 13 output; it only contributes that it was a high-quality dagger for its own baseline.
-- The level 6 axe cannot inject two-handed raw budget into a dagger because its contribution is percentile-based and conversion-limited.
+This is the “feel-good” case:
+- The forged spear’s white damage ends up **higher than the main-slot parent** (153.5 → ~156.9 avg), because the donor was a genuinely high roll and the conversion loss between spear and 2H sword is small.
 
-##### Example 3: Shields (two numeric channels)
-Player level is 12. Both parents are Rare shields (slot 1 decides output type: shield). Output is a level 12 Rare shield.
+#### Example 5: Armour (two channels) — Strength chest (main) + Intelligence chest (donor), both Divine (level 20)
+This example uses your two Divine chest armours:
 
-Use the same Rare band `[0.96, 1.06]`, `w = 0.70`, `conversionLoss = 1.00` (same type family).
+- Slot 1 (Strength chest): `713 Physical Armour`, `140 Magic Armour`
+- Slot 2 (Intelligence chest): `140 Physical Armour`, `713 Magic Armour`
 
-Assume these are the boost-free baselines for a Rare shield at level 12:
-- `Armour_base_out = 150`
-- `Magic_base_out = 120`
+We treat **Physical Armour** and **Magic Armour** as separate numeric channels, each with its own percentile and merge.
 
-Compute per-channel percentiles:
+Assume Divine band `[0.95, 1.09]`, `w = 0.70`, and baseline cache values (example):
+- `B(Chest_Str, 20, Divine)`:
+  - `B_phys = 700`
+  - `B_magic = 150`
+- `B(Chest_Int, 20, Divine)`:
+  - `B_phys = 150`
+  - `B_magic = 700`
 
-| Channel | Slot 1 `base` | Slot 1 `baseline` | Slot 1 `p` | Slot 2 `base` | Slot 2 `baseline` | Slot 2 `p` |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Armour | 160 | 150 | 1.00 | 150 | 150 | 0.40 |
-| Magic armour | 110 | 120 | 0.00 | 132 | 120 | 1.00 |
+Compute per-channel parent percentiles (using each parent’s own baseline):
+
+| Channel | Slot 1 value | Slot 1 `B` | Slot 1 `q` | Slot 1 `p` | Slot 2 value | Slot 2 `B` | Slot 2 `q` | Slot 2 `p` |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Physical | 713 | 700 | 1.019 | 0.490 | 140 | 150 | 0.933 | 0.000 |
+| Magic | 140 | 150 | 0.933 | 0.000 | 713 | 700 | 1.019 | 0.490 |
+
+Cross-type conversion loss is applied per channel on the **output curve** (slot 1’s chest type):
+- Physical channel: `conversionLoss_phys = min(1, (B_phys_out / B_phys_donor)^α) = min(1, (700/150)^0.75) = 1.00`
+- Magic channel: `conversionLoss_magic = min(1, (B_magic_out / B_magic_donor)^α) = (150/700)^0.75 ≈ 0.32`
 
 Merge per channel:
-- Armour:
-  - `p_out = 0.70 * 1.00 + 0.30 * 0.40 = 0.82`
-  - `q_out = 0.96 + 0.82 * 0.10 = 1.042`
-  - `Armour_target_out = 150 * 1.042 = 156.3`
-- Magic armour:
-  - `p_out = 0.70 * 0.00 + 0.30 * 1.00 = 0.30`
-  - `q_out = 0.96 + 0.30 * 0.10 = 0.99`
-  - `Magic_target_out = 120 * 0.99 = 118.8`
+
+- Physical:
+  - `p_out = 0.70 * 0.490 + 0.30 * 0.000 * 1.00 = 0.343`
+  - `q_out = 0.95 + 0.343 * 0.14 = 0.998`
+  - `Phys_out = 700 * 0.998 = 698.6` → **699** (rounded)
+- Magic:
+  - `p_out = 0.70 * 0.000 + 0.30 * 0.490 * 0.32 = 0.047`
+  - `q_out = 0.95 + 0.047 * 0.14 = 0.957`
+  - `Magic_out = 150 * 0.957 = 143.6` → **144** (rounded)
 
 Interpretation:
-- Slot 1 heavily influences both channels.
-- You can “mix and match” a parent that is good on armour with a parent that is good on magic armour, but the result is still capped within Rare expectations.
+- The output remains a **Strength chest** (slot 1), so it cannot become an “Int chest in disguise”.
+- The donor can still nudge the weaker channel slightly (Magic 140 → ~144), but cross-type conversion prevents budget stealing.
 
 ---
 
@@ -517,13 +708,13 @@ $$K = \min(\max(E + V,\ 0),\ P)$$
 $$T = S + K$$
 
 $$Final = \min(T,\ Cap)$$
-### Step 1: Separate shared vs pool stats
+#### Step 1: Separate shared vs pool stats
 Compare the two parents:
 - For all the **shared stats** from both items (same stats **key**), put into **Shared stats (S)**.
   - If the values differ, use the **value merge** rules in **3.3** to roll the merged number for the forged item.
 - For all the **non-shared stats** from both items, put into **Pool stats (P)**.
 
-### Step 2: Set the expected baseline (E)
+#### Step 2: Set the expected baseline (E)
 Now work out your starting point for the pool.
 You begin at **about one-third of the pool**, rounded down (this is the “expected baseline”, E). This makes **non-shared** stats noticeably harder to keep, while **shared** stats remain stable.
 
@@ -534,7 +725,7 @@ Examples:
 - Pool size 7 → expect to keep 2
 - Pool size 12 → expect to keep 4
 
-### Step 3: Choose the tier (sets luck odds)
+#### Step 3: Choose the tier (sets luck odds)
 The tier depends only on **pool size**:
 
 | Pool size | Tier | First roll chances (Bad / Neutral / Good) | Chain chance (Down / Up) |
@@ -544,7 +735,7 @@ The tier depends only on **pool size**:
 | **5–7** | Tier 3 (Mid) | 28% / 50% / 22% | 28% / 30% |
 | **8+** | Tier 4 (Risky) | 45% / 40% / 15% | 45% / 30% |
 
-### Step 4: Roll the luck adjustment (can chain)
+#### Step 4: Roll the luck adjustment (can chain)
 The system rolls a **luck adjustment** which is essentially a **variance** that gets added to the expected baseline **E**, which changes how many pool stats you keep:
 
 - **Bad roll**: you try to keep 1 fewer, and you may chain further down.
@@ -556,7 +747,7 @@ The system rolls a **luck adjustment** which is essentially a **variance** that 
 Multiplayer note:
 - This luck roll (and the later random selection of which pool stats you actually take) should be rolled **host-authoritatively** and driven by the forge’s deterministic seed (`forgeSeed`), for consistency.
 
-### Step 5: Build the result and apply the cap
+#### Step 5: Build the result and apply the cap
 1. **Plan total stats**:
    - Total stats = number of shared stats + number of pool stats kept
 2. **Build the list**:
@@ -600,13 +791,9 @@ So you end up with:
 
 ---
 
-### Examples
+#### Safe vs YOLO forging
 
-The tables below are examples only. They apply the formulas above to show what you can roll in each pool-size tier.
-
-### Safe vs YOLO forging (intuition extremes)
-
-These two standalone examples are meant to build intuition:
+These two standalone examples are meant to show the difference between:
 - **Safe forging**: many shared stats → stable outcomes (pool stats are just “bonus”).
 - **YOLO forging**: zero shared stats → pure variance (rare spikes are possible, but unreliable).
 
@@ -705,7 +892,7 @@ Inputs for this example:
 - **Pool size (P):** 9
 - **Expected baseline (E):** floor((P + 1) / 3) = floor(10 / 3) = 3
 - **Tier used:** Tier 4 odds (because `P = 9` is `8+`)
-- **Assume output rarity:** Divine
+- **Assume output rarity:** Divine (2.7% chance)
 
 This is the perfect example for **YOLO forging**:
 - With **0 shared stats**, you have **no guarantees**. Everything is a roll from the pool.
@@ -734,7 +921,8 @@ Chance to end with a **Divine item with 8 stats** (Final = 8):
 
 **Key insight:** YOLO forging can still “spike” into a full Divine statline, but it’s intentionally **very rare** when you have **0 shared stats**.
 
-### Tier 1 (Pool size = 1, no chains)
+---
+#### Tier 1 (Pool size = 1, no chains)
 
 **Example 1:**
 ```
@@ -761,7 +949,7 @@ Inputs for this example:
 | 0 | 0 | 1 | 50% (cap) | **50.00%** |
 | +1 | 1 | 2 | 50% (cap) | **50.00%** |
 
-### Tier 2 (Pool size = 2–4)
+#### Tier 2 (Pool size = 2–4)
 
 **Example 1 (Pool size = 3):**
 ```
@@ -834,7 +1022,7 @@ Before the rarity cap, the forged item ends up with between **2** and **6** stat
 | +1 | 2 | 4 | 38% × 78% | **29.64%** |
 | +2 | 3 | 5 | 38% × 22% × 78% | **6.54%** |
 | +3 | 4 | 6 | 38% × (22%)^2 (cap) | **1.84%** |
-### Tier 3 (Pool size = 5–7)
+#### Tier 3 (Pool size = 5–7)
 
 **Example 1 (Pool size = 5):**
 ```
@@ -936,7 +1124,7 @@ Before the rarity cap, the forged item ends up with between **2** and **9** stat
 | +4 | 6 | 8 | 22% × (30%)^3 × 70% | **0.42%** |
 | +5 | 7 | 9 | 22% × (30%)^4 (cap) | **0.18%** |
 
-### Tier 4 (Pool size = 8+)
+#### Tier 4 (Pool size = 8+)
 
 **Example 1 (Pool size = 12):**
 ```
