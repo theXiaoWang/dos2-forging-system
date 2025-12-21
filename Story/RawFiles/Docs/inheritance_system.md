@@ -129,7 +129,7 @@ This normalisation model is intentionally generic: it works for any item that ha
 - **Weapons**: base damage range.
 - **Shields**: base armour and base magic armour.
 - **Armour pieces** (helmets/chest/gloves/boots/pants): base armour and base magic armour.
-- **Jewellery** base magic armour.
+- **Jewellery** (rings/amulets): base magic armour.
 - **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): Section 2 is a **no-op** for those numeric channels (do not attempt to normalise/divide by a `0` baseline).
 
 Quick "what is base values vs what is rollable?" table (vanilla-backed examples):
