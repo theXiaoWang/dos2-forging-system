@@ -5,11 +5,11 @@
 This system aims to deliver a more RPG-like forging experience, one that can be calculated, but with enough RNG to allow for that YOLO.
 
 When you forge two items, this system decides **which and how stats are inherited** by the new forged item.
-- It also inherits the item's **base values**: weapon **base damage** and armour/shield **base armour & magic armour**, using **levelled, type-safe normalisation** (prevents cross-type "budget stealing").
-- If both items share the same stats line, you're more likely to **keep the overlapping stats** (it's safer).
+- It also inherits the item's **base values**: weapon **base damage** and armour/shield **base armour & magic armour**, using **levelled, type-safe normalisation**.
+- If both items share the same stats line, you're more likely to **keep the overlapping stats**.
 - If both items share the same stats **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as **shared stats**, but the forged item will **merge the numbers** into a new value.
-- If a stats line is **not shared**, it goes into the **pool**, and keeping it is **more RNG** (risk/reward).
-- If both items are very different, it’s **riskier but can be more rewarding** (more possible outcomes).
+- If a stats line is **not shared**, it goes into the **pool**, and keeping it is **more RNG**.
+- If both items are very different, it’s **riskier but can be more rewarding**.
 - Depending on your forging strategy, you could get a **steady, average** 
 result, or a **unpredictable, volatile** result which can get **lucky** or 
 **unlucky** streaks.
@@ -136,7 +136,7 @@ This section defines how to merge **raw numeric power** (weapon damage, armour/m
 - Avoids nonsense when ingredient levels are far apart (e.g. level 6 + level 13).
 - Ensures the output stays **capped by its own (type, level, rarity)** budget.
 
-Forging can improve the **white numbers** (base damage / base armour / base magic armour). The result can’t grow forever: it’s still limited by the item’s **type**, **your level**, and **its rarity**.
+Forging can improve the **white numbers** (base damage / base armour / base magic armour). But it’s still limited by the item’s **type**, **your level**, and **its rarity**.
 
 With the right strategy, forging is a way to **upgrade your favourite item over time**: good ingredients push it upwards more reliably, and with some luck you can sometimes get a **big jump**, or very rarely can gain an **exceptional result**.
 
@@ -150,7 +150,7 @@ This normalisation model is intentionally generic: it works for any item that ha
 
 - **Weapons**: base damage range.
 - **Shields**: base armour and base magic armour.
-- **Armour pieces** (helmets/chest/gloves/boots/pants): base armour and base magic armour.
+- **Armour pieces** (helmets/chest/gloves/boots/pants): base armour and/or base magic armour.
 - **Jewellery** (rings/amulets): base magic armour.
 - **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): Section 2 is a **no-op** for those numeric channels (do not attempt to normalise/divide by a `0` baseline).
 
@@ -164,7 +164,7 @@ Overview on how the forged item's base values are calculated:
 - **Output level**: always the forger’s level, `Level_out = Level_player`.
 - **Output type**: always the item in the **main forge slot** (first slot).
 - **Output rarity**: decided by the **[Rarity System](rarity_system.md)**.
-- **Capped result**: the output’s raw numeric values must not exceed what is allowed for the output’s **type + level + rarity**.
+- **Capped result**: the output's raw numeric values are normally limited by the output's **type + level + rarity** band, but can **exceed the normal maximum** via the **overcap mechanism** (Section 2.6, Step 8) when an upgrade succeeds (up to +10% above the band's maximum).
 
 ### 2.3. Inputs and tuning parameters
 <a id="23-inputs-and-tuning-parameters"></a>
@@ -184,20 +184,19 @@ This section defines the **inputs**, **notation**, and the **balance knobs** use
 - **No-op rule**: if an item has no meaningful base value for a channel (e.g. baseline is `0`), do **not** normalise that channel.
 
 #### Balance knobs (tuning table)
-| Parameter | Meaning | Suggested default | Notes |
+| Parameter | Meaning | Default | Notes |
 | :--- | :--- | :---: | :--- |
-| `w` | Slot 1 dominance when merging percentiles | **0.70** | Keeps the output feeling like “slot 1’s type”, even cross-type. |
+| `w` | Slot 1 dominance when merging percentiles | **0.70** | The main slot's base values are more likely to be inherited by the output. |
 | `[L_r, H_r]` | Allowed base roll band for rarity `r` (in quality-ratio space) | See table below | Defines “bottom roll” / “top roll” for base values at each rarity. |
 | `α` | Cross-type conversion softness | **0.75** | Used inside `conversionLoss` (Section 2.6). |
-| `g(Family_out, Family_donor)` | Family adjacency multiplier (cross-type flexibility) | See table below | Enables “close family” forging without allowing budget stealing (Section 2.6). |
+| `g(Family_out, Family_donor)` | Family adjacency multiplier (cross-type flexibility) | See table below | Enables weapon “close family” forging without allowing budget stealing (Section 2.6). |
 | `p_upgrade_min` | Minimum percentile for an “upgrade roll” | **0.60** | On an upgrade, you roll into `[p_upgrade_min, 1.0]` (or higher if `p_base` is already higher). |
 | `upgradeCap` | Maximum upgrade chance | **50%** | Upgrade chance depends only on ingredient quality. |
 | `k` | Upgrade difficulty exponent (“higher is harder”) | **2** | Higher values make extreme upgrades rarer; this document uses `k=2`. |
 | `overcap` | Upgrade overcap range | **+1%..+10%** | Applied only on an upgrade; higher overcap is harder. |
-| Unique baseline | How to normalise Unique parents | **Use Legendary baseline** | Normalisation-only; does not change displayed rarity. |
 | Rounding policy | How to convert the final float into the displayed integer | Nearest (half-up) | Optional “player-favour” bias is to always round up. |
 
-#### Suggested base values roll bands (shared across equipment for now)
+#### Base values roll bands (shared across equipment)
 These bands are used both to:
 - convert parent quality ratios into percentiles (Section 2.5), and
 - convert the merged percentile back into an output quality ratio (Section 2.6).
@@ -225,7 +224,7 @@ These bands are used both to:
 
 #### Family adjacency multiplier `g(Family_out, Family_donor)`
 When forging across weapon types, we apply an additional multiplier to make “close family” forging more effective without breaking type safety:
-- `g` is always clamped to `(0, 1]`
+- `g` is always clamped to `[0, 1]`
 - `g = 1.00` means “no extra penalty beyond the baseline-ratio loss”
 
 | Relationship | Examples | `g` |
@@ -234,15 +233,6 @@ When forging across weapon types, we apply an additional multiplier to make “c
 | Strong adjacency | Spear ↔ 2H melee; Spear ↔ Ranged 2H | **0.95** |
 | Medium adjacency | 2H melee ↔ Ranged 2H | **0.90** |
 | Weak adjacency | Anything ↔ Magic weapons (unless same magic family); Dagger ↔ non-dagger; everything else | **0.85** |
-
-#### “Upgrade roll” + overcap (one event)
-After computing the deterministic result `p_base`, the forge may trigger an **upgrade** based only on ingredient quality `p_ing` (not on family/adjacency).
-
-On upgrade success:
-- roll a higher output percentile `p_out` using `u` (Section 2.6, Step 6), then
-- apply an overcap multiplier using `v` (Section 2.6, Step 8).
-
-If the upgrade does not trigger, you simply keep `p_out = p_base`.
 
 ---
 
@@ -302,7 +292,6 @@ For a parent item `i` and one numeric channel (weapon damage average, physical a
 - `Type_i`, `Level_i`, `Rarity_i`: the parent’s identifiers.
 - `B_i = B(Type_i, Level_i, Rarity_base)`:
   - Normally `Rarity_base = Rarity_i`
-  - **Unique special case**: if `Rarity_i` is Unique, use `Rarity_base = Legendary` (normalisation-only)
 
 Compute:
 - Quality ratio: `q_i = Base_i / B_i`
@@ -336,7 +325,7 @@ Let slot 1 be the “main” parent and slot 2 the “donor” parent.
 | `[L_r, H_r]` | Allowed quality-ratio band for rarity `r` | ratio |
 | `p_1`, `p_2` | Parent percentiles (“how good for its own type/level/rarity”) | `[0,1]` |
 | `ratioLoss` | Cross-type loss from baseline budget ratio (softened by `α`) | `[0,1]` |
-| `g(…)` | Weapon-family adjacency multiplier | `(0,1]` |
+| `g(…)` | Weapon-family adjacency multiplier | `[0,1]` |
 | `conversionLoss` | Final cross-type donor effectiveness (`ratioLoss × g`) | `[0,1]` |
 | `w` | Slot 1 dominance weight | `[0,1]` |
 | `p_base` | Deterministic merged percentile (type-safe) | `[0,1]` |
@@ -382,7 +371,7 @@ Notes:
 
 ##### 5. Compute ingredient quality (used only for upgrade chance):
    - `p_ing = clamp(w × p_1 + (1 - w) × p_2, 0, 1)`
-   - This intentionally ignores `conversionLoss` (upgrade chance depends on raw ingredient quality, not type penalties)
+   - upgrade chance only depends on raw ingredient quality
 
 ##### 6. Compute upgrade chance:
    - `P(upgrade) = upgradeCap × (p_ing)^k` (this document uses `k=2`)
