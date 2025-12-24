@@ -345,7 +345,7 @@ $$ratioLoss = \min\left(1,\ \left(\frac{B(Type_{out}, Level_{out}, Rarity_{out})
 $$conversionLoss = clamp(ratioLoss \times g(Family_{out}, Family_{donor}),\ 0,\ 1)$$
 
 Notes:
-- `g(Family_out, Family_donor)` is primarily defined for **weapons** (Section 2.3 “Weapon families”). If you do not define families for a category, treat `g = 1.0` for that category.
+- `g(Family_out, Family_donor)` is primarily defined for **weapons** (Section 2.3 “Weapon families”). Treat `g = 1.0` for other categories.
 
 #### Step-by-step explanation (per numeric channel)
 
@@ -421,11 +421,11 @@ The examples below use real level 20 in-game items (white damage ranges / armour
 #### Example 1: Same type, "steady improvement" (crossbow + crossbow)
 Assume the realised output rarity is **Divine** (the rarity system is documented separately).
 
-| Item | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| Slot 1 (Crossbow, Divine) | `150–157` → `153.5` | `152.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
-| Slot 2 (Crossbow, Common) | `130–136` → `133.0` | `133.0` | `[0.97, 1.03]` | `1.000` | `0.500` |
-| Output (Crossbow, Divine) | (computed) | `152.0` | `[0.95, 1.09]` | – | – |
+| Item | Rarity | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Slot 1 (Crossbow) | Divine | `150–157` → `153.5` | `152.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
+| Slot 2 (Crossbow) | Common | `130–136` → `133.0` | `133.0` | `[0.97, 1.03]` | `1.000` | `0.500` |
+| Output (Crossbow) | Divine | (computed) | `152.0` | `[0.95, 1.09]` | – | – |
 
 | Key value | Result |
 | :--- | :---: |
@@ -471,11 +471,11 @@ Slot 2 (2H sword, high roll): `170–188` → `D_avg = 179.0`
 
 Assume the realised output rarity is **Divine** (slot 1 identity is preserved).
 
-| Item | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| Slot 1 (Spear, Divine) | `150–157` → `153.5` | `152.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
-| Slot 2 (2H Sword, Divine) | `170–188` → `179.0` | `160.0` | `[0.95, 1.09]` | `1.119` | `1.000` (clamp) |
-| Output (Spear, Divine) | (computed) | `152.0` | `[0.95, 1.09]` | – | – |
+| Item | Rarity | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Slot 1 (Spear) | Divine | `150–157` → `153.5` | `152.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
+| Slot 2 (2H Sword) | Divine | `170–188` → `179.0` | `160.0` | `[0.95, 1.09]` | `1.119` | `1.000` (clamp) |
+| Output (Spear) | Divine | (computed) | `152.0` | `[0.95, 1.09]` | – | – |
 
 | Key value | Result |
 | :--- | :---: |
@@ -525,12 +525,12 @@ Slot 1 (1H sword): `98–108` → `D_avg = 103.0`
 Slot 2 (staff): `132–160` → `D_avg = 146.0`
 
 Assume the realised output rarity is **Divine** (slot 1 identity is preserved).
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 
-| Item | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| Slot 1 (1H Sword, Divine) | `98–108` → `103.0` | `102.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
-| Slot 2 (Staff, Divine) | `132–160` → `146.0` | `145.0` | `[0.95, 1.09]` | `1.007` | `0.406` |
-| Output (1H Sword, Divine) | (computed) | `102.0` | `[0.95, 1.09]` | – | – |
+| Item | Rarity | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
+| Slot 1 (1H Sword) | Divine | `98–108` → `103.0` | `102.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
+| Slot 2 (Staff) | Divine | `132–160` → `146.0` | `145.0` | `[0.95, 1.09]` | `1.007` | `0.406` |
+| Output (1H Sword) | Divine | (computed) | `102.0` | `[0.95, 1.09]` | – | – |
 
 | Key value | Result |
 | :--- | :---: |
