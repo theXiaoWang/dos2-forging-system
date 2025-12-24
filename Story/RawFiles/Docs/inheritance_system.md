@@ -1,6 +1,6 @@
 # Inheritance System
 
-## What this system does
+## What this system d
 
 This system aims to deliver a more RPG-like forging experience, one that can be calculated, but with enough RNG to allow for that YOLO.
 
@@ -13,7 +13,7 @@ When you forge two items, this system decides **which and how stats are inherite
 - Depending on your forging strategy, you could get a **steady, average** 
 result, or a **unpredictable, volatile** result which can get **lucky** or 
 **unlucky** streaks.
-
+g
 In short: 
 - **More matching lines = more predictable forging**, and **vice versa** 
 - **Closer stats values = merged numbers more consistent**.
@@ -38,7 +38,7 @@ In short:
 - [2.4. Baseline budget cache and parent measurement](#24-baseline-budget-cache-and-parent-measurement)
 - [2.5. Normalisation (raw to percentile)](#25-normalisation-raw-to-percentile)
 - [2.6. Merge algorithm (percentiles to output base values)](#26-merge-algorithm-percentiles-to-output-base-values)
-- [2.7. Worked examples (base values)](#27-worked-examples-base-values)
+- [2.7. Worked examples](#27-worked-examples-base-values)
 </details>
 
 <details>
@@ -164,7 +164,7 @@ Overview on how the forged item's base values are calculated:
 - **Output level**: always the forger’s level, `Level_out = Level_player`.
 - **Output type**: always the item in the **main forge slot** (first slot).
 - **Output rarity**: decided by the **[Rarity System](rarity_system.md)**.
-- **Capped result**: the output's raw numeric values are normally limited by the output's **type + level + rarity** band, but can **exceed the normal maximum** via the **overcap mechanism** (Section 2.6, Step 8) when an upgrade succeeds (up to +10% above the band's maximum).
+- **Capped result**: the output's raw numeric values are normally limited by the output's **type + level + rarity** band, but can **exceed the normal maximum** via the **overcap mechanism** (Section 2.6, Step 7) when an upgrade succeeds (up to +10% above the band's maximum).
 
 ### 2.3. Inputs and tuning parameters
 <a id="23-inputs-and-tuning-parameters"></a>
@@ -287,16 +287,44 @@ Note on “Type” for armour:
 
 This converts “how good is this item for its own type/level/rarity” into a stable percentile `p ∈ [0, 1]`.
 
-For a parent item `i` and one numeric channel (weapon damage average, physical armour, or magic armour):
-- `Base_i`: the measured base value (from Section 2.4).
-- `Type_i`, `Level_i`, `Rarity_i`: the parent’s identifiers.
-- `B_i = B(Type_i, Level_i, Rarity_base)`:
-  - Normally `Rarity_base = Rarity_i`
+#### Notation legend (shared for Sections 2.5–2.6)
+<a id="25-notation-legend-shared"></a>
 
-Compute:
-- Quality ratio: `q_i = Base_i / B_i`
-- Band for the parent’s displayed rarity: `[L_{Rarity_i}, H_{Rarity_i}]`
-- Percentile: `p_i = clamp((q_i - L_{Rarity_i}) / (H_{Rarity_i} - L_{Rarity_i}), 0, 1)`
+| Name | Meaning | Range / units |
+| :--- | :--- | :--- |
+| `Base_i` | Measured base value from the parent item tooltip (one channel: weapon `D_avg`, or armour `Armour` / `MagicArmour`) | base-value units |
+| `Type_i`, `Level_i`, `Rarity_i` | Parent identifiers | n/a |
+| `Rarity_base` | Rarity used for baseline lookup when computing `B_i` (normally the parent’s own rarity) | n/a |
+| `B(Type, Level, Rarity)` | Baseline mean base value from cache (“what vanilla expects on average” for that cell) | base-value units |
+| `B_i` | Parent baseline mean: `B(Type_i, Level_i, Rarity_base)` | base-value units |
+| `q_i` | Parent quality ratio: `Base_i / B_i` (ratio vs vanilla mean for the parent’s own cell) | ratio |
+| `[L_r, H_r]` | Allowed quality-ratio band for rarity `r` | ratio |
+| `p_i` | Normalised percentile score for `q_i` inside the rarity band | `[0,1]` |
+| `Type_out`, `Level_out`, `Rarity_out` | Output selectors (always slot 1 type, player level, rarity system result) | n/a |
+| `B_out` | Output baseline mean: `B(Type_out, Level_out, Rarity_out)` | base-value units |
+| `p_1`, `p_2` | Parent percentiles for slot 1 and slot 2 | `[0,1]` |
+| `ratioLoss` | Cross-type loss from baseline budget ratio (softened by `α`) | `[0,1]` |
+| `g(…)` | Weapon-family adjacency multiplier | `[0,1]` |
+| `conversionLoss` | Final cross-type donor effectiveness (`ratioLoss × g`) | `[0,1]` |
+| `w` | Slot 1 dominance weight | `[0,1]` |
+| `p_base` | Deterministic merged percentile (type-safe) | `[0,1]` |
+| `p_ing` | Ingredient quality (ignores type conversion penalties; used only for upgrade chance) | `[0,1]` |
+| `upgradeCap`, `k` | Upgrade chance cap and difficulty exponent | `%` or `num` |
+| `P(upgrade)` | Upgrade chance | `[0,50%]` |
+| `u` | Upgrade quality roll (only if upgrade succeeds) | `U(0,1)` |
+| `p_out` | Final output percentile (either `p_base` or upgraded) | `[0,1]` |
+| `v` | Overcap size roll (only if upgrade succeeds) | `U(0,1)` |
+| `Δ` | Overcap bonus applied to `q_out` | `+1%..10%` |
+| `q_out` | Output quality ratio (applied to `B_out`) | ratio |
+| `Base_target_out` | Output base value target before rounding: `B_out × q_out` | base-value units |
+
+#### Normalisation steps (one numeric channel)
+For a parent item `i`:
+1) Read `Base_i` from the tooltip (Section 2.4).
+2) Look up `B_i` from the baseline cache.
+3) Compute `q_i = Base_i / B_i`.
+4) Get the band `[L_{Rarity_i}, H_{Rarity_i}]` for the parent’s displayed rarity.
+5) Compute `p_i = clamp((q_i - L_{Rarity_i}) / (H_{Rarity_i} - L_{Rarity_i}), 0, 1)`.
 
 Interpretation:
 - `p_i = 0` means “bottom of the allowed base band for that rarity”.
@@ -308,35 +336,16 @@ Interpretation:
 <a id="26-merge-algorithm-percentiles-to-output-base-values"></a>
 <a id="26-cross-type-merging-w--conversionloss"></a>
 
-Never merge raw base numbers across types. Instead:
-1) normalise each parent into a percentile (Section 2.5),
-2) merge percentiles with slot 1 dominance, and
-3) denormalise back onto the output type’s baseline at the player’s level.
+After normalising each parent into a percentile (Section 2.5), we can merge the percentiles to get the output base value.
+
+The merge algorithm works as follows:
+1) merge percentiles with slot 1 dominance, and
+2) denormalise back onto the output type’s baseline at the player’s level.
 
 #### Step-by-step algorithm (one numeric channel)
 Let slot 1 be the “main” parent and slot 2 the “donor” parent.
 
-#### Legend
-
-| Name | Meaning | Range / units |
-| :--- | :--- | :--- |
-| `Type_out`, `Level_out`, `Rarity_out` | Output selectors (always slot 1 type, player level, rarity system result) | n/a |
-| `B(Type, Level, Rarity)` | Baseline mean base value from cache | base-value units |
-| `[L_r, H_r]` | Allowed quality-ratio band for rarity `r` | ratio |
-| `p_1`, `p_2` | Parent percentiles (“how good for its own type/level/rarity”) | `[0,1]` |
-| `ratioLoss` | Cross-type loss from baseline budget ratio (softened by `α`) | `[0,1]` |
-| `g(…)` | Weapon-family adjacency multiplier | `[0,1]` |
-| `conversionLoss` | Final cross-type donor effectiveness (`ratioLoss × g`) | `[0,1]` |
-| `w` | Slot 1 dominance weight | `[0,1]` |
-| `p_base` | Deterministic merged percentile (type-safe) | `[0,1]` |
-| `p_ing` | Ingredient quality (ignores type conversion penalties) | `[0,1]` |
-| `upgradeCap`, `k` | Upgrade chance cap and difficulty exponent | `%` or `num` |
-| `P(upgrade)` | Upgrade chance | `[0,50%]` |
-| `u` | Upgrade quality roll (only if upgrade succeeds) | `U(0,1)` |
-| `p_out` | Final output percentile (either `p_base` or upgraded) | `[0,1]` |
-| `v` | Overcap size roll (only if upgrade succeeds) | `U(0,1)` |
-| `Δ` | Overcap bonus applied to `q_out` | `+1%..10%` |
-| `q_out` | Output quality ratio (applied to `B_out`) | ratio |
+Notation: see the shared legend in Section 2.5 (`#25-notation-legend-shared`).
 
 #### Cross-type conversion loss
 
@@ -354,43 +363,41 @@ Notes:
    - `Level_out = Level_player` (always the forger’s level)
    - `Rarity_out` (from the rarity system)
 
-##### 2. Normalise each parent to percentiles:
-   - For each parent `i`, compute `q_i = Base_i / B_i` (where `B_i = B(Type_i, Level_i, Rarity_i)`)
-   - Then compute `p_i = clamp((q_i - L_{Rarity_i}) / (H_{Rarity_i} - L_{Rarity_i}), 0, 1)`
-   - This gives you `p_1` and `p_2` (how good each parent is for its own type/level/rarity)
+Prerequisite:
+- From Section 2.5, compute the parent percentiles `p_1` and `p_2` for slot 1 and slot 2.
 
-##### 3. Compute cross-type conversion loss (only when types differ):
-   - If `Type_1 == Type_2`: set `conversionLoss = 1.0` and skip to step 4.
+##### 2. Compute cross-type conversion loss (only when types differ):
+   - If `Type_1 == Type_2`: set `conversionLoss = 1.0` and skip to step 3.
    - Otherwise:
      - Compute `ratioLoss = min(1, (B_out / B_donor_on_out_curve)^α)` (budgets compared on the output curve)
      - Apply the family adjacency multiplier: `conversionLoss = clamp(ratioLoss × g, 0, 1)` (where `g` comes from weapon-family adjacency, Section 2.3)
 
-##### 4. Compute deterministic merged percentile:
+##### 3. Compute deterministic merged percentile:
    - `p_base = clamp(w × p_1 + (1 - w) × p_2 × conversionLoss, 0, 1)`
    - This is the type-safe, deterministic result (what you get if no upgrade happens)
 
-##### 5. Compute ingredient quality (used only for upgrade chance):
+##### 4. Compute ingredient quality (used only for upgrade chance):
    - `p_ing = clamp(w × p_1 + (1 - w) × p_2, 0, 1)`
    - upgrade chance only depends on raw ingredient quality
 
-##### 6. Compute upgrade chance:
+##### 5. Compute upgrade chance:
    - `P(upgrade) = upgradeCap × (p_ing)^k` (this document uses `k=2`)
 
-##### 7. Roll for upgrade:
+##### 6. Roll for upgrade:
    - Roll once to check if the upgrade succeeds (compare a random value to `P(upgrade)`).
-   - **If upgrade fails**: set `p_out = p_base` and skip to step 9 (no overcap).
-   - **If upgrade succeeds**: continue to step 8.
+   - **If upgrade fails**: set `p_out = p_base` and skip to step 8 (no overcap).
+   - **If upgrade succeeds**: continue to step 7.
 
-##### 8. Roll upgraded percentile and overcap (only if upgrade succeeded):
+##### 7. Roll upgraded percentile and overcap (only if upgrade succeeded):
    - Compute `p_min = max(p_upgrade_min, p_base)` (upgrade floor)
    - Roll `u ~ U(0,1)` and compute `p_out = p_min + (1 - p_min) × u^2` (higher is harder)
    - Roll `v ~ U(0,1)` and compute `Δ = 0.01 + 0.09 × v^4` (overcap bonus, range +1%..+10%, higher is harder)
 
-##### 9. Convert percentile to quality ratio:
+##### 8. Convert percentile to quality ratio:
    - `q_out = L_out + p_out × (H_out - L_out)` (where `[L_out, H_out]` is the output rarity band)
-   - If the upgrade succeeded (from step 7), apply overcap: `q_out = q_out × (1 + Δ)`
+   - If the upgrade succeeded (from step 6), apply overcap: `q_out = q_out × (1 + Δ)`
 
-##### 10. Apply to baseline and round:
+##### 9. Apply to baseline and round:
    - `B_out = B(Type_out, Level_out, Rarity_out)` (look up from baseline cache)
    - `Base_target_out = B_out × q_out`
    - Round to integer for display (rounding policy: nearest, or optionally always round up)
