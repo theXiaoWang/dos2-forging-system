@@ -39,17 +39,17 @@ When combining two items of the exact same quality (and neither is Unique), the 
 
 ### 2.1. Rarities
 
-Each item rarity is assigned a numeric `RarityID` used for calculation.
+Each item rarity is assigned a numeric **rarity index** used for calculation.
 
-| Rarity ID | Rarity Name | Max Stat Cap (this mod) | Vanilla rollable boost slots (non-rune) | Usage Note |
+| Rarity index | Rarity name | Max stats cap (this mod) | Vanilla stats (non-rune) | Usage Note |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | Common | 1 | 0..0 | Lowest bound. |
-| **2** | Uncommon | 4 | 2..4 | |
-| **3** | Rare | 5 | 3..5 | |
-| **4** | Epic | 6 | 4..6 | |
-| **5** | Legendary | 7 | 4..6 | |
-| **6** | Divine | 8 | 5..7 | **Hard Cap** for standard inheritance. |
-| **8** | Unique | 10 | 0..0 | **Dominant Rarity.** Acts as the "Consumer." |
+| **0** | Common | 1 | 0..0 | Lowest bound. |
+| **1** | Uncommon | 4 | 2..4 | |
+| **2** | Rare | 5 | 3..5 | |
+| **3** | Epic | 6 | 4..6 | |
+| **4** | Legendary | 7 | 4..6 | |
+| **5** | Divine | 8 | 5..7 | **Hard Cap** for standard inheritance. |
+| **6** | Unique | 10 | 0..0 | **Dominant Rarity.** Acts as the "Consumer." |
 
 ---
 
@@ -59,17 +59,17 @@ Each item rarity is assigned a numeric `RarityID` used for calculation.
 - Vanilla **Unique** items are largely hand-authored rather than generated from this roll-slot system, hence `0..0` here.
 
 ## 3. Global Override: Unique Preservation
-*Trigger Condition: `Rarity_A == 8` OR `Rarity_B == 8`*
+*Trigger Condition: `Rarity_A == 6` OR `Rarity_B == 6`*
 
 ### 3.1. Logic Description
 Before calculating averages or stability, the system checks for the presence of a Unique item. If found, the standard rarity calculation is aborted.
 
-* **Result:** 100% Unique (Rarity 8).
+* **Result:** 100% Unique (Rarity 6).
 * **Identity:** The result is always the ID of the specific Unique input item.
 
 ---
 
-## 4. Mechanism A: Standard Inheritance (The Gravity Well)
+## 4. Standard Inheritance (The Gravity Well)
 *Trigger Condition: `Rarity_A != Rarity_B` AND `Neither is Unique`*
 
 ### 4.1. Logic Description
@@ -98,36 +98,36 @@ $$Weight_t = e^{-\frac{(t - M)^2}{2\sigma^2}}$$
 ### 4.4. Example Scenarios
 
 #### Scenario 1: The "Wide Gap" (Common + Divine)
-* **Input:** Rarity 1 + Rarity 6
+* **Input:** Rarity 0 + Rarity 5
 * **Outcome:** Extreme pull toward the middle.
 
 | Candidate Rarity | Normalized % | Outcome Verdict |
 | :--- | :--- | :--- |
-| **Common (1)** | **2.7%** | **Punishment** (Lose Divine) |
-| **Uncommon (2)** | **14.2%** | **Low** |
-| **Rare (3)** | **33.1%** | **Likely Outcome** |
-| **Epic (4)** | **33.1%** | **Likely Outcome** |
-| **Legendary (5)** | **14.2%** | **Lucky** |
-| **Divine (6)** | **2.7%** | **Jackpot** (Keep Divine) |
+| **Common (0)** | **2.7%** | **Punishment** (Lose Divine) |
+| **Uncommon (1)** | **14.2%** | **Low** |
+| **Rare (2)** | **33.1%** | **Likely Outcome** |
+| **Epic (3)** | **33.1%** | **Likely Outcome** |
+| **Legendary (4)** | **14.2%** | **Lucky** |
+| **Divine (5)** | **2.7%** | **Jackpot** (Keep Divine) |
 
 #### Scenario 2: The "Narrow Gap" (Epic + Legendary)
-* **Input:** Rarity 4 + Rarity 5
+* **Input:** Rarity 3 + Rarity 4
 * **Outcome:** With only two possible results (clamped between inputs), the distribution is evenly split.
 
 | Candidate Rarity | Normalized % | Outcome Verdict |
 | :--- | :--- | :--- |
-| **Epic (4)** | **50.0%** | **Likely Outcome** |
-| **Legendary (5)** | **50.0%** | **Lucky** (Upgrade) |
+| **Epic (3)** | **50.0%** | **Likely Outcome** |
+| **Legendary (4)** | **50.0%** | **Lucky** (Upgrade) |
 
 ---
 
-## 5. Mechanism B: Rarity Break (Ascension)
+## 5. Rarity Break (Ascension)
 *Trigger Condition: `Rarity_A == Rarity_B` AND `Neither is Unique`*
 
 ### 5.1. Logic Description
 Identical rarities create a highly stable environment (~88% chance to remain the same) with a small chance to upgrade (~12%).
 
-**Hard Cap Exception:** If the input items are **Divine (Rarity 6)**, the system forces 100% stability.
+**Hard Cap Exception:** If the input items are **Divine (Rarity 5)**, the system forces 100% stability.
 
 ### 5.2. The Probability Formula
 * `M (Mean)` = `Rarity_A`
@@ -135,12 +135,12 @@ Identical rarities create a highly stable environment (~88% chance to remain the
 * `Max Rarity Bound` = `Rarity_A + 1`
 
 ### 5.3. Example Scenario (Legendary + Legendary)
-* **Input:** Rarity 5 + Rarity 5
+* **Input:** Rarity 4 + Rarity 4
 
 | Candidate Rarity | Normalized % | Outcome Verdict |
 | :--- | :--- | :--- |
-| **Legendary (5)** | **88.1%** | **Stability** (No Change) |
-| **Divine (6)** | **11.9%** | **Ascension** (Free Upgrade) |
+| **Legendary (4)** | **88.1%** | **Stability** (No Change) |
+| **Divine (5)** | **11.9%** | **Ascension** (Free Upgrade) |
 
 ---
 

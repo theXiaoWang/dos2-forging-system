@@ -1,6 +1,6 @@
 # Inheritance System
 
-## What this system d
+## What this system does
 
 This system aims to deliver a more RPG-like forging experience, one that can be calculated, but with enough RNG to allow for that YOLO.
 
@@ -13,7 +13,7 @@ When you forge two items, this system decides **which and how stats are inherite
 - Depending on your forging strategy, you could get a **steady, average** 
 result, or a **unpredictable, volatile** result which can get **lucky** or 
 **unlucky** streaks.
-g
+
 In short: 
 - **More matching lines = more predictable forging**, and **vice versa** 
 - **Closer stats values = merged numbers more consistent**.
@@ -186,7 +186,10 @@ This section defines the **inputs**, **notation**, and the **balance knobs** use
 #### Balance knobs (tuning table)
 | Parameter | Meaning | Default | Notes |
 | :--- | :--- | :---: | :--- |
-| `w` | Slot 1 dominance when merging percentiles | **0.70** | The main slot's base values are more likely to be inherited by the output. |
+| `w` | Slot 1 dominance when merging percentiles | Derived | Computed from the parents’ rarities (rarity dominance rule below). Slot 1 always remains the main parent. |
+| `w0` | Base slot 1 dominance | **0.70** | Used when both parents have the same rarity. |
+| `β` | Rarity dominance strength | **0.04** | Each rarity step in favour of slot 1 increases `w` by `β` (and decreases donor weight by the same amount). |
+| `w_min`, `w_max` | Clamp range for `w` | **0.50..0.90** | Prevents the donor from becoming completely irrelevant, and prevents slot 1 from ever being “overridden”. |
 | `[L_r, H_r]` | Allowed base roll band for rarity `r` (in quality-ratio space) | See table below | Defines “bottom roll” / “top roll” for base values at each rarity. |
 | `α` | Cross-type conversion softness | **0.75** | Used inside `conversionLoss` (Section 2.6). |
 | `g(Family_out, Family_donor)` | Family adjacency multiplier (cross-type flexibility) | See table below | Enables weapon “close family” forging without allowing budget stealing (Section 2.6). |
@@ -195,6 +198,35 @@ This section defines the **inputs**, **notation**, and the **balance knobs** use
 | `k` | Upgrade difficulty exponent (“higher is harder”) | **2** | Higher values make extreme upgrades rarer; this document uses `k=2`. |
 | `overcap` | Upgrade overcap range | **+1%..+10%** | Applied only on an upgrade; higher overcap is harder. |
 | Rounding policy | How to convert the final float into the displayed integer | Nearest (half-up) | Optional “player-favour” bias is to always round up. |
+
+#### Rarity dominance (Non-Unique): dynamic merge weight `w`
+To make higher rarity ingredients matter more, `w` is not a constant.
+
+Each rarity name map to a **rarity index**:
+- Common = 0, Uncommon = 1, Rare = 2, Epic = 3, Legendary = 4, Divine = 5, Unique = 6
+
+Let:
+- `r_main` be the rarity index of the **main** parent (slot 1)
+- `r_donor` be the rarity index of the **donor** parent (slot 2)
+- `Δr = r_main - r_donor`
+
+Then:
+- `w = clamp(w0 + β × Δr, w_min, w_max)`
+- donor weight is `(1 - w)`
+
+#### Weight table (main rarity vs donor rarity)
+These are the resulting `w` values using `w0=0.70`, `β=0.04`, `w_min=0.50`, `w_max=0.90`.
+
+Format: `w (donor weight = 1 - w)`
+
+| Main \\ Donor | Common (0) | Uncommon (1) | Rare (2) | Epic (3) | Legendary (4) | Divine (5) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Common (0) | 0.70 (0.30) | 0.66 (0.34) | 0.62 (0.38) | 0.58 (0.42) | 0.54 (0.46) | 0.50 (0.50) |
+| Uncommon (1) | 0.74 (0.26) | 0.70 (0.30) | 0.66 (0.34) | 0.62 (0.38) | 0.58 (0.42) | 0.54 (0.46) |
+| Rare (2) | 0.78 (0.22) | 0.74 (0.26) | 0.70 (0.30) | 0.66 (0.34) | 0.62 (0.38) | 0.58 (0.42) |
+| Epic (3) | 0.82 (0.18) | 0.78 (0.22) | 0.74 (0.26) | 0.70 (0.30) | 0.66 (0.34) | 0.62 (0.38) |
+| Legendary (4) | 0.86 (0.14) | 0.82 (0.18) | 0.78 (0.22) | 0.74 (0.26) | 0.70 (0.30) | 0.66 (0.34) |
+| Divine (5) | 0.90 (0.10) | 0.86 (0.14) | 0.82 (0.18) | 0.78 (0.22) | 0.74 (0.26) | 0.70 (0.30) |
 
 #### Base values roll bands (shared across equipment)
 These bands are used both to:
@@ -306,7 +338,9 @@ This converts “how good is this item for its own type/level/rarity” into a s
 | `ratioLoss` | Cross-type loss from baseline budget ratio (softened by `α`) | `[0,1]` |
 | `g(…)` | Weapon-family adjacency multiplier | `[0,1]` |
 | `conversionLoss` | Final cross-type donor effectiveness (`ratioLoss × g`) | `[0,1]` |
-| `w` | Slot 1 dominance weight | `[0,1]` |
+| `w` | Slot 1 dominance weight (computed from rarity dominance) | `[0,1]` |
+| `w0`, `β`, `w_min`, `w_max` | Rarity dominance parameters used to compute `w` | `[0,1]` |
+| `r_main`, `r_donor`, `Δr` | Rarity indices and rarity gap used to compute `w` | `int` |
 | `p_base` | Deterministic merged percentile (type-safe) | `[0,1]` |
 | `p_ing` | Ingredient quality (ignores type conversion penalties; used only for upgrade chance) | `[0,1]` |
 | `upgradeCap`, `k` | Upgrade chance cap and difficulty exponent | `%` or `num` |
@@ -373,6 +407,7 @@ Prerequisite:
      - Apply the family adjacency multiplier: `conversionLoss = clamp(ratioLoss × g, 0, 1)` (where `g` comes from weapon-family adjacency, Section 2.3)
 
 ##### 3. Compute deterministic merged percentile:
+   - Compute `w` from the parents’ rarities (Section 2.3 “Rarity dominance”).
    - `p_base = clamp(w × p_1 + (1 - w) × p_2 × conversionLoss, 0, 1)`
    - This is the type-safe, deterministic result (what you get if no upgrade happens)
 
@@ -416,7 +451,9 @@ For shields/armour, apply the same steps as above  **per numeric channel** (phys
 #### Shared settings (used by all examples)
 | Name | Value | Meaning |
 | :--- | :---: | :--- |
-| `w` | 0.70 | Slot 1 dominance (merge weight) |
+| `w0` | 0.70 | Base slot 1 dominance (same rarity) |
+| `β` | 0.04 | Rarity dominance strength |
+| `w_min`, `w_max` | 0.50..0.90 | Clamp range for `w` |
 | `p_upgrade_min` | 0.60 | Upgrade minimum percentile floor (only on upgrade success) |
 | `upgradeCap` | 50% | Maximum upgrade chance |
 | `k` | 2 | Upgrade difficulty exponent (“higher is harder”) |
@@ -425,8 +462,58 @@ For shields/armour, apply the same steps as above  **per numeric channel** (phys
 
 The examples below use real level 20 in-game items (white damage ranges / armour values). `B(...)` values shown are example baseline-cache values (your sampler provides the real ones). You can toggle the fully explicit view to see the detailed calculations.
 
-#### Example 1: Same type, "steady improvement" (crossbow + crossbow)
+#### Example 1: Same type, rarity dominance (Common + Divine crossbow)
 Assume the realised output rarity is **Divine** (the rarity system is documented separately).
+
+##### Case A: Slot 1 Common (main) + Slot 2 Divine (donor)
+| Item | Rarity | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Slot 1 (Crossbow) | Common | `130–136` → `133.0` | `133.0` | `[0.97, 1.03]` | `1.000` | `0.500` |
+| Slot 2 (Crossbow) | Divine | `150–157` → `153.5` | `152.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
+| Output (Crossbow) | Divine | (computed) | `152.0` | `[0.95, 1.09]` | – | – |
+
+| Key value | Result |
+| :--- | :---: |
+| `w` | `clamp(0.70 + 0.04×(0-5), 0.50, 0.90) = 0.50` |
+| `conversionLoss` | `1.00` (same type) |
+| `p_base` | `0.464` |
+| `p_ing` | `0.464` |
+| `P(upgrade)` | `50% × 0.464^2 ≈ 10.76%` |
+
+| Outcome | `p_out` | `q_out` | Output damage |
+| :--- | :---: | :---: | :---: |
+| No upgrade | `0.464` | `1.015` | `152×1.015 = 154.3` |
+| Upgrade example (`u=0.70`, `v=0.30`) | `0.796` | `1.061×(1+0.0107)=1.072` | `≈ 163.0` |
+
+<details>
+<summary><strong>Fully explicit view</strong></summary>
+
+| Name | Value | How it was obtained |
+| :--- | :---: | :--- |
+| `Base_1` | `133.0` | average of `130–136` |
+| `Base_2` | `153.5` | average of `150–157` |
+| `B_1` | `133.0` | `B(Crossbow,20,Common)` |
+| `B_2` | `152.0` | `B(Crossbow,20,Divine)` |
+| `q_1` | `133.0/133.0 = 1.000` | definition |
+| `q_2` | `153.5/152.0 = 1.010` | definition |
+| `p_1` | `clamp((1.000-0.97)/0.06)=0.500` | Common band width `0.06` |
+| `p_2` | `clamp((1.010-0.95)/0.14)=0.428` | Divine band width `0.14` |
+| `w` | `clamp(0.70 + 0.04×(0-5), 0.50, 0.90) = 0.50` | rarity dominance |
+| `conversionLoss` | `1.00` | same type |
+| `p_base` | `0.50×0.500 + 0.50×0.428 = 0.464` | merge |
+| `p_ing` | `0.50×0.500 + 0.50×0.428 = 0.464` | ingredient quality |
+| `P(upgrade)` | `0.50×0.464^2 ≈ 0.1076` | cap `50%`, `k=2` |
+| `p_min` | `max(0.60, 0.464) = 0.60` | upgrade floor |
+| `p_out` (example) | `0.60 + 0.40×0.70^2 = 0.796` | `u=0.70` |
+| `q_out` (pre-overcap) | `0.95 + 0.796×0.14 = 1.061` | Divine band |
+| `Δ` (example) | `0.01 + 0.09×0.30^4 ≈ 0.0107` | `v=0.30` |
+| `q_out` (final) | `1.061×1.0107 ≈ 1.072` | overcap |
+| `D_out` (final) | `152×1.072 ≈ 163.0` | apply baseline |
+
+</details>
+
+##### Case B: Slot 1 Divine (main) + Slot 2 Common (donor)
+Same two items, swapped slots. This shows how `w` shifts with rarity.
 
 | Item | Rarity | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -436,41 +523,16 @@ Assume the realised output rarity is **Divine** (the rarity system is documented
 
 | Key value | Result |
 | :--- | :---: |
+| `w` | `clamp(0.70 + 0.04×(5-0), 0.50, 0.90) = 0.90` |
 | `conversionLoss` | `1.00` (same type) |
-| `p_base` | `0.450` |
-| `p_ing` | `0.450` |
-| `P(upgrade)` | `50% × 0.450^2 ≈ 10.13%` |
+| `p_base` | `0.435` |
+| `p_ing` | `0.435` |
+| `P(upgrade)` | `50% × 0.435^2 ≈ 9.47%` |
 
 | Outcome | `p_out` | `q_out` | Output damage |
 | :--- | :---: | :---: | :---: |
-| No upgrade | `0.450` | `1.013` | `152×1.013 = 154.0` |
+| No upgrade | `0.435` | `1.011` | `152×1.011 = 153.7` |
 | Upgrade example (`u=0.70`, `v=0.30`) | `0.796` | `1.061×(1+0.0107)=1.072` | `≈ 163.0` |
-
-<details>
-<summary><strong>Fully explicit view</strong></summary>
-
-| Name | Value | How it was obtained |
-| :--- | :---: | :--- |
-| `Base_1` | `153.5` | average of `150–157` |
-| `Base_2` | `133.0` | average of `130–136` |
-| `B_1` | `152.0` | `B(Crossbow,20,Divine)` |
-| `B_2` | `133.0` | `B(Crossbow,20,Common)` |
-| `q_1` | `153.5/152.0 = 1.010` | definition |
-| `q_2` | `133.0/133.0 = 1.000` | definition |
-| `p_1` | `clamp((1.010-0.95)/0.14)=0.428` | Divine band width `0.14` |
-| `p_2` | `clamp((1.000-0.97)/0.06)=0.500` | Common band width `0.06` |
-| `conversionLoss` | `1.00` | same type |
-| `p_base` | `0.70×0.428 + 0.30×0.500 = 0.450` | merge |
-| `p_ing` | `0.70×0.428 + 0.30×0.500 = 0.450` | ingredient quality |
-| `P(upgrade)` | `0.50×0.450^2 = 0.1013` | cap `50%`, `k=2` |
-| `p_min` | `max(0.60, 0.450) = 0.60` | upgrade floor |
-| `p_out` (example) | `0.60 + 0.40×0.70^2 = 0.796` | `u=0.70` |
-| `q_out` (pre-overcap) | `0.95 + 0.796×0.14 = 1.061` | Divine band |
-| `Δ` (example) | `0.01 + 0.09×0.30^4 ≈ 0.0107` | `v=0.30` |
-| `q_out` (final) | `1.061×1.0107 ≈ 1.072` | overcap |
-| `D_out` (final) | `152×1.072 ≈ 163.0` | apply baseline |
-
-</details>
 
 #### Example 2: Strong adjacency, "high-quality donor" (spear + high-roll 2H sword)
 Slot 1 (spear): `150–157` → `D_avg = 153.5`  
@@ -489,6 +551,7 @@ Assume the realised output rarity is **Divine** (slot 1 identity is preserved).
 | `ratioLoss` | `(152/160)^0.75 ≈ 0.96` |
 | `g` | `0.95` (strong adjacency) |
 | `conversionLoss` | `0.96×0.95 ≈ 0.91` |
+| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` |
 | `p_base` | `0.574` |
 | `p_ing` | `0.600` |
 | `P(upgrade)` | `50% × 0.600^2 = 18.00%` |
@@ -515,8 +578,9 @@ Assume the realised output rarity is **Divine** (slot 1 identity is preserved).
 | `ratioLoss` | `(152/160)^0.75 ≈ 0.96` | budget comparison on output curve |
 | `g` | `0.95` | strong adjacency (2H melee family) |
 | `conversionLoss` | `0.96×0.95 ≈ 0.91` | family-adjusted conversion |
-| `p_base` | `0.70×0.428 + 0.30×1.000×0.91 = 0.574` | merge with conversion loss |
-| `p_ing` | `0.70×0.428 + 0.30×1.000 = 0.600` | ingredient quality (no conversion loss) |
+| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` | rarity dominance |
+| `p_base` | `w×0.428 + (1-w)×1.000×0.91 = 0.574` | merge with conversion loss |
+| `p_ing` | `w×0.428 + (1-w)×1.000 = 0.600` | ingredient quality (no conversion loss) |
 | `P(upgrade)` | `0.50×0.600^2 = 0.18` | cap `50%`, `k=2` |
 | `p_min` | `max(0.60, 0.574) = 0.60` | upgrade floor |
 | `p_out` (example) | `0.60 + 0.40×0.80^2 = 0.856` | `u=0.80` |
@@ -544,6 +608,7 @@ Assume the realised output rarity is **Divine** (slot 1 identity is preserved).
 | `ratioLoss` | `(102/145)^0.75 ≈ 0.77` |
 | `g` | `0.85` (weak adjacency) |
 | `conversionLoss` | `0.77×0.85 ≈ 0.65` |
+| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` |
 | `p_base` | `0.379` |
 | `p_ing` | `0.422` |
 | `P(upgrade)` | `50% × 0.422^2 ≈ 8.90%` |
@@ -570,8 +635,9 @@ Assume the realised output rarity is **Divine** (slot 1 identity is preserved).
 | `ratioLoss` | `(102/145)^0.75 ≈ 0.77` | budget comparison on output curve |
 | `g` | `0.85` | weak adjacency (1H melee vs staff) |
 | `conversionLoss` | `0.77×0.85 ≈ 0.65` | family-adjusted conversion |
-| `p_base` | `0.70×0.428 + 0.30×0.406×0.65 = 0.379` | merge with conversion loss |
-| `p_ing` | `0.70×0.428 + 0.30×0.406 = 0.422` | ingredient quality (no conversion loss) |
+| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` | rarity dominance |
+| `p_base` | `w×0.428 + (1-w)×0.406×0.65 = 0.379` | merge with conversion loss |
+| `p_ing` | `w×0.428 + (1-w)×0.406 = 0.422` | ingredient quality (no conversion loss) |
 | `P(upgrade)` | `0.50×0.422^2 ≈ 0.089` | cap `50%`, `k=2` |
 | `p_min` | `max(0.60, 0.379) = 0.60` | upgrade floor |
 | `p_out` (example) | `0.60 + 0.40×0.80^2 = 0.856` | `u=0.80` |
@@ -618,8 +684,9 @@ Interpretation:
 | `p_1_phys` | `clamp((1.019-0.95)/0.14)=0.490` | Divine band width `0.14` |
 | `p_2_phys` | `clamp((0.933-0.95)/0.14)=0.000` | clamped to 0 (below band) |
 | `conversionLoss_phys` | `1.00` | same type (both are physical armour) |
-| `p_base_phys` | `0.70×0.490 + 0.30×0.000×1.00 = 0.343` | merge |
-| `p_ing_phys` | `0.70×0.490 + 0.30×0.000 = 0.343` | ingredient quality |
+| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` | rarity dominance |
+| `p_base_phys` | `w×0.490 + (1-w)×0.000×1.00 = 0.343` | merge |
+| `p_ing_phys` | `w×0.490 + (1-w)×0.000 = 0.343` | ingredient quality |
 | `P(upgrade)_phys` | `0.50×0.343^2 ≈ 0.0588` | cap `50%`, `k=2` |
 | `q_out_phys` (no upgrade) | `0.95 + 0.343×0.14 = 0.998` | Divine band |
 | `Base_out_phys` (no upgrade) | `700×0.998 = 699` | apply baseline |
@@ -640,8 +707,9 @@ Interpretation:
 | `ratioLoss_magic` | `(150/700)^0.75 ≈ 0.38` | budget comparison on output curve |
 | `g` | `0.85` | weak adjacency (different armour types) |
 | `conversionLoss_magic` | `0.38×0.85 ≈ 0.32` | family-adjusted conversion |
-| `p_base_magic` | `0.70×0.000 + 0.30×0.490×0.32 = 0.047` | merge with conversion loss |
-| `p_ing_magic` | `0.70×0.000 + 0.30×0.490 = 0.147` | ingredient quality (no conversion loss) |
+| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` | rarity dominance |
+| `p_base_magic` | `w×0.000 + (1-w)×0.490×0.32 = 0.047` | merge with conversion loss |
+| `p_ing_magic` | `w×0.000 + (1-w)×0.490 = 0.147` | ingredient quality (no conversion loss) |
 | `P(upgrade)_magic` | `0.50×0.147^2 ≈ 0.0108` | cap `50%`, `k=2` |
 | `q_out_magic` (no upgrade) | `0.95 + 0.047×0.14 = 0.957` | Divine band |
 | `Base_out_magic` (no upgrade) | `150×0.957 = 144` | apply baseline |
@@ -677,21 +745,21 @@ Stats modifiers are **separate from base values** (Section 2) and **granted skil
 
 #### Modifier cap for each rarity
 
-| Rarity ID | Name | Max stats slots (this mod) | Vanilla rollable boost slots (non-rune) |
+| Rarity index | Name | Max stats slots (this mod) | Vanilla rollable boost slots (non-rune) |
 | :--- | :--- | :--- | :--- |
-| **1** | Common | **1** | 0..0 |
-| **2** | Uncommon | **4** | 2..4 |
-| **3** | Rare | **5** | 3..5 |
-| **4** | Epic | **6** | 4..6 |
-| **5** | Legendary | **7** | 4..6 |
-| **6** | Divine | **8** | 5..7 |
-| **8** | Unique | **10** | 0..0 |
+| **0** | Common | **1** | 0..0 |
+| **1** | Uncommon | **4** | 2..4 |
+| **2** | Rare | **5** | 3..5 |
+| **3** | Epic | **6** | 4..6 |
+| **4** | Legendary | **7** | 4..6 |
+| **5** | Divine | **8** | 5..7 |
+| **6** | Unique | **10** | 0..0 |
 
 **Example:**  
 A shield can appear at different rarities too.  
-- If the shield is **Rare** (Rarity ID 3), it can have up to **5 stats modifiers** (for example: `Blocking +15`, `+2 Constitution`, `+1 Warfare`, `+10% Fire Resistance`, `+1 Retribution`).  
+- If the shield is **Rare** (rarity index 2), it can have up to **5 stats modifiers** (for example: `Blocking +15`, `+2 Constitution`, `+1 Warfare`, `+10% Fire Resistance`, `+1 Retribution`).  
   - Vanilla reference: `Shield.stats` defines `_Boost_Shield_Special_Block_Shield_*` boosts that apply the `Blocking` stats (e.g. `Blocking=10/15/20`).
-- If the same shield is **Epic** (Rarity ID 4), it can have up to **6 stats modifiers**.
+- If the same shield is **Epic** (rarity index 3), it can have up to **6 stats modifiers**.
 
 ### 3.2. The two stats lists
 <a id="32-the-two-stats-lists"></a>
@@ -1348,15 +1416,15 @@ Here are what you can expect:
 
 This is the maximum number of **granted skills** on the forged item:
 
-| Rarity ID | Name | Granted skill cap |
+| Rarity index | Name | Granted skill cap |
 | :--- | :--- | :---: |
-| **1** | Common | **0** |
-| **2** | Uncommon | **0** |
-| **3** | Rare | **0** |
-| **4** | Epic | **1** |
-| **5** | Legendary | **1** |
-| **6** | Divine | **2** |
-| **8** | Unique | **3** |
+| **0** | Common | **0** |
+| **1** | Uncommon | **0** |
+| **2** | Rare | **0** |
+| **3** | Epic | **1** |
+| **4** | Legendary | **1** |
+| **5** | Divine | **2** |
+| **6** | Unique | **x+1** |
 
 ### 4.3. Shared vs pool skills
 <a id="43-shared-vs-pool-skills"></a>
