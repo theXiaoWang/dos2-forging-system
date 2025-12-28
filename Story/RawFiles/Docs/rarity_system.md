@@ -31,7 +31,9 @@ When combining two items of different quality (and neither is Unique), the forge
 
 ### 1.3. The "Rarity Break" (Mixing Same Rarities)
 When combining two items of the exact same quality (and neither is Unique), the forge creates a stable environment with a calculated chance to "Rarity Up" (Ascend).
-* **The Logic:** The result is stable (~88% chance to stay) with a small chance (~12%) to upgrade.
+* **The Logic:** The result is stable, with a small chance to upgrade:
+  - Cross-type (default): **9%**
+  - Same-type (exact `WeaponType`): **18%**
 
 ---
 
@@ -41,22 +43,111 @@ When combining two items of the exact same quality (and neither is Unique), the 
 
 Each item rarity is assigned a numeric **rarity index** used for calculation.
 
-| Rarity index | Rarity name | Max stats cap (this mod) | Vanilla stats (non-rune) | Usage Note |
-| :--- | :--- | :--- | :--- | :--- |
-| **0** | Common | 1 | 0..0 | Lowest bound. |
-| **1** | Uncommon | 4 | 2..4 | |
-| **2** | Rare | 5 | 3..5 | |
-| **3** | Epic | 6 | 4..6 | |
-| **4** | Legendary | 7 | 4..6 | |
-| **5** | Divine | 8 | 5..7 | **Hard Cap** for standard inheritance. |
-| **6** | Unique | 10 | 0..0 | **Dominant Rarity.** Acts as the "Consumer." |
+| Rarity index | Rarity name | Usage note |
+| :--- | :--- | :--- |
+| **0** | Common | Lowest bound. |
+| **1** | Uncommon | |
+| **2** | Rare | |
+| **3** | Epic | |
+| **4** | Legendary | |
+| **5** | Divine | |
+| **6** | Unique | **Ignored for vNext balancing** (do not consider for now). |
 
 ---
 
-#### Notes on “Vanilla rollable boost slots”
-- These values come from `DefEd/Data/Editor/Mods/Shared/Stats/ItemTypes/ItemTypes.stats`.
-- They represent the **min..max count of non-rune boost picks** (i.e. excluding `RuneEmpty`) across the level-dependent `_substat_*` rows.
-- Vanilla **Unique** items are largely hand-authored rather than generated from this roll-slot system, hence `0..0` here.
+## 2.2. Caps (vNext: default + learned, per save)
+<a id="22-caps-vnext-default--learned-per-save"></a>
+
+This mod uses **two cap layers**:
+- A hidden **default cap** per rarity (baseline; ensures rarity-break results always have a cap).
+- A per-save **learned cap** that increases when the player obtains items with higher rollable slot counts.
+
+All cap logic is **host-authoritative** in multiplayer.
+
+### 2.2.1. Overall rollable-slots cap (shared across channels)
+<a id="221-overall-rollable-slots-cap"></a>
+
+This is a **single cap** used by forging across three rollable channels:
+- Blue stats (stats modifiers)
+- ExtraProperties (as a single slot if present)
+- Skills (each rollable skill consumes 1 slot)
+
+#### Default overall cap by rarity (baseline)
+<a id="2211-default-overall-cap"></a>
+
+This is the baseline used when the save has not learned a higher cap yet:
+
+| Rarity index | Name | Default overall cap |
+| :--- | :--- | :---: |
+| **0** | Common | **1** |
+| **1** | Uncommon | **4** |
+| **2** | Rare | **5** |
+| **3** | Epic | **5** |
+| **4** | Legendary | **5** |
+| **5** | Divine | **5** |
+
+#### Learned overall cap by rarity (per save)
+<a id="2212-learned-overall-cap"></a>
+
+For each rarity `r`, the save maintains:
+
+`OverallCap[r] = min(5, max(DefaultOverallCap[r], LearnedOverallCap[r]))`
+
+Where `LearnedOverallCap[r]` is the maximum **actual rollable slot count** the player has ever obtained on an item of rarity `r`.
+
+**Update trigger (acquisition only):**
+- Update the learned caps only when the player **obtains** an item (loot pickup, reward, vendor purchase).
+- Do **not** update on merely viewing vendor inventory.
+
+**Slot counting (actual instance):**
+`slots(item) = blueStatLineCount + rollableSkillCount + (hasExtraProperties ? 1 : 0)`
+
+Notes:
+- Rune sockets do not count (and socketed runes are forbidden as ingredients anyway).
+- Base values do not count.
+- ExtraProperties counts as **1** slot regardless of how many internal tokens/tooltip lines it shows.
+
+#### Player notification (cap breakthrough)
+<a id="2213-cap-notification"></a>
+
+This system runs silently, except when a learned cap increases past the previous effective cap.
+
+When `OverallCap[r]` increases, show a one-time message:
+
+- “New stats limit for **{RarityName}** is updated to **{OverallCap[r]}**. You can now forge up to **{OverallCap[r]}** rollable slots on **{RarityName}** items (weapons, shields, rings, etc.).”
+
+If the cap jumps by more than +1 (rare), show only the final value once to avoid spam.
+
+### 2.2.2. Skill count cap (vNext: default + learned)
+<a id="222-skill-cap-vnext"></a>
+
+Skills are rollable and consume overall slots, but the system also tracks a **per-rarity skill-count cap** to keep the skill channel bounded and “vanilla-feeling” unless the player has already seen higher counts.
+
+#### Default skill cap by rarity (baseline)
+<a id="2221-default-skill-cap"></a>
+
+| Rarity index | Name | Default rollable skill cap |
+| :--- | :--- | :---: |
+| **0** | Common | **1** |
+| **1** | Uncommon | **1** |
+| **2** | Rare | **1** |
+| **3** | Epic | **1** |
+| **4** | Legendary | **1** |
+| **5** | Divine | **1** |
+
+#### Learned skill cap by rarity (per save)
+<a id="2222-learned-skill-cap"></a>
+
+For each rarity `r`, the save maintains:
+
+`SkillCap[r] = max(DefaultSkillCap[r], LearnedSkillCap[r])`
+
+Where `LearnedSkillCap[r]` is the maximum number of rollable granted skills the player has ever obtained on an item of rarity `r`.
+
+This cap can be updated using the same acquisition-trigger rule as the overall cap.
+
+**Notification:** use the same “cap breakthrough” messaging pattern, but with the skill wording:
+- “New skill limit for **{RarityName}** is updated to **{SkillCap[r]}**.”
 
 ## 3. Global Override: Unique Preservation
 *Trigger Condition: `Rarity_A == 6` OR `Rarity_B == 6`*
@@ -125,22 +216,30 @@ $$Weight_t = e^{-\frac{(t - M)^2}{2\sigma^2}}$$
 *Trigger Condition: `Rarity_A == Rarity_B` AND `Neither is Unique`*
 
 ### 5.1. Logic Description
-Identical rarities create a highly stable environment (~88% chance to remain the same) with a small chance to upgrade (~12%).
+Identical rarities create a stable environment with a small chance to upgrade ("Ascend").
+
+Weapon-type match modifier:
+- **Cross-type (default)**: **9%** chance to Ascend.
+- **Same-type** (**exact same `WeaponType`** for weapons): **18%** chance to Ascend (2×).
 
 **Hard Cap Exception:** If the input items are **Divine (Rarity 5)**, the system forces 100% stability.
 
 ### 5.2. The Probability Formula
-* `M (Mean)` = `Rarity_A`
-* `σ (Sigma)` = `0.5` (Fixed constant)
-* `Max Rarity Bound` = `Rarity_A + 1`
+Let `p_break` be the Ascension probability:
+- `p_break = 9%` for cross-type (default)
+- `p_break = 18%` for same-type (exact same `WeaponType`)
+
+Then (for non-Divine inputs):
+- `P(result = Rarity_A) = 1 - p_break`
+- `P(result = Rarity_A + 1) = p_break`
 
 ### 5.3. Example Scenario (Legendary + Legendary)
 * **Input:** Rarity 4 + Rarity 4
 
-| Candidate Rarity | Normalized % | Outcome Verdict |
-| :--- | :--- | :--- |
-| **Legendary (4)** | **88.1%** | **Stability** (No Change) |
-| **Divine (5)** | **11.9%** | **Ascension** (Free Upgrade) |
+| Candidate Rarity | Cross-type (default) | Same-type (exact WeaponType) | Outcome Verdict |
+| :--- | ---: | ---: | :--- |
+| **Legendary (4)** | **91%** | **82%** | **Stability** (No Change) |
+| **Divine (5)** | **9%** | **18%** | **Ascension** (Free Upgrade) |
 
 ---
 

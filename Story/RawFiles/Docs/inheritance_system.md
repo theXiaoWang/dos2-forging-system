@@ -5,7 +5,7 @@
 This system aims to deliver a more RPG-like forging experience, one that can be calculated, but with enough RNG to allow for that YOLO.
 
 When you forge two items, this system decides **which and how stats are inherited** by the new forged item.
-- It also inherits the item's **base values**: weapon **base damage** and armour/shield **base armour & magic armour**, using **levelled, type-safe normalisation**.
+- It also inherits the item's **base values**: weapon **base damage** (tooltip-midpoint based, same `WeaponType` only) and armour/shield/jewellery **base values** (tooltip-only, channel-by-channel).
 - If both items share the same stats line, you're more likely to **keep the overlapping stats**.
 - If both items share the same stats **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as **shared stats**, but the forged item will **merge the numbers** into a new value.
 - If a stats line is **not shared**, it goes into the **pool**, and keeping it is **more RNG**.
@@ -17,6 +17,21 @@ result, or a **unpredictable, volatile** result which can get **lucky** or
 In short: 
 - **More matching lines = more predictable forging**, and **vice versa** 
 - **Closer stats values = merged numbers more consistent**.
+
+---
+## vNext restructuring note (read this first)
+
+These docs are being restructured to match the new vNext balancing model:
+
+- A hidden **default + learned (per-save) cap** system driven by what the player has actually acquired in vanilla gameplay.
+- A single **overall rollable slots cap** shared across:
+  - Blue stats
+  - ExtraProperties (counts as **1 slot** if present)
+  - Skills (each rollable skill counts as **1 slot**)
+- Skills remain rollable, but can be **preserved** by:
+  - A matching **skillbook lock** in the forge UI (exact skill ID match), and/or
+  - Being **shared** between both parents.
+- ExtraProperties is treated as a standalone channel and can be **guaranteed** if there are shared ExtraProperties tokens.
 
 <details>
 <summary><strong>Contents (click to expand)</strong></summary>
@@ -35,14 +50,14 @@ In short:
 - [2.1. Base values (definition)](#21-base-values-definition)
 - [2.2. Output rules (level/type/rarity)](#22-output-rules-leveltyperarity)
 - [2.3. Inputs and tuning parameters](#23-inputs-and-tuning-parameters)
-- [2.4. Baseline budget cache and parent measurement](#24-baseline-budget-cache-and-parent-measurement)
-- [2.5. Normalisation (raw to percentile)](#25-normalisation-raw-to-percentile)
-- [2.6. Merge algorithm (percentiles to output base values)](#26-merge-algorithm-percentiles-to-output-base-values)
+- [2.4. Parent measurement (tooltip values)](#24-baseline-budget-cache-and-parent-measurement)
+- [2.5. Core formulas (gain + upgrade + rarity dominance)](#25-normalisation-raw-to-percentile)
+- [2.6. Merge algorithms (weapons and non-weapons)](#26-merge-algorithm-percentiles-to-output-base-values)
 - [2.7. Worked examples](#27-worked-examples-base-values)
 </details>
 
 <details>
-<summary><strong><a href="#3-stats-modifiers-inheritance">3. Stats modifiers inheritance</a></strong></summary>
+<summary><strong><a href="#3-stats-modifiers-inheritance">3. Blue stats inheritance</a></strong></summary>
 
 - [3.1. Stats modifiers (definition)](#31-stats-modifiers-definition)
 - [3.2. The two stats lists](#32-the-two-stats-lists)
@@ -53,23 +68,32 @@ In short:
 </details>
 
 <details>
-<summary><strong><a href="#4-skills-inheritance">4. Skills inheritance</a></strong></summary>
+<summary><strong><a href="#4-extraproperties-inheritance">4. ExtraProperties inheritance</a></strong></summary>
 
-- [4.1. Granted skills (definition)](#41-granted-skills-definition)
-- [4.2. Skill cap by rarity](#42-skill-cap-by-rarity)
-- [4.3. Shared vs pool skills](#43-shared-vs-pool-skills)
-- [4.4. How skills are gained (gated fill)](#44-how-skills-are-gained-gated-fill)
-- [4.5. Overflow + replace (5%)](#45-overflow--replace-5)
-- [4.6. Scenario tables](#46-scenario-tables)
-- [4.7. Worked example (Divine)](#47-worked-example-divine)
+- [4.1. ExtraProperties (definition)](#41-extraproperties-definition)
+- [4.2. Shared vs pool tokens](#42-extraproperties-shared-vs-pool)
+- [4.3. Selection + internal cap (max of parent lines)](#43-extraproperties-selection--internal-cap)
+- [4.4. Slot competition + trimming](#44-extraproperties-slot-competition--trimming)
 </details>
 
 <details>
-<summary><strong><a href="#5-rune-slots-inheritance">5. Rune slots inheritance</a></strong></summary>
+<summary><strong><a href="#4-skills-inheritance">5. Skills inheritance</a></strong></summary>
+
+- [5.1. Granted skills (definition)](#41-granted-skills-definition)
+- [5.2. Skill cap by rarity](#42-skill-cap-by-rarity)
+- [5.3. Shared vs pool skills](#43-shared-vs-pool-skills)
+- [5.4. How skills are gained (gated fill)](#44-how-skills-are-gained-gated-fill)
+- [5.5. Overflow + replace (type-modified)](#45-overflow--replace-5)
+- [5.6. Scenario tables](#46-scenario-tables)
+- [5.7. Worked example (Divine)](#47-worked-example-divine)
 </details>
 
 <details>
-<summary><strong><a href="#6-implementation-reference">6. Implementation reference</a></strong></summary>
+<summary><strong><a href="#5-rune-slots-inheritance">6. Rune slots inheritance</a></strong></summary>
+</details>
+
+<details>
+<summary><strong><a href="#6-implementation-reference">7. Implementation reference</a></strong></summary>
 </details>
 
 </details>
@@ -103,19 +127,24 @@ The forged output item is always the same **item type/slot** as the ingredient i
 
 ### 1.2. Forge flow overview
 <a id="12-forge-flow-overview"></a>
-This document splits forging into independent “channels”, because vanilla item generation works the same way:
+This document splits forging into independent “channels”, because vanilla item generation works the same way.
 
-- **Base values** (base damage / armour / magic armour): determined by **item type + level + rarity**.
-- **Stats modifiers** (boosts): rollable modifiers (eg attributes, crit, "chance to set status") bounded by rarity modifier caps.
-- **Granted skills**: a separate, rarity-capped channel (vanilla-aligned).
+vNext note: blue stats, ExtraProperties, and skills now share a single **overall rollable slots cap** defined in:
+- [`rarity_system.md` → Caps (vNext)](rarity_system.md#22-caps-vnext-default--learned-per-save)
+
+- **Base values** (base damage / armour / magic armour): determined by **item type + the white tooltip values**.
+- **Blue stats** (stats modifiers): rollable modifiers (e.g. attributes, crit, “chance to set status”).
+- **ExtraProperties**: rollable bundle (counts as **1 slot** if present, regardless of how many internal lines it expands into).
+- **Skills**: rollable granted skills (each skill consumes **1 slot**, unless protected by shared/skillbook rules).
 - **Rune slots**: a separate channel (only when empty; rune effects are forbidden as ingredients).
 
 High-level forge order:
 1. Decide the output’s **rarity** using the **[Rarity System](rarity_system.md)**.
 2. Decide the output's **base values** (damage/armour) using **[Section 2](#2-base-values-inheritance)**.
-3. Inherit **stats modifiers** using **[Section 3](#3-stats-modifiers-inheritance)** (including the modifier cap table).
-4. Inherit **skills** using **[Section 4](#4-skills-inheritance)**.
-5. Inherit **rune slots** using **[Section 5](#5-rune-slots-inheritance)**.
+3. Inherit **blue stats** using **[Section 3](#3-stats-modifiers-inheritance)**.
+4. Inherit **ExtraProperties** using **[Section 4](#4-extraproperties-inheritance)**.
+5. Inherit **skills** using **[Section 5](#4-skills-inheritance)**.
+6. Inherit **rune slots** using **[Section 6](#5-rune-slots-inheritance)**.
 
 ### 1.3. Deterministic randomness (seed + multiplayer)
 <a id="13-deterministic-randomness-seed--multiplayer"></a>
@@ -134,45 +163,51 @@ All random outcomes in this system (white numbers, blue stats, granted skills) m
 This section defines how to merge **raw numeric power** (weapon damage, armour/magic armour from shields, other armour pieces, jewellery):
 
 - Always outputs an item at the **player’s current level**.
-- Prevents “cross-type budget stealing” (e.g. importing a two-handed axe’s raw budget into a dagger).
-- Avoids nonsense when ingredient levels are far apart (e.g. level 6 + level 13).
-- Ensures the output stays **capped by its own (type, level, rarity)** budget.
+- The computation itself uses only the parents’ **white tooltip values**.
 
-Forging can improve the **white numbers** (base damage / base armour / base magic armour). But it’s still limited by the item’s **type**, **your level**, and **its rarity**.
+Forging can improve the **white numbers** (base damage / base armour / base magic armour), but the base-value merge itself is constrained by:
+- The output **item category/slot** (slot-locked eligibility and main-slot identity),
+- Slot 1 dominance (rarity-based `w` for non-weapons, and for same-`WeaponType` weapons)
+- The donor’s own tooltip values (the “spike” pushes **towards** the donor).
 
 With the right strategy, forging is a way to **upgrade your favourite item over time**: good ingredients push it upwards more reliably, and with some luck you can sometimes get a **big jump**, or very rarely can gain an **exceptional result**.
 
 Here are what you can expect:
-- **If slot 1 is already very strong** (near the top for its rarity), most forges will be **small changes** — maybe a point or two up or down, or staying about the same. This is normal: you’re already near the ceiling for that rarity. However, You could push it beyond the normal maximum with excellent donor with right strategy and luck.
+- **If slot 1 is already very strong** (already close to the donor values you can realistically find), most forges will be **small changes** — maybe a point or two up or down, or staying about the same. This is normal: the model moves you **towards** the donor.
 - **If slot 1 is weak and the donors are strong**, you’ll see **clear improvements** more often, with very rare **exceptional results** that can feel like a real jackpot.
 
 ### 2.1. Base values (definition)
 <a id="21-base-values-definition"></a>
-This normalisation model is intentionally generic: it works for any item that has a meaningful **base values** (raw template numbers, not stats modifiers/granted skills/runes).
+This base-value model is intentionally generic: it works for any item that has meaningful **base values** (raw template numbers, not stats modifiers/granted skills/runes).
 
 - **Weapons**: base damage range.
 - **Shields**: base armour and base magic armour.
 - **Armour pieces** (helmets/chest/gloves/boots/pants): base armour and/or base magic armour.
 - **Jewellery** (rings/amulets): base magic armour.
-- **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): Section 2 is a **no-op** for those numeric channels (do not attempt to normalise/divide by a `0` baseline).
+- **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): Section 2 is a **no-op** for those numeric channels.
 
 Overview on how the forged item's base values are calculated:
-- Measure a parent's base value relative to a **baseline for the same (type, level, rarity)**.
-- Merge in **percentile space**.
-- Re-apply to the output's baseline at the player's level, then clamp to the output band.
+- **Weapons (damage)**: uses a **tooltip-midpoint** model.
+  - Let `A = avgDamage(slot1)` and `B = avgDamage(slot2)`, where `avgDamage = (min+max)/2`.
+  - Only if both parents are weapons of the **exact same `WeaponType`** (same-type) can the donor influence damage.
+  - Cross-type weapon forging does **not** change base damage (slot 1 identity is preserved).
+- **Non-weapons (armour/shields/jewellery)**: uses a **tooltip-only** model (per channel):
+  - Let `A = Base(slot1)` and `B = Base(slot2)` for that channel (e.g. physical armour, magic armour).
+  - Uses **slot 1 dominance** (rarity-based `w`): the donor can pull the result **up or down**.
+  - An upgrade can “spike” towards the donor using the same `u^2` shape (higher is harder).
 
 ### 2.2. Output rules (level/type/rarity)
 <a id="22-output-rules-leveltyperarity"></a>
 - **Output level**: always the forger’s level, `Level_out = Level_player`.
 - **Output type**: always the item in the **main forge slot** (first slot).
 - **Output rarity**: decided by the **[Rarity System](rarity_system.md)**.
-- **Capped result**: the output's raw numeric values are normally limited by the output's **type + level + rarity** band, but can **exceed the normal maximum** via the **upgrade bonus (overcap)** (**Section 2.3** [Upgrade bonus overcap distribution](#23-upgrade-overcap-behaviour)) when an upgrade succeeds (up to +12% above the band's maximum).
+- **Base values (all items)**: upgrades do **not** overcap. They only push the output **towards the donor** for that channel (and cross-type weapon forging does not change weapon damage).
 
 ### 2.3. Inputs and tuning parameters
 <a id="23-inputs-and-tuning-parameters"></a>
 <a id="23-parameters-tuning-knobs"></a>
 
-This section defines the **inputs**, **notation**, and the **balance knobs** used by the base values merge. The actual algorithm is in [Section 2.6](#26-merge-algorithm-percentiles-to-output-base-values).
+This section defines the **inputs**, **notation**, and the **balance knobs** used by the base values merge. The actual algorithms are in [Section 2.6](#26-merge-algorithm-percentiles-to-output-base-values).
 
 #### Inputs (per forge)
 - **Output selectors**:
@@ -183,65 +218,22 @@ This section defines the **inputs**, **notation**, and the **balance knobs** use
   - **Weapons**: one channel (white damage average).
   - **Shields / armour pieces**: two channels (physical armour and magic armour).
   - **Jewellery**: typically one channel (magic armour).
-- **No-op rule**: if an item has no meaningful base value for a channel (e.g. baseline is `0`), do **not** normalise that channel.
+- **No-op rule**: if an item has no meaningful base value for a channel (e.g. the tooltip value is `0`), do **not** apply the merge to that channel.
 
 #### Balance knobs (tuning table)
 These are the **balance knobs** (tuning defaults). The symbol dictionary used by the algorithm is in **Section 2.5**: [Notation legend](#25-notation-legend-shared).
+These are used by the tooltip-only base-value models in Section 2.
 | Parameter | Meaning | Default | Notes |
 | :--- | :--- | :---: | :--- |
-| `[L_r, H_r]` | Allowed base roll band for rarity `r` (in quality-ratio space) | See table below | Defines “bottom roll” / “top roll” for base values at each rarity. |
-| `α` | Cross-type conversion softness | **0.75** | Used inside `conversionLoss` ([Section 2.6](#26-merge-algorithm-percentiles-to-output-base-values)). |
-| `g(Family_out, Family_donor)` | Family adjacency multiplier (cross-type flexibility) | See table below | Enables weapon "close family" forging without allowing budget stealing ([Section 2.6](#26-merge-algorithm-percentiles-to-output-base-values)). |
-| `w` | Slot 1 dominance when merging percentiles | Derived | Computed from the parents’ rarities (rarity dominance rule below). Slot 1 always remains the main parent. |
+| `w` | Slot 1 dominance weight | Derived | Computed from the parents’ rarities (rarity dominance rule below). Slot 1 always remains the main parent. Used by non-weapons and by weapons when `WeaponType` matches. |
 | `w0` | Base slot 1 dominance | **0.70** | Used when both parents have the same rarity. |
 | `β` | Rarity dominance strength | **0.04** | Each rarity step in favour of slot 1 increases `w` by `β` (and decreases donor weight by the same amount). |
 | `w_min`, `w_max` | Clamp range for `w` | **0.50..0.90** | Prevents the donor from becoming completely irrelevant, and prevents slot 1 from ever being “overridden”. |
-| `p_upgrade_min` | Minimum percentile for an “upgrade roll” | **0.60** | On an upgrade, you roll into `[p_upgrade_min, 1.0]` (or higher if `p_base` is already higher). |
-| `upgradeCap` | Maximum upgrade chance | **50%** | Upgrade chance depends only on ingredient quality. |
-| `k` | Upgrade difficulty exponent (“higher is harder”) | **2** | Higher values make extreme upgrades rarer; this document uses `k=2`. |
-| `overcap` | Upgrade overcap range | **+1%..+12%** | Applied only on an upgrade; higher overcap is harder. |
+| `upgradeCap` | Maximum upgrade chance | **50%** | Applies only when the donor is better (`B > A`). |
+| `k` | Upgrade difficulty exponent (“higher is harder”) | **1** | Linear upgrade chance vs relative gain. |
+| Upgrade quality roll | `u^2` | – | On upgrade success: pushes towards donor (`Out = Base + (B-Base)×u^2`). |
 | Rounding policy | How to convert the final float into the displayed integer | Nearest (half-up) | Optional “player-favour” bias is to always round up. |
 
-#### Rarity bands for base values (`L_r`, `H_r`)
-<a id="23-rarity-bands-for-base-values"></a>
-These bands are used both to:
-- convert parent quality ratios into percentiles ([Section 2.5](#25-normalisation-raw-to-percentile)), and
-- convert the merged percentile back into an output quality ratio ([Section 2.6](#26-merge-algorithm-percentiles-to-output-base-values)).
-
-| Rarity | `[L_r, H_r]` | Interpretation |
-| :--- | :---: | :--- |
-| Common | `[0.97, 1.03]` | Small variance only. |
-| Uncommon | `[0.97, 1.04]` | Slightly wider. |
-| Rare | `[0.96, 1.06]` | Noticeable, still controlled. |
-| Epic | `[0.96, 1.07]` | A bit wider. |
-| Legendary | `[0.95, 1.08]` | “Good rolls matter”. |
-| Divine | `[0.95, 1.09]` | Top-end, still capped. |
-| Unique | `[0.95, 1.08]` | Use Legendary band for now (normalisation is already special-cased). |
-
-#### Weapon families (used by `g`)
-<a id="23-weapon-families"></a>
-| Family | Weapon types |
-| :--- | :--- |
-| 1H melee | 1H Sword, 1H Axe, 1H Mace |
-| Dagger | Dagger |
-| 2H melee | 2H Sword, 2H Axe, 2H Mace |
-| Spear | Spear |
-| Ranged 2H | Bow, Crossbow |
-| Magic 1H | Wand |
-| Magic 2H | Staff |
-
-#### Family adjacency multiplier `g(Family_out, Family_donor)`
-<a id="23-family-adjacency-multiplier"></a>
-When forging across weapon types, we apply an additional multiplier to make "close family" forging more effective without breaking type safety:
-- `g` is always clamped to `[0, 1]`
-- `g = 1.00` means “no extra penalty beyond the baseline-ratio loss”
-
-| Relationship | Examples | `g` |
-| :--- | :--- | :---: |
-| Same family | 2H sword ↔ 2H axe, bow ↔ crossbow | **1.00** |
-| Strong adjacency | Spear ↔ 2H melee; Spear ↔ Ranged 2H | **0.95** |
-| Medium adjacency | 2H melee ↔ Ranged 2H | **0.90** |
-| Weak adjacency | Anything ↔ Magic weapons (unless same magic family); Dagger ↔ non-dagger; everything else | **0.85** |
 
 #### Rarity dominance (Non-Unique): dynamic merge weight `w`
 <a id="23-rarity-dominance"></a>
@@ -259,8 +251,12 @@ Then:
 - `w = clamp(w0 + β × Δr, w_min, w_max)`
 - donor weight is `(1 - w)`
 
+**Note:**
+Weapon damage (same `WeaponType`) uses rarity dominance too. When `WeaponType` matches, weapons use the same donor pull strength: `t = (1 - w)` (computed from parent rarities).
+When `WeaponType` does not match, weapon base damage does not change ([Section 2.6](#26-merge-algorithm-percentiles-to-output-base-values)).
+
 #### Weight table (main rarity vs donor rarity)
-These are the resulting `w` values using `w0=0.70`, `β=0.04`, `w_min=0.50`, `w_max=0.90`.
+This table shows what percentage the main item and donor contribute for different rarity combinations, using `w0=0.70`, `β=0.04`, `w_min=0.50`, `w_max=0.90`
 
 Format: `w (donor weight = 1 - w)`
 
@@ -273,440 +269,181 @@ Format: `w (donor weight = 1 - w)`
 | Legendary (4) | 0.86 (0.14) | 0.82 (0.18) | 0.78 (0.22) | 0.74 (0.26) | 0.70 (0.30) | 0.66 (0.34) |
 | Divine (5) | 0.90 (0.10) | 0.86 (0.14) | 0.82 (0.18) | 0.78 (0.22) | 0.74 (0.26) | 0.70 (0.30) |
 
-#### Upgrade bonus overcap distribution (if upgrade succeeds)
+#### Upgrade quality roll `u`
 <a id="23-upgrade-overcap-behaviour"></a>
-On an upgrade success, there are two independent rolls:
-- `u` controls **how good the upgrade is within the normal rarity band** (it decides `p_out`, which is then converted into a `q_out` inside `[L_r, H_r]`).
-- `v` controls **how far you push past the band top** (it decides the overcap bonus `Δ`, which is applied after `q_out` and can exceed `H_r`).
-
-Overcap model: `Δ = 0.01 + 0.11 × v^2` (range +1%..+12%).
-
-Overcap size distribution (1%-wide buckets):
-```text
-Δ bucket (percent)   Chance   Graph
-+1%–<+2%             30.2%   ████████████████████████████
-+2%–<+3%             12.5%   ████████████
-+3%–<+4%              9.6%   █████████
-+4%–<+5%              8.1%   ████████
-+5%–<+6%              7.1%   ███████
-+6%–<+7%              6.4%   ██████
-+7%–<+8%              5.9%   ██████
-+8%–<+9%              5.5%   █████
-+9%–<+10%             5.2%   █████
-+10%–<+11%            4.9%   █████
-+11%–≤+12%            4.7%   █████
-```
+On an upgrade success, we roll `u ~ U(0,1)` and use `u^2` to push the output towards the donor (higher is harder).
 
 ---
 
-### 2.4. Baseline budget cache and parent measurement
+### 2.4. Parent measurement (tooltip values)
 <a id="24-baseline-budget-cache-and-parent-measurement"></a>
 <a id="24-measuring-base-values-no-runeboost-pollution"></a>
 
-This system measures parent base values from real items (white tooltip numbers), then compares them to a **baseline budget cache** to make the merge vanilla-fair and type-safe.
+This section defines how to measure the parents’ base values from real items (white tooltip numbers).
+Base values are derived directly from these measured tooltip values.
 
 #### Parent measurement
 Important constraints (already enforced elsewhere, but repeated here because they matter for correctness):
 - **Socketed runes are rejected** as ingredients ([Section 1.1](#11-ingredient-eligibility)), so rune pollution does not enter the system.
 - Try to measure from a stable state (not mid-combat / not under temporary buffs), so the tooltip reflects the item’s own base values.
 
-Weapons (single channel):
+Weapons (single channel; uses these directly):
 - Read the weapon’s white damage range from the item tooltip: `D_min..D_max`
-- Compute the average: `D_avg = (D_min + D_max) / 2`
+- Compute the midpoint: `avgDamage = (D_min + D_max) / 2`
 
 Shields / armour pieces (two channels):
 - Read `Armour` and `MagicArmour` from the item tooltip.
 - Treat each channel independently throughout Sections 2.5–2.6.
 
-#### Baseline cache `B(Type, Level, Rarity)` (runtime-sampled, data-driven)
-`B(Type, Level, Rarity)` is the expected (mean) base value for that cell in vanilla.
-
-Because this curve is not cleanly exposed as a single editor table, obtain it empirically via Script Extender and treat the result as a **data asset**.
-
-Recommended approaches:
-- **Preferred (ship/precompute)**: run a developer-only sampling command (or build step), export the resulting baseline table (for all `(Type, Level, Rarity)`), and ship it with the mod. Runtime then simply loads the table.
-- **Fallback (first-run calibration)**: if cannot ship a baseline table, sample once on first run, then **persist** the results (e.g. to a saved cache file / persistent mod data) and reuse them on all later runs.
-
-Sampling procedure (either approach uses the same method):
-- Spawn (or otherwise obtain) `N` vanilla items for each `(Type, Level, Rarity)` cell.
-- Read the measured base value(s) (e.g. `D_avg`).
-- Store `B` as the sample mean (optionally also store p10/p50/p90 for debugging).
-
-Cache invalidation (when to resample):
-- If you change the sampling algorithm, item filters, or supported type list.
-- If a game/mod update materially changes item generation curves (treat this as “baseline version bump”).
-
-Recommended starting point:
-- `N = 200` per cell for stable means (use fewer for dev, more for final tuning).
-
-Note on “Type” for armour:
-- For armour, `Type` should include the **slot** (e.g. Chest) and the **armour archetype/material** (Strength / Finesse / Intelligence families), because those families have intentionally different physical vs magic baseline budgets.
-
 ---
 
-### 2.5. Normalisation (raw to percentile)
+### 2.5. Core formulas (gain + upgrade + rarity dominance)
 <a id="25-normalisation-raw-to-percentile"></a>
-<a id="25-normalisation-q--percentile-p"></a>
+This section defines the shared pieces of maths used by the base-value models:
 
-This converts “how good is this item for its own type/level/rarity” into a stable percentile `p ∈ [0, 1]`.
-
-#### Notation legend (shared for Sections 2.5–2.6)
-<a id="25-notation-legend-shared"></a>
-This is a **symbol dictionary** for the normalisation and merge steps ([Section 2.5](#25-normalisation-raw-to-percentile) to [Section 2.6](#26-merge-algorithm-percentiles-to-output-base-values)). For tuning defaults, see **Section 2.3**: [Balance knobs](#balance-knobs-tuning-table).
-
-| Name | Meaning | Range / units |
-| :--- | :--- | :--- |
-| **Input (parent items)** | | |
-| `Base_i` | Measured base value from the parent item tooltip (one channel: weapon `D_avg`, or armour `Armour` / `MagicArmour`) | base-value units |
-| `Type_i`, `Level_i`, `Rarity_i` | Parent identifiers | n/a |
-| **Baseline and normalisation** | | |
-| `B(Type, Level, Rarity)` | Baseline mean base value from cache ("what vanilla expects on average" for that cell) | base-value units |
-| `B_i` | Parent baseline mean: `B(Type_i, Level_i, Rarity_i)` | base-value units |
-| `[L_r, H_r]` | Allowed quality-ratio band for rarity `r` | ratio |
-| `q_i` | Parent quality ratio: `Base_i / B_i` (ratio vs vanilla mean for the parent's own cell) | ratio |
-| `p_i` | Normalised percentile score for `q_i` inside the rarity band | `[0,1]` |
-| **Output selectors** | | |
-| `Type_out`, `Level_out`, `Rarity_out` | Output selectors (always slot 1 type, player level, rarity system result) | n/a |
-| `B_out` | Output baseline mean: `B(Type_out, Level_out, Rarity_out)` | base-value units |
-| `p_1`, `p_2` | Parent percentiles for slot 1 and slot 2 | `[0,1]` |
-| **Cross-type conversion** | | |
-| `ratioLoss` | Cross-type loss from baseline budget ratio (softened by `α`) | `[0,1]` |
-| `g(…)` | Weapon-family adjacency multiplier | `[0,1]` |
-| `conversionLoss` | Final cross-type donor effectiveness (`ratioLoss × g`) | `[0,1]` |
-| **Rarity dominance (merge weight)** | | |
-| `r_main`, `r_donor`, `Δr` | Rarity indices and rarity gap used to compute `w` | `int` |
-| `w0`, `β`, `w_min`, `w_max` | Rarity dominance parameters used to compute `w` | `[0,1]` |
-| `w` | Slot 1 dominance weight (computed from rarity dominance) | `[0,1]` |
-| **Merge and upgrade** | | |
-| `p_base` | Deterministic merged percentile (type-safe) | `[0,1]` |
-| `p_ing` | Ingredient quality (ignores type conversion penalties; used only for upgrade chance) | `[0,1]` |
-| `upgradeCap`, `k` | Upgrade chance cap and difficulty exponent | `%` or `num` |
-| `P(upgrade)` | Upgrade chance | `[0,50%]` |
-| `p_min` | Upgrade floor for this forge: `max(p_upgrade_min=0.60, p_base)`. See `p_upgrade_min=0.60` at **Section 2.3** [Balance knobs](#balance-knobs-tuning-table) | `[0,1]` |
-| `u` | Upgrade quality roll (only if upgrade succeeds) | `U(0,1)` |
-| `p_out` | Output percentile score (either `p_base` or upgraded) | `[0,1]` |
-| `v` | Overcap size roll (only if upgrade succeeds) | `U(0,1)` |
-| `Δ` | Overcap bonus applied to `q_out` | `+1%..12%` |
-| **Final output** | | |
-| `q_out` | Output quality ratio (applied to `B_out`) | ratio |
-| `Base_target_out` | Output base value target before rounding: `B_out × q_out` | base-value units |
-
-**Note:** `U(0,1)` denotes a uniform distribution on the interval [0,1], i.e., a random variable that can take any value between 0 and 1 with equal probability.
-
-#### Normalisation steps (one numeric channel)
-For a parent item `i`:
-1) Read `Base_i` from the tooltip ([Section 2.4](#24-baseline-budget-cache-and-parent-measurement)).
-2) Look up `B_i` from the baseline cache.
-3) Compute `q_i = Base_i / B_i`.
-4) Get the band `[L_{Rarity_i}, H_{Rarity_i}]` for the parent’s displayed rarity.
-5) Compute `p_i = clamp((q_i - L_{Rarity_i}) / (H_{Rarity_i} - L_{Rarity_i}), 0, 1)`.
-
-Interpretation:
-- `p_i = 0` means “bottom of the allowed base band for that rarity”.
-- `p_i = 1` means “top of the allowed base band for that rarity”.
+- **Base pull (`delta`)**: the donor can pull **up or down**:
+  - `delta = (B - A)`
+- **Rarity dominance (`w`)**: computes slot 1 dominance and donor influence:
+  - donor pull strength is `t = (1 - w)`
+- **Upgrade chance (donor better only):**
+  - `gain = max(0, delta / max(A, 1))` (relative improvement available; 0 if donor is not better)
+  - `P(upgrade) = clamp(upgradeCap × gain^k, 0, upgradeCap)`
+- **Upgrade quality (if upgrade succeeds):**
+  - roll `u ~ U(0,1)` and use `u^2` to push towards the donor (higher is harder)
 
 ---
 
-### 2.6. Merge algorithm (percentiles to output base values)
+### 2.6. Merge algorithms (weapons and non-weapons)
 <a id="26-merge-algorithm-percentiles-to-output-base-values"></a>
 <a id="26-cross-type-merging-w--conversionloss"></a>
 
-After normalising each parent into a percentile ([Section 2.5](#25-normalisation-raw-to-percentile)), we can merge the percentiles to get the output base value.
+This section contains two separate models:
+- **Weapons (damage)**: tooltip-midpoint model (only if the parents have the exact same `WeaponType`; uses `w` for donor pull when eligible, otherwise damage is unchanged).
+- **Non-weapons (armour/shields/jewellery)**: tooltip-only model (per channel; always uses `w` for slot 1 dominance / donor pull).
 
-The merge algorithm works as follows:
-1) merge percentiles with slot 1 dominance, and
-2) denormalise back onto the output type’s baseline at the player’s level.
-
-#### Step-by-step algorithm (one numeric channel)
+#### Weapon base damage merge (tooltip midpoints)
 Let slot 1 be the “main” parent and slot 2 the “donor” parent.
 
-Notation: see the shared legend in [Section 2.5](#25-notation-legend-shared).
+Inputs:
+- `A = avgDamage(slot1)` and `B = avgDamage(slot2)` where `avgDamage = (min+max)/2`
+- `TypeMatch = (WeaponType_1 == WeaponType_2)`
 
-#### Cross-type conversion loss
+Rules:
+- If `TypeMatch=false`: `avg_out = A` (cross-type weapons do not change damage).
+- Otherwise (`TypeMatch=true`):
+  - Compute `w` from parent rarities (Section 2.3), so donor pull strength is `t = (1 - w)`
+  - `delta = (B - A)`
+  - `avg_base = A + t × delta`
+  - `gain = max(0, delta / max(A, 1))`
+  - `P(upgrade) = clamp(upgradeCap × gain^k, 0, upgradeCap)`
+  - On upgrade failure: `avg_out = avg_base`
+  - On upgrade success: roll `u ~ U(0,1)` and compute `avg_out = avg_base + (B - avg_base) × u^2` (higher is harder)
 
-$$ratioLoss = \min\left(1,\ \left(\frac{B(Type_{out}, Level_{out}, Rarity_{out})}{B(Type_{donor}, Level_{out}, Rarity_{out})}\right)^{\alpha}\right)$$
+Finally, round to the displayed integer midpoint and let the engine display min/max using the weapon’s `Damage Range` rules.
 
-$$conversionLoss = clamp(ratioLoss \times g(Family_{out}, Family_{donor}),\ 0,\ 1)$$
+#### Non-weapons (tooltip-only; per channel)
+Let slot 1 be the “main” parent and slot 2 the “donor” parent.
 
-Notes:
-- `g(Family_out, Family_donor)` is primarily defined for **weapons** (**Section 2.3** [Weapon families](#23-weapon-families)). Treat `g = 1.0` for other categories.
+Inputs (per channel):
+- `A = Base(slot1)` (e.g. physical armour)
+- `B = Base(slot2)` (same channel)
+- `w` from rarity dominance (Section 2.3), so donor pull strength is `t = (1 - w)`
 
-#### Step-by-step explanation (per numeric channel)
+Rules:
+- `delta = (B - A)`
+- `Base = A + t × delta`
+- `gain = max(0, delta / max(A, 1))`
+- `P(upgrade) = clamp(upgradeCap × gain^k, 0, upgradeCap)`
+- On upgrade failure: `Out = Base`
+- On upgrade success: roll `u ~ U(0,1)` and compute `Out = Base + (B - Base) × u^2`
 
-##### 1. Choose output selectors:
-   - `Type_out = Type_1` (always the main slot's type)
-   - `Level_out = Level_player` (always the forger's level)
-   - `Rarity_out` (from the rarity system)
-   - `B_out = B(Type_out, Level_out, Rarity_out)` (look up from baseline cache)
-
-Prerequisite:
-- From [Section 2.5](#25-normalisation-raw-to-percentile), compute the parent percentiles `p_1` and `p_2` for slot 1 and slot 2.
-
-##### 2. Compute cross-type conversion loss (only when types differ):
-   - If `Type_1 == Type_2`: set `conversionLoss = 1.0` and skip to step 3.
-   - Otherwise:
-     - Compute `ratioLoss = min(1, (B_out / B_donor_on_out_curve)^α)` (budgets compared on the output curve)
-     - Apply the family adjacency multiplier: `conversionLoss = clamp(ratioLoss × g, 0, 1)` (where `g` comes from **Section 2.3** [Family adjacency multiplier](#23-family-adjacency-multiplier))
-
-##### 3. Compute deterministic merged percentile:
-   - Compute `w` from the parents' rarities (**Section 2.3** [Rarity dominance](#23-rarity-dominance)).
-   - `p_base = clamp(w × p_1 + (1 - w) × p_2 × conversionLoss, 0, 1)`
-   - This is the type-safe, deterministic result (what you get if no upgrade happens)
-
-##### 4. Compute ingredient quality (used only for upgrade chance):
-   - `p_ing = clamp(w × p_1 + (1 - w) × p_2, 0, 1)`
-   - upgrade chance only depends on raw ingredient quality
-
-##### 5. Compute upgrade chance:
-   - `P(upgrade) = upgradeCap × (p_ing)^k` (this document uses `k=2`)
-
-##### 6. Roll for upgrade:
-   - Roll once to check if the upgrade succeeds (compare a random value to `P(upgrade)`).
-   - **If upgrade fails**: set `p_out = p_base` and skip to step 8 (no upgrade bonus overcap).
-   - **If upgrade succeeds**: continue to step 7.
-
-##### 7. Roll upgraded percentile score and upgrade bonus overcap (only if upgrade succeeded):
-   - Compute `p_min = max(p_upgrade_min=0.60, p_base)` (upgrade floor; Defined `p_upgrade_min=0.60` in **Section 2.3** [Balance knobs](#balance-knobs-tuning-table))
-   - Roll `u ~ U(0,1)` and compute `p_out = p_min + (1 - p_min) × u^2` (higher is harder)
-    - Roll `v ~ U(0,1)` and compute `Δ = 0.01 + 0.11 × v^2` (overcap bonus; see **Section 2.3** [Upgrade bonus overcap distribution](#23-upgrade-overcap-behaviour))
-
-##### 8. Convert percentile score to quality ratio:
-   - `q_out = L_r + p_out × (H_r - L_r)` (here `r = Rarity_out`; use **Section 2.3** [Rarity bands for base values (`L_r`, `H_r`)](#23-rarity-bands-for-base-values))
-   - If the upgrade succeeded (from step 6), apply overcap: `q_out = q_out × (1 + Δ)`
-
-##### 9. Apply to baseline and round:
-   - `Base_target_out = B_out × q_out` (where `B_out` was computed in Step 1)
-   - Round to integer for display (rounding policy: nearest, or optionally always round up)
-
-#### Multi-channel note (shields / armour)
-For shields/armour, apply the same steps as above  **per numeric channel** (physical armour and magic armour). The `conversionLoss` ratio is also computed per channel because the relevant `B(…)` differs per channel.
-
-#### Why this avoids exploits
-- **Level gap**: because each parent is normalised against its own `(type, level, rarity)` baseline, a level 13 item does not directly inject level 13 raw damage into a level 10 output.
-- **Cross-type budget stealing**: the donor only contributes a percentile, and that percentile is re-expressed on the output type’s baseline; a dagger remains “a very good dagger”, not “a dagger with two-handed damage”.
-- **Rune/boost pollution**: rune sockets are rejected up-front ([Section 1.1](#11-ingredient-eligibility)), and any remaining variation is handled fairly because all comparisons are made against the sampled baseline budget `B(Type, Level, Rarity)`.
+Apply the same steps independently to each channel (physical armour and magic armour).
 
 ### 2.7. Worked examples
 <a id="27-worked-examples-base-values"></a>
 
-#### Shared settings (used by all examples)
+#### Weapon examples (tooltip midpoints)
+The weapon examples below use only the white tooltip numbers:
+`avgDamage = (min+max)/2`.
+
+Shared settings (weapon-only):
 | Name | Value | Meaning |
 | :--- | :---: | :--- |
 | `w0` | 0.70 | Base slot 1 dominance (same rarity) |
 | `β` | 0.04 | Rarity dominance strength |
 | `w_min`, `w_max` | 0.50..0.90 | Clamp range for `w` |
-| `p_upgrade_min` | 0.60 | Upgrade minimum percentile floor (only on upgrade success) |
 | `upgradeCap` | 50% | Maximum upgrade chance |
-| `k` | 2 | Upgrade difficulty exponent (“higher is harder”) |
-| Upgrade quality roll | `u^2` | Rolls `p_out` towards the low end unless you get lucky |
-| Overcap roll | `v^2` | Rolls overcap towards +1% unless you get lucky |
+| `k` | 1 | Upgrade difficulty exponent (“higher is harder”) |
+| Upgrade quality roll | `u^2` | Pushes towards donor unless you get lucky |
 
-The examples below use real level 20 in-game items (white damage ranges / armour values). `B(...)` values shown are example baseline-cache values (your sampler provides the real ones). You can toggle the fully explicit view to see the detailed calculations.
+##### Example 1: Same `WeaponType` (Crossbow), donor is better
+Both are **Crossbow** ⇒ same-type (`TypeMatch=true`).
 
-#### Example 1: Same type, rarity dominance (Common + Divine crossbow)
-Assume the realised output rarity is **Divine** (the rarity system is documented separately).
+| Item | `WeaponType` | Tooltip damage | `avgDamage` |
+| :--- | :--- | :---: | ---: |
+| Slot 1 (main) | Crossbow | `130–136` | `A = 133.0` |
+| Slot 2 (donor) | Crossbow | `150–157` | `B = 153.5` |
 
-##### Case A: Slot 1 Common (main) + Slot 2 Divine (donor)
-| Item | Rarity | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| Slot 1 (Crossbow) | Common | `130–136` → `133.0` | `133.0` | `[0.97, 1.03]` | `1.000` | `0.500` |
-| Slot 2 (Crossbow) | Divine | `150–157` → `153.5` | `152.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
-| Output (Crossbow) | Divine | (computed) | `152.0` | `[0.95, 1.09]` | – | – |
-
+Compute:
 | Key value | Result |
-| :--- | :---: |
-| `w` | `clamp(0.70 + 0.04×(0-5), 0.50, 0.90) = 0.50` |
-| `conversionLoss` | `1.00` (same type) |
-| `p_base` | `0.464` |
-| `p_ing` | `0.464` |
-| `P(upgrade)` | `50% × 0.464^2 ≈ 10.76%` |
+| :--- | ---: |
+| `delta = (B-A)` | `20.5` |
+| `w = clamp(0.70 + 0.04×(0-5), 0.50, 0.90)` | `0.50` |
+| `t = (1-w)` | `0.50` |
+| `avg_base = A + t×delta` | `133.0 + 0.50×20.5 = 143.25` |
+| `gain = max(0, delta/max(A,1))` | `20.5/133.0 = 0.1541` |
+| `P(upgrade) = upgradeCap × gain^k` | `50% × 0.1541 = 7.71%` |
 
-| Outcome | `p_out` | `q_out` | Output damage |
-| :--- | :---: | :---: | :---: |
-| No upgrade | `0.464` | `1.015` | `152×1.015 = 154.3` |
-| Upgrade example (`u=0.70`, `v=0.30`) | `0.796` | `1.061×(1+0.0199)=1.082` | `≈ 164.5` |
+| Outcome | `avg_out` | Notes |
+| :--- | ---: | :--- |
+| No upgrade | `avg_out = 143.25` | deterministic baseline |
+| Upgrade example (`u=0.70`) | `avg_out = 143.25 + (153.5-143.25)×0.70^2 = 148.27` | exciting spike towards donor |
 
-<details>
-<summary><strong>Fully explicit view</strong></summary>
+##### Example 2: Cross-type weapons do **not** change base damage (Spear + 2H Sword)
+Different `WeaponType` ⇒ cross-type (`TypeMatch=false`).
 
-| Name | Value | How it was obtained |
+| Item | `WeaponType` | Tooltip damage | `avgDamage` |
+| :--- | :--- | :---: | ---: |
+| Slot 1 (main) | Spear | `150–157` | `A = 153.5` |
+| Slot 2 (donor) | 2H Sword | `170–188` | `B = 179.0` |
+
+Rule:
+- `avg_out = A = 153.5` (no upgrade roll)
+
+
+
+
+#### Non-weapon examples (tooltip-only)
+The non-weapon examples below use only the white tooltip values (per channel).
+
+Shared settings (non-weapons):
+| Name | Value | Meaning |
 | :--- | :---: | :--- |
-| `Base_1` | `133.0` | average of `130–136` |
-| `Base_2` | `153.5` | average of `150–157` |
-| `B_1` | `133.0` | `B(Crossbow,20,Common)` |
-| `B_2` | `152.0` | `B(Crossbow,20,Divine)` |
-| `q_1` | `133.0/133.0 = 1.000` | definition |
-| `q_2` | `153.5/152.0 = 1.010` | definition |
-| `p_1` | `clamp((1.000-0.97)/0.06)=0.500` | Common band width `0.06` |
-| `p_2` | `clamp((1.010-0.95)/0.14)=0.428` | Divine band width `0.14` |
-| `w` | `clamp(0.70 + 0.04×(0-5), 0.50, 0.90) = 0.50` | rarity dominance |
-| `conversionLoss` | `1.00` | same type |
-| `p_base` | `0.50×0.500 + 0.50×0.428 = 0.464` | merge |
-| `p_ing` | `0.50×0.500 + 0.50×0.428 = 0.464` | ingredient quality |
-| `P(upgrade)` | `0.50×0.464^2 ≈ 0.1076` | cap `50%`, `k=2` |
-| `p_min` | `max(0.60, 0.464) = 0.60` | upgrade floor |
-| `p_out` (example) | `0.60 + 0.40×0.70^2 = 0.796` | `u=0.70` |
-| `q_out` (pre-overcap) | `0.95 + 0.796×0.14 = 1.061` | Divine band |
-| `Δ` (example) | `0.01 + 0.11×0.30^2 = 0.0199` | `v=0.30` |
-| `q_out` (final) | `1.061×1.0199 ≈ 1.082` | overcap |
-| `D_out` (final) | `152×1.082 ≈ 164.5` | apply baseline |
+| `w0` | 0.70 | Base slot 1 dominance (same rarity) |
+| `β` | 0.04 | Rarity dominance strength |
+| `w_min`, `w_max` | 0.50..0.90 | Clamp range for `w` |
+| `upgradeCap` | 50% | Maximum upgrade chance |
+| `k` | 1 | Upgrade difficulty exponent (“higher is harder”) |
+| Upgrade quality roll | `u^2` | Pushes towards donor unless you get lucky |
 
-</details>
-
-##### Case B: Slot 1 Divine (main) + Slot 2 Common (donor)
-Same two items, swapped slots. This shows how `w` shifts with rarity.
-
-| Item | Rarity | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| Slot 1 (Crossbow) | Divine | `150–157` → `153.5` | `152.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
-| Slot 2 (Crossbow) | Common | `130–136` → `133.0` | `133.0` | `[0.97, 1.03]` | `1.000` | `0.500` |
-| Output (Crossbow) | Divine | (computed) | `152.0` | `[0.95, 1.09]` | – | – |
-
-| Key value | Result |
-| :--- | :---: |
-| `w` | `clamp(0.70 + 0.04×(5-0), 0.50, 0.90) = 0.90` |
-| `conversionLoss` | `1.00` (same type) |
-| `p_base` | `0.435` |
-| `p_ing` | `0.435` |
-| `P(upgrade)` | `50% × 0.435^2 ≈ 9.47%` |
-
-| Outcome | `p_out` | `q_out` | Output damage |
-| :--- | :---: | :---: | :---: |
-| No upgrade | `0.435` | `1.011` | `152×1.011 = 153.7` |
-| Upgrade example (`u=0.70`, `v=0.30`) | `0.796` | `1.061×(1+0.0199)=1.082` | `≈ 164.5` |
-
-#### Example 2: Strong adjacency, "high-quality donor" (spear + high-roll 2H sword)
-Slot 1 (spear): `150–157` → `D_avg = 153.5`  
-Slot 2 (2H sword, high roll): `170–188` → `D_avg = 179.0`
-
-Assume the realised output rarity is **Divine** (slot 1 identity is preserved).
-
-| Item | Rarity | Measured base | Baseline `B` | Band | `q = Base/B` | `p` |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| Slot 1 (Spear) | Divine | `150–157` → `153.5` | `152.0` | `[0.95, 1.09]` | `1.010` | `0.428` |
-| Slot 2 (2H Sword) | Divine | `170–188` → `179.0` | `160.0` | `[0.95, 1.09]` | `1.119` | `1.000` (clamp) |
-| Output (Spear) | Divine | (computed) | `152.0` | `[0.95, 1.09]` | – | – |
-
-| Key value | Result |
-| :--- | :---: |
-| `ratioLoss` | `(152/160)^0.75 ≈ 0.96` |
-| `g` | `0.95` (strong adjacency) |
-| `conversionLoss` | `0.96×0.95 ≈ 0.91` |
-| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` |
-| `p_base` | `0.574` |
-| `p_ing` | `0.600` |
-| `P(upgrade)` | `50% × 0.600^2 = 18.00%` |
-
-| Outcome | `p_out` | `q_out` | Output damage |
-| :--- | :---: | :---: | :---: |
-| No upgrade | `0.574` | `1.030` | `152×1.030 = 156.6` |
-| Upgrade example (`u=0.80`, `v=0.30`) | `0.856` | `1.070×(1+0.0199)=1.091` | `≈ 165.9` |
-
-<details>
-<summary><strong>Fully explicit view</strong></summary>
-
-| Name | Value | How it was obtained |
-| :--- | :---: | :--- |
-| `Base_1` | `153.5` | average of `150–157` |
-| `Base_2` | `179.0` | average of `170–188` |
-| `B_1` | `152.0` | `B(Spear,20,Divine)` |
-| `B_2` | `160.0` | `B(2H_Sword,20,Divine)` |
-| `B_out` | `152.0` | `B(Spear,20,Divine)` (output type) |
-| `q_1` | `153.5/152.0 = 1.010` | definition |
-| `q_2` | `179.0/160.0 = 1.119` | definition |
-| `p_1` | `clamp((1.010-0.95)/0.14)=0.428` | Divine band width `0.14` |
-| `p_2` | `clamp((1.119-0.95)/0.14)=1.000` | clamped to 1.0 (above band) |
-| `ratioLoss` | `(152/160)^0.75 ≈ 0.96` | budget comparison on output curve |
-| `g` | `0.95` | strong adjacency (2H melee family) |
-| `conversionLoss` | `0.96×0.95 ≈ 0.91` | family-adjusted conversion |
-| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` | rarity dominance |
-| `p_base` | `w×0.428 + (1-w)×1.000×0.91 = 0.574` | merge with conversion loss |
-| `p_ing` | `w×0.428 + (1-w)×1.000 = 0.600` | ingredient quality (no conversion loss) |
-| `P(upgrade)` | `0.50×0.600^2 = 0.18` | cap `50%`, `k=2` |
-| `p_min` | `max(0.60, 0.574) = 0.60` | upgrade floor |
-| `p_out` (example) | `0.60 + 0.40×0.80^2 = 0.856` | `u=0.80` |
-| `q_out` (pre-overcap) | `0.95 + 0.856×0.14 = 1.070` | Divine band |
-| `Δ` (example) | `0.01 + 0.11×0.30^2 = 0.0199` | `v=0.30` |
-| `q_out` (final) | `1.070×1.0199 ≈ 1.091` | overcap |
-| `D_out` (final) | `152×1.091 ≈ 165.9` | apply baseline |
-
-</details>
-
-#### Example 3: Weak adjacency, "works but is harder" (1H sword + staff)
-Slot 1 (1H sword): `98–108` → `D_avg = 103.0`  
-Slot 2 (staff): `132–160` → `D_avg = 146.0`
-
-Assume the realised output rarity is **Divine** (slot 1 identity is preserved).
-
-| Item              | Rarity | Measured base        | Baseline `B` | Band           | `q = Base/B` | `p`     |
-|-------------------|:------:|:--------------------:|:------------:|:--------------:|:------------:|:-------:|
-| Slot 1 (1H Sword) | Divine | `98–108` → `103.0`   | `102.0`      | `[0.95, 1.09]` | `1.010`      | `0.428` |
-| Slot 2 (Staff)    | Divine | `132–160` → `146.0`  | `145.0`      | `[0.95, 1.09]` | `1.007`      | `0.406` |
-| Output (1H Sword) | Divine | (computed)           | `102.0`      | `[0.95, 1.09]` | –            | –       |
-
-| Key value | Result |
-| :--- | :---: |
-| `ratioLoss` | `(102/145)^0.75 ≈ 0.77` |
-| `g` | `0.85` (weak adjacency) |
-| `conversionLoss` | `0.77×0.85 ≈ 0.65` |
-| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` |
-| `p_base` | `0.379` |
-| `p_ing` | `0.422` |
-| `P(upgrade)` | `50% × 0.422^2 ≈ 8.90%` |
-
-| Outcome | `p_out` | `q_out` | Output damage |
-| :--- | :---: | :---: | :---: |
-| No upgrade | `0.379` | `1.003` | `102×1.003 = 102.3` |
-| Upgrade example (`u=0.80`, `v=0.30`) | `0.856` | `1.070×(1+0.0199)=1.091` | `≈ 111.3` |
-
-<details>
-<summary><strong>Fully explicit view</strong></summary>
-
-| Name | Value | How it was obtained |
-| :--- | :---: | :--- |
-| `Base_1` | `103.0` | average of `98–108` |
-| `Base_2` | `146.0` | average of `132–160` |
-| `B_1` | `102.0` | `B(1H_Sword,20,Divine)` |
-| `B_2` | `145.0` | `B(Staff,20,Divine)` |
-| `B_out` | `102.0` | `B(1H_Sword,20,Divine)` (output type) |
-| `q_1` | `103.0/102.0 = 1.010` | definition |
-| `q_2` | `146.0/145.0 = 1.007` | definition |
-| `p_1` | `clamp((1.010-0.95)/0.14)=0.428` | Divine band width `0.14` |
-| `p_2` | `clamp((1.007-0.95)/0.14)=0.406` | Divine band width `0.14` |
-| `ratioLoss` | `(102/145)^0.75 ≈ 0.77` | budget comparison on output curve |
-| `g` | `0.85` | weak adjacency (1H melee vs staff) |
-| `conversionLoss` | `0.77×0.85 ≈ 0.65` | family-adjusted conversion |
-| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` | rarity dominance |
-| `p_base` | `w×0.428 + (1-w)×0.406×0.65 = 0.379` | merge with conversion loss |
-| `p_ing` | `w×0.428 + (1-w)×0.406 = 0.422` | ingredient quality (no conversion loss) |
-| `P(upgrade)` | `0.50×0.422^2 ≈ 0.089` | cap `50%`, `k=2` |
-| `p_min` | `max(0.60, 0.379) = 0.60` | upgrade floor |
-| `p_out` (example) | `0.60 + 0.40×0.80^2 = 0.856` | `u=0.80` |
-| `q_out` (pre-overcap) | `0.95 + 0.856×0.14 = 1.070` | Divine band |
-| `Δ` (example) | `0.01 + 0.11×0.30^2 = 0.0199` | `v=0.30` |
-| `q_out` (final) | `1.070×1.0199 ≈ 1.091` | overcap |
-| `D_out` (final) | `102×1.091 ≈ 111.3` | apply baseline |
-
-</details>
-
-#### Example 4: Armour (two channels), same maths per channel (Strength chest + Intelligence chest)
+##### Example 4: Armour (two channels), same maths per channel (Strength chest + Intelligence chest)
 Slot 1 (Strength chest): `713 Physical Armour`, `140 Magic Armour`  
 Slot 2 (Intelligence chest): `140 Physical Armour`, `713 Magic Armour`
 
 Assume the realised output rarity is **Divine** (slot 1 identity is preserved).
 
-Baseline cache (Divine):
-- `B(Chest_Str)`: `B_phys = 700`, `B_magic = 150`
-- `B(Chest_Int)`: `B_phys = 150`, `B_magic = 700`
+Both parents are Divine, so rarity dominance is:
+- `w = clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70`
+- donor pull strength is `t = (1-w) = 0.30`
 
-| Channel | Slot 1 `Base/B → p_1` | Slot 2 `Base/B → p_2` | `conversionLoss` | `p_base` | `p_ing` | `P(upgrade)` | No-upgrade output |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| Physical | `713/700=1.019 → 0.490` | `140/150=0.933 → 0.000` | `1.00` | `0.343` | `0.343` | `≈ 5.88%` | `q=0.998 → 700×0.998 = 699` |
-| Magic | `140/150=0.933 → 0.000` | `713/700=1.019 → 0.490` | `≈ 0.32` | `0.047` | `0.147` | `≈ 1.08%` | `q=0.957 → 150×0.957 = 144` |
+| Channel | Slot 1 `A` | Slot 2 `B` | `delta = (B-A)` | `Base = A + t×delta` | `gain = max(0, delta/max(A,1))` | `P(upgrade)` | No-upgrade output |
+| :--- | ---: | ---: | ---: | ---: | ---: | :---: | ---: |
+| Physical | `713` | `140` | `-573` | `713 + 0.30×(-573) = 541.1` | `0` | `0%` | `541` |
+| Magic | `140` | `713` | `573` | `140 + 0.30×573 = 311.9` | `573/140 = 4.093` | `50%` (cap) | `312` |
 
 Interpretation:
 - The output remains a Strength chest (slot 1 identity is preserved).
-- Per-channel upgrades are possible (rare), and a magic-channel "spike" is intentionally much harder than a physical-channel spike with these inputs.
+- Per-channel upgrades are possible, and a magic-channel “spike” can pull significantly towards the donor when the donor is much better.
 
 <details>
 <summary><strong>Fully explicit view</strong></summary>
@@ -715,62 +452,46 @@ Interpretation:
 
 | Name | Value | How it was obtained |
 | :--- | :---: | :--- |
-| `Base_1_phys` | `713` | measured physical armour (Slot 1) |
-| `Base_2_phys` | `140` | measured physical armour (Slot 2) |
-| `B_1_phys` | `700` | `B(Chest_Str,20,Divine)` physical |
-| `B_2_phys` | `150` | `B(Chest_Int,20,Divine)` physical |
-| `B_out_phys` | `700` | `B(Chest_Str,20,Divine)` physical (output type) |
-| `q_1_phys` | `713/700 = 1.019` | definition |
-| `q_2_phys` | `140/150 = 0.933` | definition |
-| `p_1_phys` | `clamp((1.019-0.95)/0.14)=0.490` | Divine band width `0.14` |
-| `p_2_phys` | `clamp((0.933-0.95)/0.14)=0.000` | clamped to 0 (below band) |
-| `conversionLoss_phys` | `1.00` | same type (both are physical armour) |
-| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` | rarity dominance |
-| `p_base_phys` | `w×0.490 + (1-w)×0.000×1.00 = 0.343` | merge |
-| `p_ing_phys` | `w×0.490 + (1-w)×0.000 = 0.343` | ingredient quality |
-| `P(upgrade)_phys` | `0.50×0.343^2 ≈ 0.0588` | cap `50%`, `k=2` |
-| `q_out_phys` (no upgrade) | `0.95 + 0.343×0.14 = 0.998` | Divine band |
-| `Base_out_phys` (no upgrade) | `700×0.998 = 699` | apply baseline |
+| `A_phys` | `713` | slot 1 physical armour |
+| `B_phys` | `140` | slot 2 physical armour |
+| `w` | `0.70` | same rarity (Divine vs Divine) |
+| `t = 1-w` | `0.30` | donor pull strength |
+| `delta` | `(140-713) = -573` | donor is worse |
+| `Base` | `713 + 0.30×(-573) = 541.1` | deterministic baseline |
+| `P(upgrade)` | `0%` | donor is not better |
 
 ##### Magic Armour Channel
 
 | Name | Value | How it was obtained |
 | :--- | :---: | :--- |
-| `Base_1_magic` | `140` | measured magic armour (Slot 1) |
-| `Base_2_magic` | `713` | measured magic armour (Slot 2) |
-| `B_1_magic` | `150` | `B(Chest_Str,20,Divine)` magic |
-| `B_2_magic` | `700` | `B(Chest_Int,20,Divine)` magic |
-| `B_out_magic` | `150` | `B(Chest_Str,20,Divine)` magic (output type) |
-| `q_1_magic` | `140/150 = 0.933` | definition |
-| `q_2_magic` | `713/700 = 1.019` | definition |
-| `p_1_magic` | `clamp((0.933-0.95)/0.14)=0.000` | clamped to 0 (below band) |
-| `p_2_magic` | `clamp((1.019-0.95)/0.14)=0.490` | Divine band width `0.14` |
-| `ratioLoss_magic` | `(150/700)^0.75 ≈ 0.38` | budget comparison on output curve |
-| `g` | `0.85` | weak adjacency (different armour types) |
-| `conversionLoss_magic` | `0.38×0.85 ≈ 0.32` | family-adjusted conversion |
-| `w` | `clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70` | rarity dominance |
-| `p_base_magic` | `w×0.000 + (1-w)×0.490×0.32 = 0.047` | merge with conversion loss |
-| `p_ing_magic` | `w×0.000 + (1-w)×0.490 = 0.147` | ingredient quality (no conversion loss) |
-| `P(upgrade)_magic` | `0.50×0.147^2 ≈ 0.0108` | cap `50%`, `k=2` |
-| `q_out_magic` (no upgrade) | `0.95 + 0.047×0.14 = 0.957` | Divine band |
-| `Base_out_magic` (no upgrade) | `150×0.957 = 144` | apply baseline |
+| `A_magic` | `140` | slot 1 magic armour |
+| `B_magic` | `713` | slot 2 magic armour |
+| `w` | `0.70` | same rarity (Divine vs Divine) |
+| `t = 1-w` | `0.30` | donor pull strength |
+| `delta` | `(713-140) = 573` | donor improvement |
+| `Base` | `140 + 0.30×573 = 311.9` | deterministic baseline |
+| `gain` | `573/140 = 4.093` | relative improvement |
+| `P(upgrade)` | `clamp(50% × 4.093, 0, 50%) = 50%` | capped |
+| `Out (no upgrade)` | `round(311.9) = 312` | rounding policy |
+| `Out (upgrade example, u=0.70)` | `311.9 + (713-311.9)×0.70^2 = 508.4 → 508` | exciting spike |
 
 </details>
 
 ---
 
-## 3. Stats modifiers inheritance
+## 3. Blue stats inheritance
 <a id="3-stats-modifiers-inheritance"></a>
 
 This section defines how **blue stats** (rollable stats modifiers like Strength, crit, resistances, etc.) are inherited when you forge.
 
 - The system prefers **shared stats** (safer and more predictable).
 - Non-shared stats go into a **pool** (risk/reward).
-- The final item is still limited by the rarity’s **stats slot cap** (see the cap table below).
+- vNext: the final item is limited by a per-save learned **overall rollable slots cap** defined in [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap). Blue stats compete with **ExtraProperties** and **skills** under this cap.
 
 Here are what you can expect:
 - **If the parents share many stats**, the result is usually very stable: you keep most of what you already like, and the pool acts like a small “bonus” chance.
 - **If the parents share few or no stats**, the result is much more random: you can gain different stats lines, but it’s harder to reliably keep specific ones.
+- **For weapons:** The default non-shared (pool) stats inheritance chance for cross-type forging can be miniscule, but if both parents are the **exact same `WeaponType`** (same-type), about **2X** the chance.
 
 ### 3.1. Stats modifiers (definition)
 <a id="31-stats-modifiers-definition"></a>
@@ -782,25 +503,8 @@ Here are what you can expect:
 - Status chance effects ("X% chance to set Y")
 - Other numeric modifiers (Critical Chance, Accuracy, Initiative, Movement, Blocking, etc.)
 
-Stats modifiers are **separate from base values** (Section 2) and **granted skills** (Section 4). They are bounded by rarity-based caps defined in the **[Rarity System](rarity_system.md)**.
-
-#### Modifier cap for each rarity
-
-| Rarity index | Name | Max stats slots (this mod) | Vanilla rollable boost slots (non-rune) |
-| :--- | :--- | :--- | :--- |
-| **0** | Common | **1** | 0..0 |
-| **1** | Uncommon | **4** | 2..4 |
-| **2** | Rare | **5** | 3..5 |
-| **3** | Epic | **6** | 4..6 |
-| **4** | Legendary | **7** | 4..6 |
-| **5** | Divine | **8** | 5..7 |
-| **6** | Unique | **10** | 0..0 |
-
-**Example:**  
-A shield can appear at different rarities too.  
-- If the shield is **Rare** (rarity index 2), it can have up to **5 stats modifiers** (for example: `Blocking +15`, `+2 Constitution`, `+1 Warfare`, `+10% Fire Resistance`, `+1 Retribution`).  
-  - Vanilla reference: `Shield.stats` defines `_Boost_Shield_Special_Block_Shield_*` boosts that apply the `Blocking` stats (e.g. `Blocking=10/15/20`).
-- If the same shield is **Epic** (rarity index 3), it can have up to **6 stats modifiers**.
+Stats modifiers are **separate from base values** (Section 2), **ExtraProperties** (Section 4), and **skills** (Section 5).
+They are bounded by the vNext per-save learned caps in the **[Rarity System](rarity_system.md#22-caps-vnext-default--learned-per-save)**.
 
 ### 3.2. The two stats lists
 <a id="32-the-two-stats-lists"></a>
@@ -817,7 +521,7 @@ A shield can appear at different rarities too.
 - **V (Luck adjustment/variance)**: the luck result that nudges E up/down (can chain).
 - **K (Stats from pool)**: how many you actually take from the pool (after luck adjustment, limited to 0–P).
 - **T (Planned total)**: planned stats lines before the rarity cap.
-- **Cap**: the max stats slots from rarity.
+- **Cap**: vNext uses the per-save learned **overall rollable slots cap** from `rarity_system.md` (blue stats compete with ExtraProperties + skills under the same cap).
 - **Final**: stats lines after the cap is applied.
 
 #### Two rules define inheritance
@@ -959,17 +663,92 @@ The tier depends only on **pool size**:
 
 | Pool size | Tier | First roll chances (Bad / Neutral / Good) | Chain chance (Down / Up) |
 | :--- | :--- | :--- | :--- |
-| **1** | Tier 1 (Safe) | 0% / 50% / 50% | None |
-| **2–4** | Tier 2 (Early) | 12% / 50% / 38% | 12% / 22% |
-| **5–7** | Tier 3 (Mid) | 28% / 50% / 22% | 28% / 30% |
-| **8+** | Tier 4 (Risky) | 45% / 40% / 15% | 45% / 30% |
+| **1** | Tier 1 (Safe) | `0% / 60% / 40%` | None |
+| **2–4** | Tier 2 (Early) | `14% / 60% / 26%` | `0% / 24.23%` |
+| **5–7** | Tier 3 (Mid) | `30% / 52% / 18%` | `30% / 25%` |
+| **8+** | Tier 4 (Risky) | `33% / 55% / 12%` | `40% / 25%` |
+
+Notation used below:
+- `d` = down-chain chance (`p_chain_down`)
+- `u` = up-chain chance (`p_chain_up`)
+
+#### Weapon-type match modifier (Cross-type vs Same-type)
+For **weapons**, we treat **exact same `WeaponType`** as “same-type”. For other item categories, type mismatches are not allowed by eligibility rules, so they always behave like “same-type”.
+
+Let:
+- `TypeMatch = (WeaponType_1 == WeaponType_2)` for weapons
+- `TypeMatch = true` for non-weapons
+
+The luck adjustment `A` is sampled from a tier-specific distribution:
+- **Cross-type (default)** distribution if `TypeMatch=false`
+- **Same-type** distribution if `TypeMatch=true`
+
+Same-type is derived from the cross-type baseline by **doubling the “good” branch** and renormalising (this doubles every `A > 0` outcome):
+
+For a tier with cross-type first-roll chances:
+- `p_bad_cross`
+- `p_neutral_cross`
+- `p_good_cross`
+
+We define same-type weights:
+
+$$w_{bad}=p_{bad,cross}$$
+$$w_{neutral}=p_{neutral,cross}$$
+$$w_{good}=2\times p_{good,cross}$$
+
+Then normalise:
+
+$$Z=w_{bad}+w_{neutral}+w_{good}$$
+$$p_{bad,same}=w_{bad}/Z,\ \ p_{neutral,same}=w_{neutral}/Z,\ \ p_{good,same}=w_{good}/Z$$
 
 #### Step 4: Roll the luck adjustment (can chain)
-The system rolls a **luck adjustment** which is essentially a **variance** that gets added to the expected baseline **E**, which changes how many pool stats you keep:
+The system samples a **luck adjustment** `A` using a “first roll + chain” model.
+This `A` is a **variance** added to the expected baseline **E**, changing how many pool stats you keep:
 
-- **Bad roll**: you try to keep 1 fewer, and you may chain further down.
-- **Neutral roll**: you keep the expected amount (no change).
-- **Good roll**: you try to keep 1 more, and you may chain further up.
+- **Bad roll** (`A < 0`): you keep fewer pool stats than the baseline.
+- **Neutral roll** (`A = 0`): you keep the expected baseline.
+- **Good roll** (`A > 0`): you keep more pool stats than the baseline.
+
+##### First roll (choose Bad / Neutral / Good)
+Each tier defines `p_bad`, `p_neutral`, `p_good` (sum to 100%).
+
+##### Chain (push further down/up)
+If the first roll is:
+- **Bad**: set `A = -1`, then repeatedly apply a **down-chain** with probability `p_chain_down`:
+  - on success: `A -= 1` and try again
+  - on failure: stop
+- **Neutral**: set `A = 0` and stop
+- **Good**: set `A = +1`, then repeatedly apply an **up-chain** with probability `p_chain_up`:
+  - on success: `A += 1` and try again
+  - on failure: stop
+
+Finally apply the clamp via `K = clamp(E + A, 0, P)`. Equivalently, `A` is effectively clamped to:
+- `A_min = -E` (cannot keep fewer than 0 pool stats)
+- `A_max = P - E` (cannot keep more than all pool stats)
+
+Closed form probabilities (after clamping) for any tier:
+
+Let `d = p_chain_down`, `u = p_chain_up`, and let:
+- `N_down = E` (max negative magnitude, since `A_min = -E`)
+- `N_up = P - E` (max positive magnitude, since `A_max = P - E`)
+
+Then:
+
+- For `n = 1..(N_down-1)`:  
+  `P(A = -n) = p_bad × d^(n-1) × (1 - d)`
+- `P(A = -N_down) = p_bad × d^(N_down-1)` *(cap bucket; includes all deeper chains; i.e. “hit the cap or go beyond it”)*
+- `P(A = 0) = p_neutral`
+- For `n = 1..(N_up-1)`:  
+  `P(A = +n) = p_good × u^(n-1) × (1 - u)`
+- `P(A = +N_up) = p_good × u^(N_up-1)` *(cap bucket; includes all deeper chains; i.e. “hit the cap or go beyond it”)*
+
+**How tables may show the cap bucket (Option A):**
+- Some worked-example tables expand the cap bucket into:
+  - “Stop at the cap” (exactly `A = ±N_*`), and
+  - “Overflow; clamped” (the chain would go beyond `±N_*`, but `K` is clamped).
+- If an overflow row rounds to `0.00%`, the table may omit it for readability.
+
+All tier parameters are defined in the **Step 3** table above.
 
 **Safety rule (always true):** you can’t keep fewer than **0** pool stats, and you can’t keep more than the **pool size**.
 
@@ -1008,9 +787,9 @@ Now calculate how many pool stats you keep:
 - Pool stats kept (from the pool): `K = clamp(E + V, 0, P) = clamp(1 + 1, 0, 4) = 2`
 - Planned total before cap: `T = S + K = 2 + 2 = 4`
 
-Finally apply the rarity cap:
-- Assume the rarity system gives the new item **Rare** → `Cap = 5`
-- Final total: `Final = min(T, Cap) = min(4, 5) = 4`
+Finally apply the overall rollable-slot cap:
+- Assume the rarity system gives the new item **Rare** → `OverallCap[Rare] = 5`
+- Final total: `Final = min(T, OverallCap) = min(4, 5) = 4`
 
 So you end up with:
 - The 2 shared stats (always)
@@ -1025,134 +804,92 @@ These two standalone examples are meant to show the difference between:
 - **Safe forging**: many shared stats → stable outcomes (pool stats are just “bonus”).
 - **YOLO forging**: zero shared stats → pure variance (rare spikes are possible, but unreliable).
 
-#### Safe Forging (Pool size = 2, 2× Divine items with high shared stats)
+#### Safe forging (realistic cap: `OverallCap ≤ 5`, with skills/ExtraProperties competing)
 ```
+Output rarity: Divine ⇒ `OverallCap[Divine] = 5` (default).
+
 Item A: Divine Warhammer
- - +3 Strength
- - +2 Warfare
- - +15% Critical Chance
- - +20% Fire Resistance
- - +20% Poison Resistance
- - +2 Constitution
- - +1 Leadership
- - +1 Persuasion
+ - Blue stats: +3 Strength, +2 Warfare, +15% Critical Chance, +20% Fire Resistance
+ - Granted skill: Shout_Whirlwind
+ - ExtraProperties: (present)
 
 Item B: Divine Warhammer
- - +3 Strength
- - +2 Warfare
- - +15% Critical Chance
- - +20% Fire Resistance
- - +20% Poison Resistance
- - +2 Constitution
- - +1 Leadership
- - +1 Bartering
+ - Blue stats: +3 Strength, +2 Warfare, +15% Critical Chance, +20% Poison Resistance
+ - Granted skill: (none)
+ - ExtraProperties: (none)
 ─────────────────────────────────────────
 Shared stats:
- - +3 Strength
- - +2 Warfare
- - +15% Critical Chance
- - +20% Fire Resistance
- - +20% Poison Resistance
- - +2 Constitution
- - +1 Leadership
+ - Blue: +3 Strength, +2 Warfare, +15% Critical Chance → `S = 3`
 Pool stats:
- - +1 Persuasion
- - +1 Bartering
+ - Blue pool candidates: +20% Fire Resistance, +20% Poison Resistance → `P = 2`
+ - Skill slot (pool): Shout_Whirlwind (no skillbook; not shared) → `+1 slot`
+ - ExtraProperties slot (pool): present on A only (no shared token guarantee) → `+1 slot`
 ```
 
 Inputs for this example:
-- `S = 7` (Shared stats)
-- `P = 2` (Pool size)
-- `E = floor((P + 1) / 3) = floor(3 / 3) = 1` (Expected baseline)
-- **Rarity:** Divine for both
+- `OverallCap[Divine] = 5`
+- Blue stats:
+  - `S = 3`
+  - `P = 2`
+  - `E = floor((P + 1) / 3) = floor(3 / 3) = 1`
+- Other rollables (compete under the same cap):
+  - `skillSlots_pool = 1`
+  - `extraPropertiesSlot_pool = 1`
 
 This is the perfect example for **Safe Forging**:
-- With **7 shared stats**, you’re already very close to the Divine cap (8). The pool only adds 0–2 more stats, so even losing all pool stats still gives you a near-max item.
+- With **3 shared blue stats**, you have a stable core.
+- Because the overall cap is **5**, the result must choose between pool blue stats and other pool slots (skill / ExtraProperties).
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| -1 | 0 | 7 | 12% (cap) | **12.00%** |
-| 0 | 1 | 8 | 50% | **50.00%** |
-| +1 | 2 | 9 | 38% × 78% | **29.64%** |
-| +2 | 2 | 9 | 38% × 22% (cap) | **8.36%** |
+Concrete outcome intuition:
+- If the blue-stats selection keeps `K = 1` pool stat (the expected baseline), the planned rollable total is:
+  - `Total = S + K + 1(skill) + 1(ExtraProperties) = 3 + 1 + 1 + 1 = 6`
+  - Over cap by 1 ⇒ the forge drops **one** pool slot with equal chance among pool slots.
 
-After applying the **Divine cap (8)**:
-- `T = 7` → Final = 7 (no trimming)
-- `T = 8` → Final = 8 (at cap)
-- `T = 9` → Final = 8 (trim 1 pool stat)
-
-Chance to end with a **Divine item with 8 stats** (Final = 8):
-- `P(T >= 8) = P(A = 0) + P(A = +1) + P(A = +2) = 50% + 29.64% + 8.36% = 88%`
-
-**Key insight:** With **very high shared stats (7)**, you’re guaranteed a near-max item even if you lose all pool stats.
-
-#### YOLO forging (Common + Divine, 0 shared, everything in the pool)
+#### YOLO forging (realistic cap: `OverallCap ≤ 5`, everything competes)
 ```
-Item A: Divine Warhammer (8 stats)
- - +3 Strength
- - +2 Warfare
- - +2 Two-Handed
- - +15% Critical Chance
- - +15% Accuracy
- - +20% Fire Resistance
- - +20% Poison Resistance
- - +2 Constitution
+Output rarity: Divine ⇒ `OverallCap[Divine] = 5` (default).
 
-Item B: Common Warhammer (1 stat)
- - +1 Aerotheurge
+Item A: Divine Warhammer
+ - Blue stats: +3 Strength, +2 Warfare, +2 Two-Handed
+ - Granted skill: Shout_Whirlwind
+ - ExtraProperties: (present)
+
+Item B: Divine Warhammer
+ - Blue stats: +15% Critical Chance, +15% Accuracy, +20% Fire Resistance
+ - Granted skill: Target_SerratedEdge
+ - ExtraProperties: (present, different; no shared token)
 ─────────────────────────────────────────
 Shared stats:
- (none)
+ (none) → `S = 0`
 Pool stats:
- - +3 Strength
- - +2 Warfare
- - +2 Two-Handed
- - +15% Critical Chance
- - +15% Accuracy
- - +20% Fire Resistance
- - +20% Poison Resistance
- - +2 Constitution
- - +1 Aerotheurge
+ - Blue pool candidates: 6 lines → `P = 6`
+ - Skill slot (pool): 1 slot (no shared; no skillbook) → `+1 slot`
+ - ExtraProperties slot (pool): 1 slot (no shared token) → `+1 slot`
 ```
 
 Inputs for this example:
-- `S = 0` (Shared stats)
-- `P = 9` (Pool size)
-- `E = floor((P + 1) / 3) = floor(10 / 3) = 3` (Expected baseline)
-- **Tier used:** Tier 4 odds (because `P = 9` is `8+`)
-- **Assume output rarity:** Divine (2.7% chance)
+- `OverallCap[Divine] = 5`
+- Blue stats:
+  - `S = 0`
+  - `P = 6`
+  - `E = floor((P + 1) / 3) = floor(7 / 3) = 2`
+- Other rollables (compete under the same cap):
+  - `skillSlots_pool = 1`
+  - `extraPropertiesSlot_pool = 1`
 
 This is the perfect example for **YOLO forging**:
 - With **0 shared stats**, you have **no guarantees**. Everything is a roll from the pool.
-- You can still (rarely) hit a “full” Divine statline (Final = 8), but it requires multiple good chains.
-
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| -3 | 0 | 0 | 45% × (45%)^2 (cap) | **9.11%** |
-| -2 | 1 | 1 | 45% × 45% × 55% | **11.14%** |
-| -1 | 2 | 2 | 45% × 55% | **24.75%** |
-| 0 | 3 | 3 | 40% | **40.00%** |
-| +1 | 4 | 4 | 15% × 70% | **10.50%** |
-| +2 | 5 | 5 | 15% × 30% × 70% | **3.15%** |
-| +3 | 6 | 6 | 15% × (30%)^2 × 70% | **0.95%** |
-| +4 | 7 | 7 | 15% × (30%)^3 × 70% | **0.28%** |
-| +5 | 8 | 8 | 15% × (30%)^4 × 70% | **0.09%** |
-| +6 | 9 | 9 | 15% × (30%)^5 (cap) | **0.04%** |
-
-After applying the **Divine cap (8)**:
-- `T = 0–7` → Final = T
-- `T = 8` → Final = 8 (at cap)
-- `T = 9` → Final = 8 (trim 1 pool stat)
-
-Chance to end with a **Divine item with 8 stats** (Final = 8):
-- `P(T ≥ 8) = P(A = +5) + P(A = +6) = 0.09% + 0.04% ≈ 0.12%`
-
-**Key insight:** YOLO forging can still "spike" into a full Divine statline, but it's intentionally **very rare** when you have **0 shared stats**.
+- Even if the blue-stats roll “wants” to keep many stats, the final result is hard-limited to **5 total rollable slots**.
+- Because skills and ExtraProperties are pool slots here, they have the same chance to be dropped as pool-picked blue stats if the result is over cap.
 
 ---
 
 ### 3.6. Worked examples
 <a id="36-worked-examples-stats-modifiers"></a>
+
+vNext note:
+- The worked examples below focus on the **blue-stats selection step**.
+- The final forged item still applies the **overall rollable-slot cap** (`OverallCap[Rarity_out]`, max 5), and blue stats may be trimmed further if skills and/or ExtraProperties occupy slots.
 
 #### Tier 1 (Pool size = 1, no chains)
 
@@ -1176,10 +913,14 @@ Inputs for this example:
 - `P = 1` (Pool size)
 - `E = 0` (Expected baseline, special case for P = 1)
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| 0 | 0 | 1 | 50% (cap) | **50.00%** |
-| +1 | 1 | 2 | 50% (cap) | **50.00%** |
+Parameters used (Tier 1):
+- Cross-type: `p_bad=0%`, `p_neutral=60%`, `p_good=40%`, `d=0.00`, `u=0.00` (no chain)
+- Same-type: `p_bad=0%`, `p_neutral=42.86%`, `p_good=57.14%`, `d=0.00`, `u=0.00` (no chain)
+
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| :---: | :---: | :---: | :--- | ---: | ---: |
+| 0 | 0 | 1 | Cross: `p_neutral = 60%`<br>Same: `p_neutral = 42.86%` | 60.00% | 42.86% |
+| +1 | 1 | 2 | Cross: `p_good = 40%` (no chain)<br>Same: `p_good = 57.14%` (no chain) | 40.00% | 57.14% |
 
 #### Tier 2 (Pool size = 2–4)
 
@@ -1207,14 +948,21 @@ Inputs for this example:
 - `P = 3` (Pool size)
 - `E = floor((P + 1) / 3) = floor(4 / 3) = 1` (Expected baseline)
 
-Before the rarity cap, the forged item ends up with between **1** and **4** stats (**1** shared + **0–3** from the pool).
+Before applying the overall rollable-slot cap, the blue-stats selection step yields between **1** and **4** stats (**1** shared + **0–3** from the pool).
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| -1 | 0 | 1 | 12% (cap) | **12.00%** |
-| 0 | 1 | 2 | 50% | **50.00%** |
-| +1 | 2 | 3 | 38% × 78% | **29.64%** |
-| +2 | 3 | 4 | 38% × 22% (cap) | **8.36%** |
+Reminder (vNext realism):
+- The *final* forged item still applies `OverallCap[Rarity_out]` (max 5) across **blue stats + skills + ExtraProperties**; blue stats may be trimmed further if other rollables occupy slots.
+
+Parameters used (Tier 2):
+- Cross-type: `p_bad=14%`, `p_neutral=60%`, `p_good=26%`, `d=0.00`, `u=0.2423`
+- Same-type: `p_bad=11.11%`, `p_neutral=47.62%`, `p_good=41.27%`, `d=0.00`, `u=0.2423`
+
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| :---: | :---: | :---: | :--- | ---: | ---: |
+| -1 | 0 | 1 | Cross: `p_bad = 14%` (no down-chain)<br>Same: `p_bad = 11.11%` | 14.00% | 11.11% |
+| 0 | 1 | 2 | Cross: `p_neutral = 60%`<br>Same: `p_neutral = 47.62%` | 60.00% | 47.62% |
+| +1 | 2 | 3 | Cross: `p_good × (1-u) = 26% × (1-0.2423) = 19.70%`<br>Same: `p_good × (1-u) = 41.27% × (1-0.2423) = 31.27%` | 19.70% | 31.27% |
+| +2 | 3 | 4 | Cross: `p_good × u = 26% × 0.2423 = 6.30%` (cap bucket)<br>Same: `p_good × u = 41.27% × 0.2423 = 10.00%` | 6.30% | 10.00% |
 
 ##### Example 2 (Pool size = 4, weapon-only cross-subtype allowed)
 ```
@@ -1245,15 +993,23 @@ Inputs for this example:
 - `P = 4` (Pool size)
 - `E = floor((P + 1) / 3) = floor(5 / 3) = 1` (Expected baseline)
 
-Before the rarity cap, the forged item ends up with between **2** and **6** stats (**2** shared + **0–4** from the pool).
+Before applying the overall rollable-slot cap, the blue-stats selection step yields between **2** and **6** stats (**2** shared + **0–4** from the pool).
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| -1 | 0 | 2 | 12% (cap) | **12.00%** |
-| 0 | 1 | 3 | 50% | **50.00%** |
-| +1 | 2 | 4 | 38% × 78% | **29.64%** |
-| +2 | 3 | 5 | 38% × 22% × 78% | **6.54%** |
-| +3 | 4 | 6 | 38% × (22%)^2 (cap) | **1.84%** |
+Reminder (vNext realism):
+- The *final* forged item still applies `OverallCap[Rarity_out]` (max 5) across **blue stats + skills + ExtraProperties**; blue stats may be trimmed further if other rollables occupy slots.
+
+Parameters used (Tier 2):
+- Cross-type: `p_bad=14%`, `p_neutral=60%`, `p_good=26%`, `d=0.00`, `u=0.2423`
+- Same-type: `p_bad=11.11%`, `p_neutral=47.62%`, `p_good=41.27%`, `d=0.00`, `u=0.2423`
+
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| :---: | :---: | :---: | :--- | ---: | ---: |
+| -1 | 0 | 2 | Cross: `p_bad = 14%` (no down-chain)<br>Same: `p_bad = 11.11%` | 14.00% | 11.11% |
+| 0 | 1 | 3 | Cross: `p_neutral = 60%`<br>Same: `p_neutral = 47.62%` | 60.00% | 47.62% |
+| +1 | 2 | 4 | Cross: `p_good × (1-u) = 26% × 0.7577 = 19.70%`<br>Same: `p_good × 0.7577 = 41.27% × 0.7577 = 31.27%` | 19.70% | 31.27% |
+| +2 | 3 | 5 | Cross: `p_good × u × (1-u) = 26% × 0.2423 × 0.7577 = 4.77%`<br>Same: `p_good × 0.2423 × 0.7577 = 41.27% × 0.2423 × 0.7577 = 7.57%` | 4.77% | 7.57% |
+| +3 | 4 | 6 | Cross: `p_good × u^2 × (1-u) = 26% × 0.2423^2 × 0.7577 = 1.16%`<br>Same: `p_good × 0.2423^2 × 0.7577 = 41.27% × 0.2423^2 × 0.7577 = 1.83%` | 1.16% | 1.83% |
+| +3+ | 4 | 6 | Cross: `p_good × u^3 = 26% × 0.2423^3 = 0.37%` (overflow; clamped)<br>Same: `p_good × 0.2423^3 = 41.27% × 0.2423^3 = 0.59%` | 0.37% | 0.59% |
 #### Tier 3 (Pool size = 5–7)
 
 ##### Example 1 (Pool size = 5)
@@ -1287,16 +1043,24 @@ Inputs for this example:
 - `P = 5` (Pool size)
 - `E = floor((P + 1) / 3) = floor(6 / 3) = 2` (Expected baseline)
 
-Before the rarity cap, the forged item ends up with between **2** and **7** stats (**2** shared + **0–5** from the pool).
+Before applying the overall rollable-slot cap, the blue-stats selection step yields between **2** and **7** stats (**2** shared + **0–5** from the pool).
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| -2 | 0 | 2 | 28% × 28% (cap) | **7.84%** |
-| -1 | 1 | 3 | 28% × 72% | **20.16%** |
-| 0 | 2 | 4 | 50% | **50.00%** |
-| +1 | 3 | 5 | 22% × 70% | **15.40%** |
-| +2 | 4 | 6 | 22% × 30% × 70% | **4.62%** |
-| +3 | 5 | 7 | 22% × (30%)^2 (cap) | **1.98%** |
+Reminder (vNext realism):
+- The *final* forged item still applies `OverallCap[Rarity_out]` (max 5) across **blue stats + skills + ExtraProperties**; blue stats may be trimmed further if other rollables occupy slots.
+
+Parameters used (Tier 3):
+- Cross-type: `p_bad=30%`, `p_neutral=52%`, `p_good=18%`, `d=0.30`, `u=0.25`
+- Same-type: `p_bad=25.42%`, `p_neutral=44.07%`, `p_good=30.51%`, `d=0.30`, `u=0.25`
+
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| :---: | :---: | :---: | :--- | ---: | ---: |
+| -2 | 0 | 2 | Cross: `p_bad × d = 30% × 0.30 = 9.00%` (cap bucket)<br>Same: `p_bad × d = 25.42% × 0.30 = 7.63%` | 9.00% | 7.63% |
+| -1 | 1 | 3 | Cross: `p_bad × (1-d) = 30% × 0.70 = 21.00%`<br>Same: `p_bad × 0.70 = 25.42% × 0.70 = 17.80%` | 21.00% | 17.80% |
+| 0 | 2 | 4 | Cross: `p_neutral = 52%`<br>Same: `p_neutral = 44.07%` | 52.00% | 44.07% |
+| +1 | 3 | 5 | Cross: `p_good × (1-u) = 18% × 0.75 = 13.50%`<br>Same: `p_good × 0.75 = 30.51% × 0.75 = 22.88%` | 13.50% | 22.88% |
+| +2 | 4 | 6 | Cross: `p_good × u × (1-u) = 18% × 0.25 × 0.75 = 3.38%`<br>Same: `p_good × 0.25 × 0.75 = 30.51% × 0.25 × 0.75 = 5.72%` | 3.38% | 5.72% |
+| +3 | 5 | 7 | Cross: `p_good × u^2 × (1-u) = 18% × 0.25^2 × 0.75 = 0.84%`<br>Same: `p_good × 0.25^2 × 0.75 = 30.51% × 0.25^2 × 0.75 = 1.43%` | 0.84% | 1.43% |
+| +3+ | 5 | 7 | Cross: `p_good × u^3 = 18% × 0.25^3 = 0.28%` (overflow; clamped)<br>Same: `p_good × 0.25^3 = 30.51% × 0.25^3 = 0.48%` | 0.28% | 0.48% |
 
 ##### Example 2 (Pool size = 7)
 ```
@@ -1306,136 +1070,171 @@ Item A: Enchanted Greatsword
  - +10% Critical Chance
  - +1 Two-Handed
  - +15% Accuracy
- - +2 Strength
- - +1 Necromancer
- - 10% chance to set Bleeding
 
 Item B: Champion’s Greatsword
  - +1 Strength
- - +1 Warfare
  - +12% Fire Resistance
  - +1 Pyrokinetic
  - +1 Aerotheurge
- - +1 Huntsman
- - 10% chance to set Blinded
- - 10% chance to set Silenced
 ─────────────────────────────────────────
 Shared stats:
  - +1 Strength
- - +1 Warfare
 Pool stats:
+ - +1 Warfare
  - +10% Critical Chance
  - +1 Two-Handed
  - +15% Accuracy
- - +2 Strength
- - +1 Necromancer
- - 10% chance to set Bleeding
  - +12% Fire Resistance
  - +1 Pyrokinetic
  - +1 Aerotheurge
- - +1 Huntsman
- - 10% chance to set Blinded
- - 10% chance to set Silenced
 ```
 
 Inputs for this example:
-- `S = 2` (Shared stats)
+- `S = 1` (Shared stats)
 - `P = 7` (Pool size)
 - `E = floor((P + 1) / 3) = floor(8 / 3) = 2` (Expected baseline)
 
-Before the rarity cap, the forged item ends up with between **2** and **9** stats (**2** shared + **0–7** from the pool).
+Before applying the overall rollable-slot cap, the blue-stats selection step yields between **1** and **8** stats (**1** shared + **0–7** from the pool).
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| -2 | 0 | 2 | 28% × 28% (cap) | **7.84%** |
-| -1 | 1 | 3 | 28% × 72% | **20.16%** |
-| 0 | 2 | 4 | 50% | **50.00%** |
-| +1 | 3 | 5 | 22% × 70% | **15.40%** |
-| +2 | 4 | 6 | 22% × 30% × 70% | **4.62%** |
-| +3 | 5 | 7 | 22% × (30%)^2 × 70% | **1.39%** |
-| +4 | 6 | 8 | 22% × (30%)^3 × 70% | **0.42%** |
-| +5 | 7 | 9 | 22% × (30%)^4 (cap) | **0.18%** |
+Reminder (vNext realism):
+- The *final* forged item still applies `OverallCap[Rarity_out]` (max 5) across **blue stats + skills + ExtraProperties**; blue stats may be trimmed further if other rollables occupy slots.
+
+Parameters used (Tier 3):
+- Cross-type: `p_bad=30%`, `p_neutral=52%`, `p_good=18%`, `d=0.30`, `u=0.25`
+- Same-type: `p_bad=25.42%`, `p_neutral=44.07%`, `p_good=30.51%`, `d=0.30`, `u=0.25`
+
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| :---: | :---: | :---: | :--- | ---: | ---: |
+| -2 | 0 | 1 | Cross: `p_bad × d = 30% × 0.30 = 9.00%` (cap bucket)<br>Same: `p_bad × d = 25.42% × 0.30 = 7.63%` | 9.00% | 7.63% |
+| -1 | 1 | 2 | Cross: `p_bad × (1-d) = 30% × 0.70 = 21.00%`<br>Same: `p_bad × 0.70 = 25.42% × 0.70 = 17.80%` | 21.00% | 17.80% |
+| 0 | 2 | 3 | Cross: `p_neutral = 52%`<br>Same: `p_neutral = 44.07%` | 52.00% | 44.07% |
+| +1 | 3 | 4 | Cross: `p_good × (1-u) = 18% × 0.75 = 13.50%`<br>Same: `p_good × 0.75 = 30.51% × 0.75 = 22.88%` | 13.50% | 22.88% |
+| +2 | 4 | 5 | Cross: `p_good × u × (1-u) = 18% × 0.25 × 0.75 = 3.38%`<br>Same: `p_good × 0.25 × 0.75 = 30.51% × 0.25 × 0.75 = 5.72%` | 3.38% | 5.72% |
+| +3 | 5 | 6 | Cross: `p_good × u^2 × (1-u) = 18% × 0.25^2 × 0.75 = 0.84%`<br>Same: `p_good × 0.25^2 × 0.75 = 30.51% × 0.25^2 × 0.75 = 1.43%` | 0.84% | 1.43% |
+| +4 | 6 | 7 | Cross: `p_good × u^3 × (1-u) = 18% × 0.25^3 × 0.75 = 0.21%`<br>Same: `p_good × 0.25^3 × 0.75 = 30.51% × 0.25^3 × 0.75 = 0.36%` | 0.21% | 0.36% |
+| +5 | 7 | 8 | Cross: `p_good × u^4 × (1-u) = 18% × 0.25^4 × 0.75 = 0.05%`<br>Same: `p_good × 0.25^4 × 0.75 = 30.51% × 0.25^4 × 0.75 = 0.09%` | 0.05% | 0.09% |
+| +5+ | 7 | 8 | Cross: `p_good × u^5 = 18% × 0.25^5 = 0.02%` (overflow; clamped)<br>Same: `p_good × 0.25^5 = 30.51% × 0.25^5 = 0.03%` | 0.02% | 0.03% |
 
 #### Tier 4 (Pool size = 8+)
 
-##### Example 1 (Pool size = 12)
+##### Example 1 (Pool size = 8)
 ```
 Item A: Tower Shield
  - +2 Constitution
  - Blocking +15
  - +2 Initiative
- - +10% Fire Resistance
  - +10% Water Resistance
- - +10% Air Resistance
- - +20% Poison Resistance
- - +1 Strength
 
 Item B: Kite Shield
- - Blocking +15
  - +10% Fire Resistance
  - +10% Earth Resistance
  - +1 Leadership
- - +1 Persuasion
  - +0.5m Movement
- - +1 Bartering
- - +1 Loremaster
 ─────────────────────────────────────────
 Shared stats:
- - Blocking +15
- - +10% Fire Resistance
+ (none)
 Pool stats:
  - +2 Constitution
+ - Blocking +15
  - +2 Initiative
- - +1 Strength
  - +10% Water Resistance
- - +10% Air Resistance
- - +20% Poison Resistance
+ - +10% Fire Resistance
  - +10% Earth Resistance
  - +1 Leadership
- - +1 Persuasion
  - +0.5m Movement
- - +1 Bartering
- - +1 Loremaster
 ```
 
 Inputs for this example:
-- `S = 2` (Shared stats)
-- `P = 12` (Pool size)
-- `E = floor((P + 1) / 3) = floor(13 / 3) = 4` (Expected baseline)
+- `S = 0` (Shared stats)
+- `P = 8` (Pool size)
+- `E = floor((P + 1) / 3) = floor(9 / 3) = 3` (Expected baseline)
 
-Before the rarity cap, the forged item ends up with between **2** and **14** stats (**2** shared + **0–12** from the pool).
+Before applying the overall rollable-slot cap, the blue-stats selection step yields between **0** and **8** stats (**0** shared + **0–8** from the pool).
   - This is “riskier crafting” in practice: fewer shared stats means more “unknown” stats in the pool.
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance<br>(math) | Chance |
-| :---: | :---: | :---: | :---: | :---: |
-| -4 | 0 | 2 | 45% × (45%)^3 (cap) | **4.10%** |
-| -3 | 1 | 3 | 45% × (45%)^2 × 55% | **5.01%** |
-| -2 | 2 | 4 | 45% × 45% × 55% | **11.14%** |
-| -1 | 3 | 5 | 45% × 55% | **24.75%** |
-| 0 | 4 | 6 | 40% | **40.00%** |
-| +1 | 5 | 7 | 15% × 70% | **10.50%** |
-| +2 | 6 | 8 | 15% × 30% × 70% | **3.15%** |
-| +3 | 7 | 9 | 15% × (30%)^2 × 70% | **0.95%** |
-| +4 | 8 | 10 | 15% × (30%)^3 × 70% | **0.28%** |
-| +5 | 9 | 11 | 15% × (30%)^4 × 70% | **0.09%** |
-| +6 | 10 | 12 | 15% × (30%)^5 × 70% | **0.03%** |
-| +7 | 11 | 13 | 15% × (30%)^6 × 70% | **0.01%** |
-| +8 | 12 | 14 | 15% × (30%)^7 (cap) | **0.03%** |
+Parameters used (Tier 4):
+- Cross-type: `p_bad=33%`, `p_neutral=55%`, `p_good=12%`, `d=0.40`, `u=0.25`
+- Same-type: `p_bad=29.46%`, `p_neutral=49.11%`, `p_good=21.43%`, `d=0.40`, `u=0.25`
+
+| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| :---: | :---: | :---: | :--- | ---: | ---: |
+| -3 | 0 | 0 | Cross: `p_bad × d^2 = 33% × 0.40^2 = 5.28%` (cap bucket)<br>Same: `p_bad × d^2 = 29.46% × 0.40^2 = 4.71%` | 5.28% | 4.71% |
+| -2 | 1 | 1 | Cross: `p_bad × d × (1-d) = 33% × 0.40 × 0.60 = 7.92%`<br>Same: `p_bad × 0.40 × 0.60 = 29.46% × 0.40 × 0.60 = 7.07%` | 7.92% | 7.07% |
+| -1 | 2 | 2 | Cross: `p_bad × (1-d) = 33% × 0.60 = 19.80%`<br>Same: `p_bad × 0.60 = 29.46% × 0.60 = 17.68%` | 19.80% | 17.68% |
+| 0 | 3 | 3 | Cross: `p_neutral = 55%`<br>Same: `p_neutral = 49.11%` | 55.00% | 49.11% |
+| +1 | 4 | 4 | Cross: `p_good × (1-u) = 12% × 0.75 = 9.00%`<br>Same: `p_good × 0.75 = 21.43% × 0.75 = 16.07%` | 9.00% | 16.07% |
+| +2 | 5 | 5 | Cross: `p_good × u × (1-u) = 12% × 0.25 × 0.75 = 2.25%`<br>Same: `p_good × 0.25 × 0.75 = 21.43% × 0.25 × 0.75 = 4.02%` | 2.25% | 4.02% |
+| +3 | 6 | 6 | Cross: `p_good × u^2 × (1-u) = 12% × 0.25^2 × 0.75 = 0.56%`<br>Same: `p_good × 0.25^2 × 0.75 = 21.43% × 0.25^2 × 0.75 = 1.00%` | 0.56% | 1.00% |
+| +4 | 7 | 7 | Cross: `p_good × u^3 × (1-u) = 12% × 0.25^3 × 0.75 = 0.14%`<br>Same: `p_good × 0.25^3 × 0.75 = 21.43% × 0.25^3 × 0.75 = 0.25%` | 0.14% | 0.25% |
+| +5 | 8 | 8 | Cross: `p_good × u^4 = 12% × 0.25^4 = 0.05%` (cap bucket)<br>Same: `p_good × 0.25^4 = 21.43% × 0.25^4 = 0.08%` | 0.05% | 0.08% |
 
 ---
-## 4. Skills inheritance
+
+## 4. ExtraProperties inheritance
+<a id="4-extraproperties-inheritance"></a>
+
+This section defines how **ExtraProperties** are inherited when you forge.
+
+In vNext, ExtraProperties is treated as its own channel:
+- ExtraProperties consumes **1** overall rollable slot if present (regardless of how many internal effects/tooltip lines it expands into).
+- The **internal content** (tokens) is merged/selected separately, with an internal cap based on the parents.
+
+### 4.1. ExtraProperties (definition)
+<a id="41-extraproperties-definition"></a>
+
+ExtraProperties is a semicolon-separated list of effects stored on the item (e.g. proc chances, statuses, immunities, surfaces).
+
+Important: the tooltip may show multiple lines, but for the overall cap, ExtraProperties is counted as **one slot**.
+
+### 4.2. Shared vs pool tokens
+<a id="42-extraproperties-shared-vs-pool"></a>
+
+Parse each parent’s ExtraProperties string into ordered tokens:
+- Split on `;`
+- Trim whitespace
+- Normalise into a canonical key for identity comparisons (e.g. strip whitespace, normalise case where safe, and isolate the “effect type” portion).
+
+Then compute:
+- **Shared tokens**: tokens that match by canonical key on both parents (guaranteed to be kept, with parameter merge if applicable).
+- **Pool tokens**: tokens present on only one parent (rolled).
+
+### 4.3. Selection + internal cap (max of parent lines)
+<a id="43-extraproperties-selection--internal-cap"></a>
+
+Let:
+- `A = tokenCount(parentA)`
+- `B = tokenCount(parentB)`
+- `InternalCap = max(A, B)`
+
+Build the output token list:
+1. Keep all shared tokens (merge parameters if the same token differs in numbers, using the same “merge then clamp” philosophy as blue stats).
+2. Roll additional tokens from the pool using the same selection philosophy as Section 3 (shared + pool + variance).
+3. Clamp the final token list to `InternalCap`.
+
+### 4.4. Slot competition + trimming
+<a id="44-extraproperties-slot-competition--trimming"></a>
+
+ExtraProperties occupies one **slot** in the overall rollable cap.
+
+Rule:
+- If there is at least **one shared token**, the ExtraProperties slot is **guaranteed** to be present (it consumes 1 slot and is never dropped under cap pressure).
+- Otherwise, the ExtraProperties slot is a **pool slot**. If the forge result is over the overall cap, this slot can be dropped with the same probability as any other pool slot (blue stats or skills).
+
+---
+## 5. Skills inheritance
 <a id="4-skills-inheritance"></a>
-This section defines how **granted skills** are inherited when you forge.
+This section defines how **granted skills** are inherited when you forge (vNext).
 
 - Granted skills are a separate channel from normal **blue stats**.
-- They have strict rarity caps (vanilla-aligned), and they do **not** consume your normal **stats slots**.
-- Unlike blue stats, **shared skills are not 100% “safe”**: shared skills are kept first, but they can still be lost if the result must be trimmed to the rarity’s **skill cap** due to an overflow, which has a 5% chance to replace the shared skill with a new one from the pool (see section 4.5).
+- vNext: each rollable granted skill consumes **1** overall rollable slot (shared cap with blue stats + ExtraProperties).
+- Skills are rollable; unless preserved by the **skillbook lock** or shared between both parents, they can be lost when applying the overall cap (equal drop chance among pool slots).
+- Skills also have a per-save learned **skill count cap** (`SkillCap[r]`) defined in [`rarity_system.md`](rarity_system.md#222-skill-cap-vnext).
 
 Here are what you can expect:
-- **Most items won’t gain skills at all** at low rarities (because the cap is 0).
-- **At higher rarities**, you can sometimes carry skills across, or gain one from the ingredient pool, but you will always be limited by the rarity’s **skill cap**.
+- You can sometimes carry a skill across, or gain one from the ingredient pool, but you will always be limited by the rarity’s **skill cap** (default is 1 for all non-Unique rarities).
+- Even if a skill is gained by the skill rules, it can still be dropped later if the final item is over the **overall rollable-slot cap** and the skill is not protected (no skillbook lock; not shared).
 
-### 4.1. Granted skills (definition)
+### 5.1. Granted skills (definition)
 <a id="41-granted-skills-definition"></a>
 
 - **Granted skill (rollable)**: any rollable boost/stats line that grants entries via a `Skills` field in its boost definition.
@@ -1457,22 +1256,40 @@ Here are what you can expect:
   - A **jewellery** must only ever roll/inherit **jewellery skill boosts**.
 - If you ever encounter “mixed” skills in runtime data, treat that as invalid input (or ignore the mismatched skill boosts).
 
-### 4.2. Skill cap by rarity
+### 5.2. Skill cap by rarity
 <a id="42-skill-cap-by-rarity"></a>
 
-This is the maximum number of **granted skills** on the forged item:
+This is the maximum number of **rollable granted skills** on the forged item.
+
+vNext: this cap is **default + learned per save**:
+- Default values are listed below.
+- The save can learn higher values if the player ever obtains an item of that rarity with more rollable granted skills.
+- See: [`rarity_system.md` → Skill count cap (vNext)](rarity_system.md#222-skill-cap-vnext)
 
 | Rarity index | Name | Granted skill cap |
 | :--- | :--- | :---: |
-| **0** | Common | **0** |
-| **1** | Uncommon | **0** |
-| **2** | Rare | **0** |
+| **0** | Common | **1** |
+| **1** | Uncommon | **1** |
+| **2** | Rare | **1** |
 | **3** | Epic | **1** |
 | **4** | Legendary | **1** |
-| **5** | Divine | **2** |
-| **6** | Unique | **x+1** |
+| **5** | Divine | **1** |
 
-### 4.3. Shared vs pool skills
+*Unique is ignored for now (do not consider it in vNext balancing).*
+
+### 5.2.1. Skillbook lock (preserve by exact skill ID)
+<a id="421-skillbook-lock"></a>
+
+If the player inserts a skillbook into the dedicated forge UI slot, the forge must validate it against the parent item’s granted skill(s):
+
+- Match by **exact skill ID** (e.g. `Target_ShockingTouch`, `Shout_Whirlwind`), not by display name.
+- If the skillbook does not match any skill granted by the main-slot item (parent A), block forging with:
+  - “No matched skills found on the item!”
+
+If both parents have matching skillbooks:
+- The main-slot item’s (parent A) skill is the guaranteed inherited one.
+
+### 5.3. Shared vs pool skills
 <a id="43-shared-vs-pool-skills"></a>
 
 Split granted skills into two lists:
@@ -1483,7 +1300,7 @@ Split granted skills into two lists:
 #### Skill identity (dedupe key)
 Use the **skill ID** as the identity key (e.g. `Shout_Whirlwind`, `Projectile_BouncingShield`), not the boost name.
 
-### 4.4. How skills are gained (gated fill)
+### 5.4. How skills are gained (gated fill)
 <a id="44-how-skills-are-gained-gated-fill"></a>
 
 Skills are **more precious than stats**, so the skill channel does **not** use the stat-style “keep half the pool” baseline.
@@ -1496,18 +1313,25 @@ Instead, skills use a **cap + gated fill** model:
 #### Key values (skills)
 - **Sₛ**: number of shared rollable skills (present on both parents).
 - **Pₛ**: number of pool rollable skills (present on only one parent).
-- **SkillCap**: from [Section 4.2](#42-skill-cap-by-rarity).
+- **SkillCap**: from [Section 5.2](#42-skill-cap-by-rarity).
 - **FreeSlots**: `max(0, SkillCap - min(Sₛ, SkillCap))`
 
 #### Gain chance model (rarity + pool size)
 We define a per-attempt gain chance:
 
-`p_attempt = base(rarity) * m(P_remaining)`
+`p_attempt_cross = base_cross(rarity) * m(P_remaining)`
 
-Where:
-- `base(Epic) = 25%`
-- `base(Legendary) = 25%`
-- `base(Divine) = 28%`
+Weapon-type match modifier:
+- If `TypeMatch=true` (exact same WeaponType for weapons; always true for non-weapons), then `p_attempt = clamp(2 × p_attempt_cross, 0, 100%)`.
+- Otherwise, `p_attempt = p_attempt_cross`.
+
+Where `base_cross(rarity)` (cross-type default) is:
+- `base_cross(Common) = 12%` *(tuning default)*  
+- `base_cross(Uncommon) = 14%` *(tuning default)*  
+- `base_cross(Rare) = 16%` *(tuning default)*  
+- `base_cross(Epic) = 18%` *(tuning default)*  
+- `base_cross(Legendary) = 18%` *(tuning default)*  
+- `base_cross(Divine) = 20%` *(tuning default)*  
 
 And the pool-size multiplier is:
 
@@ -1515,18 +1339,28 @@ And the pool-size multiplier is:
 | :---: | :---: |
 | 1 | 1.0 |
 | 2 | 1.4 |
-| 3 | 1.6 |
-| 4+ | 2.4 |
+
+Because each parent item can contribute at most **1** rollable granted skill, we always have:
+- `P_remaining ∈ {0,1,2}`
 
 So the actual per-attempt gain chances are:
 
-| Output rarity | `P_remaining=1` | `P_remaining=2` | `P_remaining=3` | `P_remaining=4+` |
-| :--- | :---: | :---: | :---: | :---: |
-| Epic | 25.0% | 35.0% | 40.0% | 60.0% |
-| Legendary | 25.0% | 35.0% | 40.0% | 60.0% |
-| Divine | 28.0% | 39.2% | 44.8% | 67.2% |
+| Output rarity | `P_remaining` | Cross-type `p_attempt` (default) | Same-type `p_attempt` (2×, capped) |
+| :--- | :---: | :---: | :---: |
+| Common | 1 | 12.0% | 24.0% |
+| Common | 2 | 16.8% | 33.6% |
+| Uncommon | 1 | 14.0% | 28.0% |
+| Uncommon | 2 | 19.6% | 39.2% |
+| Rare | 1 | 16.0% | 32.0% |
+| Rare | 2 | 22.4% | 44.8% |
+| Epic | 1 | 18.0% | 36.0% |
+| Epic | 2 | 25.2% | 50.4% |
+| Legendary | 1 | 18.0% | 36.0% |
+| Legendary | 2 | 25.2% | 50.4% |
+| Divine | 1 | 20.0% | 40.0% |
+| Divine | 2 | 28.0% | 56.0% |
 
-### 4.5. Overflow + replace (5%)
+### 5.5. Overflow + replace (type-modified)
 <a id="45-overflow--replace-5"></a>
 
 All randomness in this subsection is **host-authoritative** and driven by `forgeSeed` (see [Section 1.3](#13-deterministic-randomness-seed--multiplayer)).
@@ -1538,146 +1372,96 @@ All randomness in this subsection is **host-authoritative** and driven by `forge
 4. Fill free slots with gated gain rolls:
    - For each free slot (at most `freeSlots` attempts):
      - Let `P_remaining = len(poolSkills)`
-     - Roll a random number; success chance is `p_attempt = base(rarity) * m(P_remaining)` ([Section 4.4](#44-how-skills-are-gained-gated-fill)).
+     - Roll a random number; success chance is `p_attempt` ([Section 5.4](#44-how-skills-are-gained-gated-fill)).
      - If success: pick 1 random skill from `poolSkills`, add to `finalSkills`, remove it from `poolSkills`, and decrement `freeSlots`.
      - If failure: do nothing for that slot (skills are precious; you do not retry the same slot).
-5. Optional “replace” roll: **5% chance**
+5. Optional “replace” roll (type-modified):
+   - Cross-type (default): **10%**
+   - Same-type (`TypeMatch=true`): **5%**
    - If `poolSkills` is not empty and `finalSkills` is not empty:
-     - With 5% chance, replace 1 random skill in `finalSkills` with 1 random skill from remaining `poolSkills`.
+     - With `replaceChance`, replace 1 random skill in `finalSkills` with 1 random skill from remaining `poolSkills`.
 
-#### Example
-Assume the forged output rarity is **Divine**, so `SkillCap = 2`.
+#### Example (realistic default cap = 1)
+Assume the forged output rarity is **Divine**, so `SkillCap[Divine] = 1` (default).
 
 Parent skills:
-- Parent A: `{Shout_Whirlwind, Projectile_SkyShot}`
-- Parent B: `{Shout_Whirlwind, Target_SerratedEdge}`
+- Parent A: `{Shout_Whirlwind}`
+- Parent B: `{Projectile_SkyShot}`
 
-5% chance to have final skills:
-- Output: `{Projectile_SkyShot, Target_SerratedEdge}`
+With the optional replace roll, one possible final skills outcome is:
+- `{Shout_Whirlwind}` *(gain succeeded and selected this skill; cap is 1)*
 
 Interpretation:
-- `Shout_Whirlwind` is shared, so it is kept first; then one pool skill is gained; and the optional 5% swap can change which two skills you end up with (still limited by `SkillCap = 2`).
+- With default `SkillCap = 1`, only one skill can ever be kept.
+- If the gain roll succeeds (Section 5.4), one of the pool skills is selected.
+- If the gain roll succeeds and there is still another pool skill remaining, the optional replace roll can swap which single skill you end up with.
 
-### 4.6. Scenario tables
+### 5.6. Scenario tables
 <a id="46-scenario-tables"></a>
 
-These tables show the probability of ending with **0 / 1 / 2 rollable granted skills** under this skill model.
+These tables show the probability of ending with **0 / 1** rollable granted skills under this skill model (default `SkillCap = 1`).
 
 Notes:
 - These tables focus on **skill count outcomes** from the “gated fill” rules above.
-- They **ignore the optional 5% replace roll**, because replace mainly changes *which* skill you have, not the cap itself.
+- They **ignore the optional replace roll** (10% cross-type / 5% same-type), because replace mainly changes *which* skill you have, not the cap itself.
 - Weapon pools only contain weapon skills; shield pools only contain shield skills.
 
-#### Scenario A: `Sₛ = 0`, `Pₛ = 1`
+#### Scenario A: `Sₛ = 0`, `Pₛ ≥ 1` (no shared skill; at most one can be gained)
 
-Weapon example pool: `{Projectile_SkyShot}`
-Shield example pool: `{Projectile_BouncingShield}`
+With default `SkillCap = 1`, there is only **one** free slot. Therefore:
+- `P(final 1 skill) = p_attempt`
+- `P(final 0 skills) = 1 - p_attempt`
 
-| Output rarity | Final 0 skills | Final 1 skill | Final 2 skills |
-| :--- | ---: | ---: | ---: |
-| Epic (cap 1) | **75.0%** | **25.0%** | 0% |
-| Legendary (cap 1) | **75.0%** | **25.0%** | 0% |
-| Divine (cap 2) | **51.84%** | **48.16%** | 0% |
+Use the `p_attempt` table in **Section 5.4** for the actual values.
 
-#### Scenario B: `Sₛ = 0`, `Pₛ = 2`
+#### Scenario B: `Sₛ ≥ 1` (shared skill exists)
 
-Weapon example pool: `{Projectile_SkyShot, Target_SerratedEdge}`
-Shield example pool: `{Projectile_BouncingShield, Shout_Taunt}`
+With default `SkillCap = 1`, any shared skill consumes the entire skill cap:
+- Final is always **1 skill** (the shared one), unless later dropped by the **overall rollable-slot cap** (if not protected by the skillbook lock/shared rule).
 
-| Output rarity | Final 0 skills | Final 1 skill | Final 2 skills |
-| :--- | ---: | ---: | ---: |
-| Epic (cap 1) | **65.0%** | **35.0%** | 0% |
-| Legendary (cap 1) | **65.0%** | **35.0%** | 0% |
-| Divine (cap 2) | **36.97%** | **52.06%** | **10.98%** |
-
-#### Scenario C: `Sₛ = 0`, `Pₛ = 3`
-
-Weapon example pool: `{Shout_Whirlwind, Projectile_SkyShot, Target_SerratedEdge}`
-
-| Output rarity | Final 0 skills | Final 1 skill | Final 2 skills |
-| :--- | ---: | ---: | ---: |
-| Epic (cap 1) | **60.0%** | **40.0%** | 0% |
-| Legendary (cap 1) | **60.0%** | **40.0%** | 0% |
-| Divine (cap 2) | **30.47%** | **51.97%** | **17.56%** |
-
-#### Scenario D: `Sₛ = 0`, `Pₛ = 4`
-
-Weapon example pool: `{Shout_Whirlwind, Projectile_SkyShot, Target_SerratedEdge, Shout_BattleStomp}`
-
-| Output rarity | Final 0 skills | Final 1 skill | Final 2 skills |
-| :--- | ---: | ---: | ---: |
-| Epic (cap 1) | **40.0%** | **60.0%** | 0% |
-| Legendary (cap 1) | **40.0%** | **60.0%** | 0% |
-| Divine (cap 2) | **10.76%** | **59.13%** | **30.11%** |
-
-#### Scenario E: `Sₛ = 1`, `Pₛ = 1` (one shared, one in pool)
-
-Weapon example:
-- Shared: `{Shout_Whirlwind}`
-- Pool: `{Projectile_SkyShot}`
-
-| Output rarity | Final 1 skill | Final 2 skills |
-| :--- | ---: | ---: |
-| Epic (cap 1) | **100%** | 0% |
-| Legendary (cap 1) | **100%** | 0% |
-| Divine (cap 2) | **72.0%** | **28.0%** |
-
-#### Scenario F: `Sₛ = 1`, `Pₛ = 2` (one shared, two in pool)
-
-Weapon example:
-- Shared: `{Shout_Whirlwind}`
-- Pool: `{Projectile_SkyShot, Target_SerratedEdge}`
-
-| Output rarity | Final 1 skill | Final 2 skills |
-| :--- | ---: | ---: |
-| Epic (cap 1) | **100%** | 0% |
-| Legendary (cap 1) | **100%** | 0% |
-| Divine (cap 2) | **60.8%** | **39.2%** |
-
-### 4.7. Worked example (Divine)
+### 5.7. Worked example (Divine)
 <a id="47-worked-example-divine"></a>
 
 This is a **weapon** example (weapon-only skill boosts).
 
 Assume the rarity system produces a **Divine** forged item:
-- **SkillCap (Divine)**: **2**
+- **SkillCap[Divine]**: **1** *(default)*
 
 Parent A granted skills:
 - `Shout_Whirlwind`
-- `Target_SerratedEdge`
 
 Parent B granted skills:
-- `Shout_Whirlwind`
 - `Projectile_SkyShot`
 
 Split into lists (deduped by skill ID):
-- Shared skills `Sₛ = 1`: `Shout_Whirlwind`
-- Pool skills `Pₛ = 2`: `Target_SerratedEdge`, `Projectile_SkyShot`
+- Shared skills `Sₛ = 0`: (none)
+- Pool skills `Pₛ = 2`: `Shout_Whirlwind`, `Projectile_SkyShot`
 
 Compute free slots:
-- `SkillCap = 2`
-- `len(sharedKept) = 1`
+- `SkillCap = 1`
+- `len(sharedKept) = 0`
 - `freeSlots = 1`
 
-Attempt to fill the free slot:
+Attempt to fill free slots:
 - `P_remaining = 2`
-- Divine gain chance: `base(Divine) * m(2) = 28% * 1.4 = 39.2%`
+- Divine gain chance (same-type): `p_attempt = clamp(2 × (base_cross(Divine) * m(2)), 0, 100%) = 2 × (20% × 1.4) = 56.0%`
 - If the roll succeeds, pick 1 from the pool, e.g. `Projectile_SkyShot`
 
 Final skills before cap:
-- `Shout_Whirlwind`
-- `Projectile_SkyShot` *(only if the gain roll succeeded)*
+ - If gain succeeded: one of `{Shout_Whirlwind, Projectile_SkyShot}`
+ - If gain failed: (none)
 
-Apply `SkillCap = 2`:
-- If you gained 1 pool skill: you are at cap, keep both.
-- If you did not gain a pool skill: you stay at 1 skill.
+Apply `SkillCap = 1`:
+- If you gained a skill: you are at cap.
+- If you gained a skill and one pool skill remains, the optional replace roll (Section 5.5) can still swap which single skill you end up with.
 
 Result:
-- The forged Divine item can still roll up to **8 normal blue stats** (the mod’s cap),
-- But it will have at most **2 granted skills** (vanilla-aligned).
+Result (vNext):
+- The forged item can roll up to `OverallCap[Divine]` **overall rollable slots** (blue stats + ExtraProperties + skills), where `OverallCap` is default+learned per save.
+- It will have at most `SkillCap[Divine]` rollable granted skills (default+learned per save).
 
 ---
-## 5. Rune slots inheritance
+## 6. Rune slots inheritance
 <a id="5-rune-slots-inheritance"></a>
 
 This section defines how many **empty rune slots** the forged item ends up with.
@@ -1694,20 +1478,22 @@ Vanilla-style constraint (important for balance):
 
 If **both** parents have `RuneSlots = 1`, then the forged item gets `RuneSlots_out = 1`.
 
-If **exactly one** parent has `RuneSlots = 1`, then the forged item gets `RuneSlots_out = 1` with a **small** chance, otherwise `0`.
+If **exactly one** parent has `RuneSlots = 1`, then the forged item gets `RuneSlots_out = 1` with a **small** chance, otherwise `0`:
+- Cross-type (default): **50%**
+- Same-type (`TypeMatch=true`): **100%** (2×, capped)
 
 $$RuneSlots_{out} \in \{0,1\}$$
 
 Examples (non-Unique):
 
-| Parent A slots | Parent B slots | Forged slots |
-| :---: | :---: | :--- |
-| 0 | 0 | 0 |
-| 1 | 1 | 1 |
-| 0 | 1 | 1 with 50%, else 0 |
-| 1 | 0 | 1 with 50%, else 0 |
+| Parent A slots | Parent B slots | Forged slots (cross-type default) | Forged slots (same-type, 2× capped) |
+| :---: | :---: | :--- | :--- |
+| 0 | 0 | 0 | 0 |
+| 1 | 1 | 1 | 1 |
+| 0 | 1 | 1 with 50%, else 0 | 1 (100%) |
+| 1 | 0 | 1 with 50%, else 0 | 1 (100%) |
 ---
-## 6. Implementation reference 
+## 7. Implementation reference 
 <a id="6-implementation-reference"></a>
 
 This section is a developer reference for implementing the rules in this document.
