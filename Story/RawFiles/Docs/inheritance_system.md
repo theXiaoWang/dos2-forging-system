@@ -57,43 +57,36 @@ These docs are being restructured to match the new vNext balancing model:
 </details>
 
 <details>
-<summary><strong><a href="#3-stats-modifiers-inheritance">3. Blue stats inheritance</a></strong></summary>
+<summary><strong><a href="#3-stats-modifiers-inheritance">3. Stats Modifier Inheritance</a></strong></summary>
 
-- [3.1. Stats modifiers (definition)](#31-stats-modifiers-definition)
-- [3.2. The two stats lists](#32-the-two-stats-lists)
-- [3.3. Merging rule (how numbers are merged)](#33-merging-rule-how-numbers-are-merged)
-- [3.4. Selection rule (shared + pool + cap)](#34-selection-rule-shared--pool--cap)
-- [3.5. Safe vs YOLO forging](#35-safe-vs-yolo-forging)
-- [3.6. Worked examples](#36-worked-examples-stats-modifiers)
+- [3.1. Introduction + design principles](#31-stats-modifiers-definition)
+- [3.2. Selection rule (all modifiers)](#34-selection-rule-shared--pool--cap)
+- [3.3. Merging rule (Blue Stats + ExtraProperties)](#33-merging-rule-how-numbers-are-merged)
+- [3.4. Blue Stats](#34-blue-stats-channel)
+  - [3.4.1. Blue Stats (definition)](#341-blue-stats-definition)
+  - [3.4.2. Shared vs pool (Blue Stats)](#32-the-two-stats-lists)
+  - [3.4.3. Worked examples (Blue Stats)](#36-worked-examples-stats-modifiers)
+- [3.5. ExtraProperties](#35-extraproperties-channel)
+  - [3.5.1. ExtraProperties (definition)](#41-extraproperties-definition)
+  - [3.5.2. Shared vs pool tokens](#42-extraproperties-shared-vs-pool)
+  - [3.5.3. Selection + internal cap](#43-extraproperties-selection--internal-cap)
+  - [3.5.4. Slot competition + trimming](#44-extraproperties-slot-competition--trimming)
+- [3.6. Skills](#36-skills-channel)
+  - [3.6.1. Granted skills (definition)](#41-granted-skills-definition)
+  - [3.6.2. Skill cap by rarity](#42-skill-cap-by-rarity)
+  - [3.6.3. Shared vs pool skills](#43-shared-vs-pool-skills)
+  - [3.6.4. How skills are gained (gated fill)](#44-how-skills-are-gained-gated-fill)
+  - [3.6.5. Overflow + replace (type-modified)](#45-overflow--replace-5)
+  - [3.6.6. Scenario tables](#46-scenario-tables)
+  - [3.6.7. Worked example (Divine)](#47-worked-example-divine)
 </details>
 
 <details>
-<summary><strong><a href="#4-extraproperties-inheritance">4. ExtraProperties inheritance</a></strong></summary>
-
-- [4.1. ExtraProperties (definition)](#41-extraproperties-definition)
-- [4.2. Shared vs pool tokens](#42-extraproperties-shared-vs-pool)
-- [4.3. Selection + internal cap (max of parent lines)](#43-extraproperties-selection--internal-cap)
-- [4.4. Slot competition + trimming](#44-extraproperties-slot-competition--trimming)
+<summary><strong><a href="#4-rune-slots-inheritance">4. Rune slots inheritance</a></strong></summary>
 </details>
 
 <details>
-<summary><strong><a href="#4-skills-inheritance">5. Skills inheritance</a></strong></summary>
-
-- [5.1. Granted skills (definition)](#41-granted-skills-definition)
-- [5.2. Skill cap by rarity](#42-skill-cap-by-rarity)
-- [5.3. Shared vs pool skills](#43-shared-vs-pool-skills)
-- [5.4. How skills are gained (gated fill)](#44-how-skills-are-gained-gated-fill)
-- [5.5. Overflow + replace (type-modified)](#45-overflow--replace-5)
-- [5.6. Scenario tables](#46-scenario-tables)
-- [5.7. Worked example (Divine)](#47-worked-example-divine)
-</details>
-
-<details>
-<summary><strong><a href="#5-rune-slots-inheritance">6. Rune slots inheritance</a></strong></summary>
-</details>
-
-<details>
-<summary><strong><a href="#6-implementation-reference">7. Implementation reference</a></strong></summary>
+<summary><strong><a href="#5-implementation-reference">5. Implementation reference</a></strong></summary>
 </details>
 
 </details>
@@ -142,9 +135,9 @@ High-level forge order:
 1. Decide the output’s **rarity** using the **[Rarity System](rarity_system.md)**.
 2. Decide the output's **base values** (damage/armour) using **[Section 2](#2-base-values-inheritance)**.
 3. Inherit **blue stats** using **[Section 3](#3-stats-modifiers-inheritance)**.
-4. Inherit **ExtraProperties** using **[Section 4](#4-extraproperties-inheritance)**.
-5. Inherit **skills** using **[Section 5](#4-skills-inheritance)**.
-6. Inherit **rune slots** using **[Section 6](#5-rune-slots-inheritance)**.
+4. Inherit **ExtraProperties** using **[Section 3.5](#4-extraproperties-inheritance)**.
+5. Inherit **skills** using **[Section 3.6](#4-skills-inheritance)**.
+6. Inherit **rune slots** using **[Section 4](#4-rune-slots-inheritance)**.
 
 ### 1.3. Deterministic randomness (seed + multiplayer)
 <a id="13-deterministic-randomness-seed--multiplayer"></a>
@@ -479,64 +472,333 @@ Interpretation:
 
 ---
 
-## 3. Blue stats inheritance
+## 3. Stats Modifier Inheritance
 <a id="3-stats-modifiers-inheritance"></a>
 
-This section defines how **blue stats** (rollable stats modifiers like Strength, crit, resistances, etc.) are inherited when you forge.
+This section defines how **stats modifiers** are inherited when you forge.
 
-- The system prefers **shared stats** (safer and more predictable).
-- Non-shared stats go into a **pool** (risk/reward).
-- vNext: the final item is limited by a per-save learned **overall rollable slots cap** defined in [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap). Blue stats compete with **ExtraProperties** and **skills** under this cap.
+In vNext, stats modifiers are split into three dedicated channels, each with its own unshared pool:
+- **Blue Stats**: numeric “blue text” boosts like Strength, crit, resistances, etc.
+- **ExtraProperties**: semicolon-separated tokens (counts as **1 slot** overall if present)
+- **Skills**: rollable granted skills (each counts as **1 slot** overall)
 
-Here are what you can expect:
-- **If the parents share many stats**, the result is usually very stable: you keep most of what you already like, and the pool acts like a small “bonus” chance.
-- **If the parents share few or no stats**, the result is much more random: you can gain different stats lines, but it’s harder to reliably keep specific ones.
-- **For weapons:** The default non-shared (pool) stats inheritance chance for cross-type forging can be miniscule, but if both parents are the **exact same `WeaponType`** (same-type), about **2X** the chance.
+The forged item applies one shared cap across these channels:
+- `OverallCap[Rarity_out]` (default max 5 for Divine; default+learned per save; see [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap))
 
-### 3.1. Stats modifiers (definition)
+### 3.1. Introduction + design principles
 <a id="31-stats-modifiers-definition"></a>
 
-**Stats modifiers** are rollable boosts (blue text stats) that appear on items based on their rarity. These include:
-- Attributes (Strength, Finesse, Intelligence, etc.)
-- Combat abilities (Warfare, Scoundrel, etc.)
-- Resistances (Fire, Poison, etc.)
-- Status chance effects ("X% chance to set Y")
-- Other numeric modifiers (Critical Chance, Accuracy, Initiative, Movement, Blocking, etc.)
+Design principles:
+- **Shared-first**: shared modifiers are stable and predictable.
+- **Pool risk/reward**: non-shared modifiers go into that channel’s pool and are harder to keep.
+- **Consistent algorithms**: merging and selection are defined once up front; each channel applies them with its own identity keys.
 
-Stats modifiers are **separate from base values** (Section 2), **ExtraProperties** (Section 4), and **skills** (Section 5).
-They are bounded by the vNext per-save learned caps in the **[Rarity System](rarity_system.md#22-caps-vnext-default--learned-per-save)**.
+The universal rules are defined next:
+- **Selection rule + overall cap trimming** (Section 3.2)
+- **Merging rule** (Section 3.3)
 
-### 3.2. The two stats lists
-<a id="32-the-two-stats-lists"></a>
-- **Shared stats (S)**: stats on **both** parents (guaranteed).
-- **Pool stats (P)**: stats that are **not shared** (unique to either parent). This is the combined pool from both parents.
+### 3.2. Selection rule (all modifiers)
+<a id="34-selection-rule-shared--pool--cap"></a>
 
-#### Key values
+This selection rule is **universal** for all three modifier channels:
+- **Blue Stats** (Section 3.4)
+- **ExtraProperties** (Section 3.5)
+- **Skills** (Section 3.6)
 
-- **S (Shared stats)**: stats lines both parents share (always carried over).
-- **P (Pool stats)**: stats lines not shared (all unique lines from both parents combined).
-- **E (Expected baseline)**: your starting pool pick count (baseline picks from the pool).
-  - Default rule: `E = floor((P + 1) / 3)` (one-third of the pool, rounded down, with +1 bias).
-  - Special case: if `P = 0` or `P = 1`, use `E = 0` (this enables a clean 50/50 keep-or-lose roll for a single pool stat).
-- **V (Luck adjustment/variance)**: the luck result that nudges E up/down (can chain).
-- **K (Stats from pool)**: how many you actually take from the pool (after luck adjustment, limited to 0–P).
-- **T (Planned total)**: planned stats lines before the rarity cap.
-- **Cap**: vNext uses the per-save learned **overall rollable slots cap** from `rarity_system.md` (blue stats compete with ExtraProperties + skills under the same cap).
-- **Final**: stats lines after the cap is applied.
+Each channel has its own **unshared pool candidates list** and is selected independently, then everything competes under the single **overall rollable slots cap** (`OverallCap`, max 5 by default for Divine).
 
-#### Two rules define inheritance
-- [Merging rule](#33-merging-rule-how-numbers-are-merged)
-- [Selection rule](#34-selection-rule-shared--pool--cap)
+#### Universal notation (used across all channels)
+- **S**: Shared Modifiers (count)
+- **P_size**: Pool size (candidate count)
+- **P**: Modifiers from pool (kept/picked count)
+- **F**: Forged item modifiers for the channel, before overall-cap trimming: `F = S + P`
+
+Channel mapping:
+- Blue stats: `Sb`, `Pb_size`, `Pb`, `Fb`
+- ExtraProperties (internal tokens): `Sp`, `Pp_size`, `Pp`, `Fp_tokens`
+- Skills: `Ss`, `Ps_size`, `Ps`, `Fs`
+
+#### Step 1: Separate shared vs pool (per channel)
+Compare the two parents **within the same channel**:
+- **Shared modifiers**: on both parents by that channel's identity key.
+- **Pool candidates**: present on only one parent.
+
+Notes by channel:
+- **Blue stats**: identity key is the stats **key** (numbers may merge later).
+- **ExtraProperties**: identity key is the canonicalised token key; tokens are stored as separate lines internally.
+- **Skills**: identity key is the skill **ID** (e.g. `Shout_Whirlwind`), not the boost name.
+
+#### Step 2: Set the expected baseline (E)
+Now work out your starting point for the pool.
+You begin at **about one-third of the pool**, rounded down (this is the "expected baseline", E). This makes **non-shared** stats noticeably harder to keep, while **shared** stats remain stable.
+
+Examples:
+- Pool size 1 → baseline is 0 (then you 50/50 roll to keep it or lose it)
+- Pool size 3 → expect to keep 1
+- Pool size 4 → expect to keep 1
+- Pool size 7 → expect to keep 2
+
+Formula:
+
+$$E =
+\begin{cases}
+0 & \text{if } P_{size} = 0 \text{ or } P_{size} = 1 \\
+\lfloor (P_{size} + 1) / 3 \rfloor & \text{otherwise}
+\end{cases}
+$$
+
+#### Step 3: Choose the tier (sets luck odds)
+The tier depends only on **pool size**:
+
+| Pool size | Tier | First roll chances (Bad / Neutral / Good) | Chain chance (Down / Up) |
+| :--- | :--- | :--- | :--- |
+| **1** | Tier 1 (Safe) | `0% / 60% / 40%` | None |
+| **2–4** | Tier 2 (Early) | `14% / 60% / 26%` | `0% / 24.23%` |
+| **5–7** | Tier 3 (Mid) | `30% / 52% / 18%` | `30% / 25%` |
+| **8+** | Tier 4 (Risky) | `33% / 55% / 12%` | `40% / 25%` |
+
+Notation used below:
+- `d` = down-chain chance (`p_chain_down`)
+- `u` = up-chain chance (`p_chain_up`)
+
+#### Weapon-type match modifier (Cross-type vs Same-type)
+For **weapons**, we treat **exact same `WeaponType`** as "same-type". For other item categories, type mismatches are not allowed by eligibility rules, so they always behave like "same-type".
+
+Let:
+- `TypeMatch = (WeaponType_1 == WeaponType_2)` for weapons
+- `TypeMatch = true` for non-weapons
+
+The luck adjustment `A` is sampled from a tier-specific distribution:
+- **Cross-type (default)** distribution if `TypeMatch=false`
+- **Same-type** distribution if `TypeMatch=true`
+
+Same-type is derived from the cross-type baseline by **doubling the "good" branch** and renormalising (this doubles every `A > 0` outcome):
+
+For a tier with cross-type first-roll chances:
+- `p_bad_cross`
+- `p_neutral_cross`
+- `p_good_cross`
+
+We define same-type weights:
+
+$$w_{bad}=p_{bad,cross}$$
+$$w_{neutral}=p_{neutral,cross}$$
+$$w_{good}=2\times p_{good,cross}$$
+
+Then normalise:
+
+$$Z=w_{bad}+w_{neutral}+w_{good}$$
+$$p_{bad,same}=w_{bad}/Z,\ \ p_{neutral,same}=w_{neutral}/Z,\ \ p_{good,same}=w_{good}/Z$$
+
+#### Step 4: Roll the luck adjustment (can chain)
+The system samples a **luck adjustment** `A` using a "first roll + chain" model.
+This `A` is a **variance** added to the expected baseline **E**, changing how many pool stats you keep:
+
+- **Bad roll** (`A < 0`): you keep fewer pool stats than the baseline.
+- **Neutral roll** (`A = 0`): you keep the expected baseline.
+- **Good roll** (`A > 0`): you keep more pool stats than the baseline.
+
+##### First roll (choose Bad / Neutral / Good)
+Each tier defines `p_bad`, `p_neutral`, `p_good` (sum to 100%).
+
+##### Chain (push further down/up)
+If the first roll is:
+- **Bad**: set `A = -1`, then repeatedly apply a **down-chain** with probability `p_chain_down`:
+  - on success: `A -= 1` and try again
+  - on failure: stop
+- **Neutral**: set `A = 0` and stop
+- **Good**: set `A = +1`, then repeatedly apply an **up-chain** with probability `p_chain_up`:
+  - on success: `A += 1` and try again
+  - on failure: stop
+
+Finally apply the clamp via `P = clamp(E + A, 0, P_size)`. Equivalently, `A` is effectively clamped to:
+- `A_min = -E` (cannot keep fewer than 0 pool modifiers)
+- `A_max = P_size - E` (cannot keep more than all pool modifiers)
+
+Closed form probabilities (after clamping) for any tier:
+
+Let `d = p_chain_down`, `u = p_chain_up`, and let:
+- `N_down = E` (max negative magnitude, since `A_min = -E`)
+- `N_up = P_size - E` (max positive magnitude, since `A_max = P_size - E`)
+
+Then:
+
+- For `n = 1..(N_down-1)`:  
+  `P(A = -n) = p_bad × d^(n-1) × (1 - d)`
+- `P(A = -N_down) = p_bad × d^(N_down-1)` *(cap bucket; includes all deeper chains; i.e. "hit the cap or go beyond it")*
+- `P(A = 0) = p_neutral`
+- For `n = 1..(N_up-1)`:  
+  `P(A = +n) = p_good × u^(n-1) × (1 - u)`
+- `P(A = +N_up) = p_good × u^(N_up-1)` *(cap bucket; includes all deeper chains; i.e. "hit the cap or go beyond it")*
+
+**How tables may show the cap bucket (Option A):**
+- Some worked-example tables expand the cap bucket into:
+  - "Stop at the cap" (exactly `A = ±N_*`), and
+- "Overflow; clamped" (the chain would go beyond `±N_*`, but `P` is clamped).
+- If an overflow row rounds to `0.00%`, the table may omit it for readability.
+
+All tier parameters are defined in the **Step 3** table above.
+
+**Safety rule (always true):** you can't keep fewer than **0** pool modifiers, and you can't keep more than the **pool size**.
+
+#### Step 5: Build the per-channel result list
+For a given channel:
+1. Keep all **shared modifiers** (`S`).
+2. Add **P** random modifiers from the channel's pool candidates list (uniformly).
+3. This yields the channel's planned result count: `F = S + P`.
+
+#### Step 6: Apply the overall modifier cap (cross-channel)
+The forged item has a single cap `OverallCap[Rarity_out]` across:
+- Blue stats
+- ExtraProperties (slot)
+- Skills
+
+This section defines how we trim when `F_total > OverallCap`.
+
+**Protection rule:**
+- Shared modifiers are protected (not dropped by cap trimming).
+- ExtraProperties slot is protected if `Sp ≥ 1` (shared ExtraProperties exists).
+
+**Fair trimming rule (Option A, slot-weighted):**
+- After protected/shared slots are counted, the remaining slots are allocated by rolling between *pending pool-picked slots*.
+- Weight per channel is:
+  - Blue stats: `Pb` (number of pool-picked blue stats)
+  - Skills: `Ps` (number of pool-picked skills, if any)
+  - ExtraProperties slot: `1` if the EP slot is pending as a pool slot (i.e. `Sp = 0` and EP exists), else `0`
+
+If a channel wins a slot:
+- **Blue stats**: pick one of the remaining pool-picked blue stats uniformly.
+- **Skills**: pick one of the remaining pool-picked skills uniformly.
+- **ExtraProperties**: keep the EP slot (then apply Section 3.5 internal token selection).
+
+Imagine you're forging these two **boots** (boots can only forge with boots):
+
+```
+Parent A: Ranger's Boots
+ - +1 Finesse
+ - +0.5m Movement
+ - +10% Fire Resistance
+ - +1 Sneaking
+
+Parent B: Scout's Boots
+ - +1 Finesse
+ - +0.5m Movement
+ - +2 Initiative
+ - +10% Air Resistance
+```
+
+Split into lists:
+- Shared Blue Stats: `+1 Finesse`, `+0.5m Movement` → `Sb = 2`
+- Pool Blue Stats candidates: `+10% Fire Resistance`, `+1 Sneaking`, `+2 Initiative`, `+10% Air Resistance` → `Pb_size = 4`
+
+Now calculate how many pool stats you keep:
+- Expected baseline: `E = floor((Pb_size + 1) / 3) = floor(5 / 3) = 1`
+- Suppose your luck adjustment roll comes out as `V = +1`
+- Modifiers from pool (kept): `Pb = clamp(E + V, 0, Pb_size) = clamp(1 + 1, 0, 4) = 2`
+- Planned forged blue modifiers (before overall trimming): `Fb = Sb + Pb = 2 + 2 = 4`
+
+Finally apply the overall rollable-slot cap:
+- Assume the rarity system gives the new item **Rare** → `OverallCap[Rare] = 5`
+- Final (blue only, no other channels in this example): `Final = min(Fb, OverallCap) = min(4, 5) = 4`
+
+So you end up with:
+- The 2 shared blue stats (always)
+- Plus 2 of the pool blue stats (no trimming needed in this example)
+
+#### Corner cases (park for later work)
+- **Protection stacking vs OverallCap**: if multiple "protected" sources (shared modifiers, skillbook lock, `Sp ≥ 1` protecting the EP slot) ever imply more than `OverallCap`, the system needs an explicit priority rule for what breaks first.
+- **ExtraProperties internal payload vs 1-slot accounting**: `Sp ≥ 1` can guarantee the EP slot, but internal token selection (`Pp_size → Pp`, clamped by `InternalCap`) may still represent multiple tooltip lines. This may skew balance compared to blue stats/skills.
+- **Parent max-modifier cap implications**: if parent items themselves are capped to 5 total modifiers (blue + skills + EP slot), some pool sizes become impossible in certain scenarios (e.g. `Sb = 4` and EP present implies `Pb_size = 0` on both parents).
+
 ---
 
-### 3.3. Merging rule (how numbers are merged)
+#### 3.2.1. Safe vs YOLO forging
+<a id="35-safe-vs-yolo-forging"></a>
+
+These two standalone examples are meant to show the difference between:
+- **Safe forging**: many shared stats → stable outcomes (pool stats are just "bonus").
+- **YOLO forging**: zero shared stats → pure variance (rare spikes are possible, but unreliable).
+
+#### Safe forging (realistic cap: `OverallCap ≤ 5`, with skills/ExtraProperties competing)
+```
+Output rarity: Divine ⇒ `OverallCap[Divine] = 5` (default).
+
+Item A: Divine Warhammer
+ - Blue stats: +3 Strength, +2 Warfare, +15% Critical Chance, +20% Fire Resistance  (4)
+ - Granted skill: Shout_Whirlwind  (1)
+
+Item B: Divine Warhammer
+ - Blue stats: +3 Strength, +2 Warfare, +15% Critical Chance, +20% Poison Resistance  (4)
+ - ExtraProperties: (present; no shared token)  (1)
+─────────────────────────────────────────
+Shared Modifiers:
+ - Shared Blue Stats: +3 Strength, +2 Warfare, +15% Critical Chance → `Sb = 3`
+Pool candidates (unshared, per channel):
+ - Pool Blue Stats candidates: +20% Fire Resistance, +20% Poison Resistance → `Pb_size = 2`
+ - Pool Skills candidates: Shout_Whirlwind (no skillbook; not shared) → `Ps_size = 1`
+ - ExtraProperties slot is a pool slot (present on B only; `Sp = 0`) → pending EP slot
+```
+
+Inputs for this example:
+- `OverallCap[Divine] = 5`
+- Shared totals (protected): `S_total = Sb + Ss + Sp = 3 + 0 + 0 = 3`
+
+This is the perfect example for **Safe Forging**:
+- With **3 shared blue stats**, you have a stable core.
+- Because the overall cap is **5**, the result must allocate the remaining **2 slots** between:
+  - pool-picked blue stats (`Pb`)
+  - pool-picked skills (`Ps`)
+  - the pending ExtraProperties slot (weight 1 if kept)
+
+Concrete outcome intuition:
+- Suppose the channel selections produce:
+  - Blue stats: `Pb = 1` (kept 1 from `Pb_size = 2`)
+  - Skills: `Ps = 1` (kept 1 from `Ps_size = 1`)
+  - EP slot: pending
+  - Then `F_total = Sb + Pb + Ss + Ps + EPslot = 3 + 1 + 0 + 1 + 1 = 6` ⇒ over cap by 1.
+- Using the **slot-weighted** overall trimming rule (Section 3.2):
+  - weight(Blue) = `Pb = 1`, weight(Skills) = `Ps = 1`, weight(EP) = `1`
+  - one of these three pool-picked slots is dropped (each **33.33%** in this case).
+
+#### YOLO forging (realistic cap: `OverallCap ≤ 5`, everything competes)
+```
+Output rarity: Divine ⇒ `OverallCap[Divine] = 5` (default).
+
+Item A: Divine Warhammer
+ - Blue stats: +3 Strength, +2 Warfare, +2 Two-Handed, +15% Accuracy  (4)
+ - Granted skill: Shout_Whirlwind  (1)
+
+Item B: Divine Warhammer
+ - Blue stats: +15% Critical Chance, +20% Fire Resistance, +10% Air Resistance, +1 Two-Handed  (4)
+ - ExtraProperties: (present; no shared token)  (1)
+─────────────────────────────────────────
+Shared Modifiers:
+ (none) → `S_total = 0`
+Pool candidates (unshared, per channel):
+ - Pool Blue Stats candidates: 8 lines → `Pb_size = 8`
+ - Pool Skills candidates: 1 skill (no shared; no skillbook) → `Ps_size = 1`
+ - ExtraProperties slot is a pool slot (`Sp = 0`) → pending EP slot
+```
+
+Inputs for this example:
+- `OverallCap[Divine] = 5`
+
+This is the perfect example for **YOLO forging**:
+- With **0 shared stats**, you have **no guarantees**. Everything is a roll from the pool.
+- Even if the blue-stats roll "wants" to keep many stats, the final result is hard-limited to **5 total rollable slots**.
+- Because skills and ExtraProperties are pool slots here, they can be dropped under the same overall trimming step as pool-picked blue stats.
+
+---
+### 3.3. Merging rule (Blue Stats + ExtraProperties)
 <a id="33-merging-rule-how-numbers-are-merged"></a>
 
 Sometimes both parents have the **same stats**, but the **numbers** are different:
 - `+10% Critical Chance` vs `+14% Critical Chance`
 - `+3 Strength` vs `+4 Strength`
 
-In this system, those are still treated as **Shared stats (S)** (same stats **key**), but the forged item will roll a **merged value** for those stats.
+In this system, those are still treated as **shared modifiers** (same identity key), but the forged item will roll a **merged value**:
+- **Blue Stats**: identity key is the stats key (e.g. `CriticalChance`, `Strength`)
+- **ExtraProperties**: identity key is the canonicalised token key; if a shared token has numeric parameters, those parameters are merged using the same algorithm below
 
 Slot note:
 - These "blue stats" keys are not limited to weapons/shields. Armour/jewellery can roll numeric blue stats too, for example:
@@ -575,7 +837,7 @@ Then format the number back into a stats line using the stats' rounding rules.
 
 #### Rounding rules
 - **Integer stats** (Attributes, skill levels): round to the nearest integer.
-- **Percent stats** (Critical Chance, Accuracy, Resistances, “X% chance to set Y”): round to the nearest integer percent.
+- **Percent stats** (Critical Chance, Accuracy, Resistances, "X% chance to set Y"): round to the nearest integer percent.
 
 #### Worked examples
 
@@ -605,7 +867,7 @@ Then format the number back into a stats line using the stats' rounding rules.
 - Tight roll range: `4 × [0.85, 1.15] = [3.4, 4.6]` → **3–5** after rounding.
 - Wide roll range: `4 × [0.70, 1.30] = [2.8, 5.2]` → **3–5** after rounding.
 
-#### Quick “one forge” walk-through (shows what the 50% wide-roll chance means)
+#### Quick "one forge" walk-through (shows what the 50% wide-roll chance means)
 Using Example A (`+10%` vs `+14%` Critical Chance):
 
 | Step | Roll | Calculation | Result (rounded) |
@@ -613,283 +875,42 @@ Using Example A (`+10%` vs `+14%` Critical Chance):
 | 1 | Choose roll type | 50% tight vs 50% wide | Tight or Wide |
 | 2A | Wide case | `r=1.22` → `value = clamp(12×1.22, 8.5, 16.1) = 14.64` | `15%` |
 | 2B | Tight case | `r=0.90` → `value = clamp(12×0.90, 8.5, 16.1) = 10.8` | `11%` |
-
----
-### 3.4. Selection rule (shared + pool + cap)
-<a id="34-selection-rule-shared--pool--cap"></a>
-
-Now that **Shared stats (S)** includes the value-merge behaviour above (same stats key, merged number if needed), the next step:
-- Count how many shared stats you have (**S**).
-- Put everything else into the pool (**P**).
-- Roll how many pool stats you keep (**K**) and apply the rarity cap.
-
-These are the same rules as above, written as formulas:
-
-For the expected baseline (**make non-shared stats harder to keep**):
-
-$$E =
-\begin{cases}
-0 & \text{if } P = 0 \text{ or } P = 1 \\
-\lfloor (P + 1) / 3 \rfloor & \text{otherwise}
-\end{cases}
-$$
-
-Then:
-
-$$K = \min(\max(E + V,\ 0),\ P)$$
-
-$$T = S + K$$
-
-$$Final = \min(T,\ Cap)$$
-#### Step 1: Separate shared vs pool stats
-Compare the two parents:
-- For all the **shared stats** from both items (same stats **key**), put into **Shared stats (S)**.
-  - If the values differ, use the **value merge** rules in **3.3** to roll the merged number for the forged item.
-- For all the **non-shared stats** from both items, put into **Pool stats (P)**.
-
-#### Step 2: Set the expected baseline (E)
-Now work out your starting point for the pool.
-You begin at **about one-third of the pool**, rounded down (this is the “expected baseline”, E). This makes **non-shared** stats noticeably harder to keep, while **shared** stats remain stable.
-
-Examples:
-- Pool size 1 → baseline is 0 (then you 50/50 roll to keep it or lose it)
-- Pool size 3 → expect to keep 1
-- Pool size 4 → expect to keep 1
-- Pool size 7 → expect to keep 2
-- Pool size 12 → expect to keep 4
-
-#### Step 3: Choose the tier (sets luck odds)
-The tier depends only on **pool size**:
-
-| Pool size | Tier | First roll chances (Bad / Neutral / Good) | Chain chance (Down / Up) |
-| :--- | :--- | :--- | :--- |
-| **1** | Tier 1 (Safe) | `0% / 60% / 40%` | None |
-| **2–4** | Tier 2 (Early) | `14% / 60% / 26%` | `0% / 24.23%` |
-| **5–7** | Tier 3 (Mid) | `30% / 52% / 18%` | `30% / 25%` |
-| **8+** | Tier 4 (Risky) | `33% / 55% / 12%` | `40% / 25%` |
-
-Notation used below:
-- `d` = down-chain chance (`p_chain_down`)
-- `u` = up-chain chance (`p_chain_up`)
-
-#### Weapon-type match modifier (Cross-type vs Same-type)
-For **weapons**, we treat **exact same `WeaponType`** as “same-type”. For other item categories, type mismatches are not allowed by eligibility rules, so they always behave like “same-type”.
-
-Let:
-- `TypeMatch = (WeaponType_1 == WeaponType_2)` for weapons
-- `TypeMatch = true` for non-weapons
-
-The luck adjustment `A` is sampled from a tier-specific distribution:
-- **Cross-type (default)** distribution if `TypeMatch=false`
-- **Same-type** distribution if `TypeMatch=true`
-
-Same-type is derived from the cross-type baseline by **doubling the “good” branch** and renormalising (this doubles every `A > 0` outcome):
-
-For a tier with cross-type first-roll chances:
-- `p_bad_cross`
-- `p_neutral_cross`
-- `p_good_cross`
-
-We define same-type weights:
-
-$$w_{bad}=p_{bad,cross}$$
-$$w_{neutral}=p_{neutral,cross}$$
-$$w_{good}=2\times p_{good,cross}$$
-
-Then normalise:
-
-$$Z=w_{bad}+w_{neutral}+w_{good}$$
-$$p_{bad,same}=w_{bad}/Z,\ \ p_{neutral,same}=w_{neutral}/Z,\ \ p_{good,same}=w_{good}/Z$$
-
-#### Step 4: Roll the luck adjustment (can chain)
-The system samples a **luck adjustment** `A` using a “first roll + chain” model.
-This `A` is a **variance** added to the expected baseline **E**, changing how many pool stats you keep:
-
-- **Bad roll** (`A < 0`): you keep fewer pool stats than the baseline.
-- **Neutral roll** (`A = 0`): you keep the expected baseline.
-- **Good roll** (`A > 0`): you keep more pool stats than the baseline.
-
-##### First roll (choose Bad / Neutral / Good)
-Each tier defines `p_bad`, `p_neutral`, `p_good` (sum to 100%).
-
-##### Chain (push further down/up)
-If the first roll is:
-- **Bad**: set `A = -1`, then repeatedly apply a **down-chain** with probability `p_chain_down`:
-  - on success: `A -= 1` and try again
-  - on failure: stop
-- **Neutral**: set `A = 0` and stop
-- **Good**: set `A = +1`, then repeatedly apply an **up-chain** with probability `p_chain_up`:
-  - on success: `A += 1` and try again
-  - on failure: stop
-
-Finally apply the clamp via `K = clamp(E + A, 0, P)`. Equivalently, `A` is effectively clamped to:
-- `A_min = -E` (cannot keep fewer than 0 pool stats)
-- `A_max = P - E` (cannot keep more than all pool stats)
-
-Closed form probabilities (after clamping) for any tier:
-
-Let `d = p_chain_down`, `u = p_chain_up`, and let:
-- `N_down = E` (max negative magnitude, since `A_min = -E`)
-- `N_up = P - E` (max positive magnitude, since `A_max = P - E`)
-
-Then:
-
-- For `n = 1..(N_down-1)`:  
-  `P(A = -n) = p_bad × d^(n-1) × (1 - d)`
-- `P(A = -N_down) = p_bad × d^(N_down-1)` *(cap bucket; includes all deeper chains; i.e. “hit the cap or go beyond it”)*
-- `P(A = 0) = p_neutral`
-- For `n = 1..(N_up-1)`:  
-  `P(A = +n) = p_good × u^(n-1) × (1 - u)`
-- `P(A = +N_up) = p_good × u^(N_up-1)` *(cap bucket; includes all deeper chains; i.e. “hit the cap or go beyond it”)*
-
-**How tables may show the cap bucket (Option A):**
-- Some worked-example tables expand the cap bucket into:
-  - “Stop at the cap” (exactly `A = ±N_*`), and
-  - “Overflow; clamped” (the chain would go beyond `±N_*`, but `K` is clamped).
-- If an overflow row rounds to `0.00%`, the table may omit it for readability.
-
-All tier parameters are defined in the **Step 3** table above.
-
-**Safety rule (always true):** you can’t keep fewer than **0** pool stats, and you can’t keep more than the **pool size**.
-
-
-#### Step 5: Build the result and apply the cap
-##### 1. Plan total stats:
-   - Total stats = number of shared stats + number of pool stats kept
-##### 2. Build the list:
-   - Start with all **shared stats**, then add that many random stats from the **pool**.
-##### 3. Apply the cap last:
-   - If the total is above the item's **max stats slots**, remove extra stats until you reach the limit (remove pool-picked stats first).
-
-Imagine you’re forging these two **boots** (boots can only forge with boots):
-
-```
-Parent A: Ranger’s Boots
- - +1 Finesse
- - +0.5m Movement
- - +10% Fire Resistance
- - +1 Sneaking
-
-Parent B: Scout’s Boots
- - +1 Finesse
- - +0.5m Movement
- - +2 Initiative
- - +10% Air Resistance
-```
-
-Split into lists:
-- Shared stats (on both): `+1 Finesse`, `+0.5m Movement` → `S = 2`
-- Pool stats (not shared): `+10% Fire Resistance`, `+1 Sneaking`, `+2 Initiative`, `+10% Air Resistance` → `P = 4`
-
-Now calculate how many pool stats you keep:
-- Expected baseline: `E = floor((P + 1) / 3) = floor(5 / 3) = 1`
-- Suppose your luck adjustment roll comes out as `V = +1`
-- Pool stats kept (from the pool): `K = clamp(E + V, 0, P) = clamp(1 + 1, 0, 4) = 2`
-- Planned total before cap: `T = S + K = 2 + 2 = 4`
-
-Finally apply the overall rollable-slot cap:
-- Assume the rarity system gives the new item **Rare** → `OverallCap[Rare] = 5`
-- Final total: `Final = min(T, OverallCap) = min(4, 5) = 4`
-
-So you end up with:
-- The 2 shared stats (always)
-- Plus 2 of the pool stats (no trimming needed in this example)
-
 ---
 
-### 3.5. Safe vs YOLO forging
-<a id="35-safe-vs-yolo-forging"></a>
+### 3.4. Blue Stats
+<a id="34-blue-stats-channel"></a>
 
-These two standalone examples are meant to show the difference between:
-- **Safe forging**: many shared stats → stable outcomes (pool stats are just “bonus”).
-- **YOLO forging**: zero shared stats → pure variance (rare spikes are possible, but unreliable).
+#### 3.4.1. Blue Stats (definition)
+<a id="341-blue-stats-definition"></a>
 
-#### Safe forging (realistic cap: `OverallCap ≤ 5`, with skills/ExtraProperties competing)
-```
-Output rarity: Divine ⇒ `OverallCap[Divine] = 5` (default).
+Blue Stats are rollable numeric boosts (blue text stats) that appear on items based on their rarity. These include:
+- Attributes (Strength, Finesse, Intelligence, etc.)
+- Combat abilities (Warfare, Scoundrel, etc.)
+- Resistances (Fire, Poison, etc.)
+- Status chance effects ("X% chance to set Y")
+- Other numeric modifiers (Critical Chance, Accuracy, Initiative, Movement, Blocking, etc.)
 
-Item A: Divine Warhammer
- - Blue stats: +3 Strength, +2 Warfare, +15% Critical Chance, +20% Fire Resistance
- - Granted skill: Shout_Whirlwind
- - ExtraProperties: (present)
+#### 3.4.2. Shared vs pool (Blue Stats)
+<a id="32-the-two-stats-lists"></a>
 
-Item B: Divine Warhammer
- - Blue stats: +3 Strength, +2 Warfare, +15% Critical Chance, +20% Poison Resistance
- - Granted skill: (none)
- - ExtraProperties: (none)
-─────────────────────────────────────────
-Shared stats:
- - Blue: +3 Strength, +2 Warfare, +15% Critical Chance → `S = 3`
-Pool stats:
- - Blue pool candidates: +20% Fire Resistance, +20% Poison Resistance → `P = 2`
- - Skill slot (pool): Shout_Whirlwind (no skillbook; not shared) → `+1 slot`
- - ExtraProperties slot (pool): present on A only (no shared token guarantee) → `+1 slot`
-```
+- **Shared Blue Stats (Sb)**: blue stats lines on **both** parents (guaranteed).
+- **Pool Blue Stats size (Pb_size)**: blue stats lines that are **not shared** (unique to either parent). This is the combined pool candidates list from both parents.
 
-Inputs for this example:
-- `OverallCap[Divine] = 5`
-- Blue stats:
-  - `S = 3`
-  - `P = 2`
-  - `E = floor((P + 1) / 3) = floor(3 / 3) = 1`
-- Other rollables (compete under the same cap):
-  - `skillSlots_pool = 1`
-  - `extraPropertiesSlot_pool = 1`
+Key values:
+- `Sb`: Shared Blue Stats (count)
+- `Pb_size`: pool size for Blue Stats (candidate count)
+- `Pb`: modifiers from pool (kept/picked count) for Blue Stats
+- `Fb`: forged blue modifiers before overall trimming (`Fb = Sb + Pb`)
 
-This is the perfect example for **Safe Forging**:
-- With **3 shared blue stats**, you have a stable core.
-- Because the overall cap is **5**, the result must choose between pool blue stats and other pool slots (skill / ExtraProperties).
-
-Concrete outcome intuition:
-- If the blue-stats selection keeps `K = 1` pool stat (the expected baseline), the planned rollable total is:
-  - `Total = S + K + 1(skill) + 1(ExtraProperties) = 3 + 1 + 1 + 1 = 6`
-  - Over cap by 1 ⇒ the forge drops **one** pool slot with equal chance among pool slots.
-
-#### YOLO forging (realistic cap: `OverallCap ≤ 5`, everything competes)
-```
-Output rarity: Divine ⇒ `OverallCap[Divine] = 5` (default).
-
-Item A: Divine Warhammer
- - Blue stats: +3 Strength, +2 Warfare, +2 Two-Handed
- - Granted skill: Shout_Whirlwind
- - ExtraProperties: (present)
-
-Item B: Divine Warhammer
- - Blue stats: +15% Critical Chance, +15% Accuracy, +20% Fire Resistance
- - Granted skill: Target_SerratedEdge
- - ExtraProperties: (present, different; no shared token)
-─────────────────────────────────────────
-Shared stats:
- (none) → `S = 0`
-Pool stats:
- - Blue pool candidates: 6 lines → `P = 6`
- - Skill slot (pool): 1 slot (no shared; no skillbook) → `+1 slot`
- - ExtraProperties slot (pool): 1 slot (no shared token) → `+1 slot`
-```
-
-Inputs for this example:
-- `OverallCap[Divine] = 5`
-- Blue stats:
-  - `S = 0`
-  - `P = 6`
-  - `E = floor((P + 1) / 3) = floor(7 / 3) = 2`
-- Other rollables (compete under the same cap):
-  - `skillSlots_pool = 1`
-  - `extraPropertiesSlot_pool = 1`
-
-This is the perfect example for **YOLO forging**:
-- With **0 shared stats**, you have **no guarantees**. Everything is a roll from the pool.
-- Even if the blue-stats roll “wants” to keep many stats, the final result is hard-limited to **5 total rollable slots**.
-- Because skills and ExtraProperties are pool slots here, they have the same chance to be dropped as pool-picked blue stats if the result is over cap.
-
----
-
-### 3.6. Worked examples
+#### 3.4.3. Worked examples (Blue Stats)
 <a id="36-worked-examples-stats-modifiers"></a>
 
 vNext note:
-- The worked examples below focus on the **blue-stats selection step**.
-- The final forged item still applies the **overall rollable-slot cap** (`OverallCap[Rarity_out]`, max 5), and blue stats may be trimmed further if skills and/or ExtraProperties occupy slots.
+- The worked examples below focus on the **blue-stats selection step** (blue stats channel only).
+- To keep the tables readable and consistent, we assume:
+  - Output rarity is **Divine**, so `OverallCap = 5` (default).
+  - Other channels (Skills / ExtraProperties) do not occupy slots in these tables.
+- Therefore, any outcomes where the blue-stats result would exceed 5 are bucketed into **`5+`** (meaning “would be >5, then clamped by the overall cap”).
 
 #### Tier 1 (Pool size = 1, no chains)
 
@@ -902,22 +923,22 @@ Item A: Traveller’s Amulet
 Item B: Scout’s Amulet
  - +1 Aerotheurge
 ─────────────────────────────────────────
-Shared stats:
+Shared Blue Stats:
  - +1 Aerotheurge
-Pool stats:
+Pool Blue Stats:
  - +0.5m Movement
 ```
 
 Inputs for this example:
-- `S = 1` (Shared stats)
-- `P = 1` (Pool size)
-- `E = 0` (Expected baseline, special case for P = 1)
+- `Sb = 1` (Shared Blue Stats)
+- `Pb_size = 1` (Pool Blue Stats size)
+- `E = 0` (Expected baseline, special case for `P_size = 1`)
 
 Parameters used (Tier 1):
 - Cross-type: `p_bad=0%`, `p_neutral=60%`, `p_good=40%`, `d=0.00`, `u=0.00` (no chain)
 - Same-type: `p_bad=0%`, `p_neutral=42.86%`, `p_good=57.14%`, `d=0.00`, `u=0.00` (no chain)
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math) | Cross-type (default) | Same-type |
 | :---: | :---: | :---: | :--- | ---: | ---: |
 | 0 | 0 | 1 | Cross: `p_neutral = 60%`<br>Same: `p_neutral = 42.86%` | 60.00% | 42.86% |
 | +1 | 1 | 2 | Cross: `p_good = 40%` (no chain)<br>Same: `p_good = 57.14%` (no chain) | 40.00% | 57.14% |
@@ -935,29 +956,26 @@ Item B: Scholar’s Helmet
  - +2 Intelligence
  - +10% Water Resistance
 ─────────────────────────────────────────
-Shared stats:
+Shared Blue Stats:
  - +2 Intelligence
-Pool stats:
+Pool Blue Stats:
  - +10% Fire Resistance
  - +1 Loremaster
  - +10% Water Resistance
 ```
 
 Inputs for this example:
-- `S = 1` (Shared stats)
-- `P = 3` (Pool size)
-- `E = floor((P + 1) / 3) = floor(4 / 3) = 1` (Expected baseline)
+- `Sb = 1` (Shared Blue Stats)
+- `Pb_size = 3` (Pool Blue Stats size)
+- `E = floor((Pb_size + 1) / 3) = floor(4 / 3) = 1` (Expected baseline)
 
-Before applying the overall rollable-slot cap, the blue-stats selection step yields between **1** and **4** stats (**1** shared + **0–3** from the pool).
-
-Reminder (vNext realism):
-- The *final* forged item still applies `OverallCap[Rarity_out]` (max 5) across **blue stats + skills + ExtraProperties**; blue stats may be trimmed further if other rollables occupy slots.
+The blue-stats selection step yields between **1** and **4** blue modifiers (**1** shared + **0–3** from the pool).
 
 Parameters used (Tier 2):
 - Cross-type: `p_bad=14%`, `p_neutral=60%`, `p_good=26%`, `d=0.00`, `u=0.2423`
 - Same-type: `p_bad=11.11%`, `p_neutral=47.62%`, `p_good=41.27%`, `d=0.00`, `u=0.2423`
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math) | Cross-type (default) | Same-type |
 | :---: | :---: | :---: | :--- | ---: | ---: |
 | -1 | 0 | 1 | Cross: `p_bad = 14%` (no down-chain)<br>Same: `p_bad = 11.11%` | 14.00% | 11.11% |
 | 0 | 1 | 2 | Cross: `p_neutral = 60%`<br>Same: `p_neutral = 47.62%` | 60.00% | 47.62% |
@@ -978,10 +996,10 @@ Item B: Soldier’s One-Handed Axe
  - +12% Fire Resistance
  - 10% chance to set Bleeding
 ─────────────────────────────────────────
-Shared stats:
+Shared Blue Stats:
  - +1 Warfare
  - +10% Critical Chance
-Pool stats:
+Pool Blue Stats:
  - +1 Finesse
  - +2 Initiative
  - +12% Fire Resistance
@@ -989,27 +1007,22 @@ Pool stats:
 ```
 
 Inputs for this example:
-- `S = 2` (Shared stats)
-- `P = 4` (Pool size)
-- `E = floor((P + 1) / 3) = floor(5 / 3) = 1` (Expected baseline)
+- `Sb = 2` (Shared Blue Stats)
+- `Pb_size = 4` (Pool Blue Stats size)
+- `E = floor((Pb_size + 1) / 3) = floor(5 / 3) = 1` (Expected baseline)
 
-Before applying the overall rollable-slot cap, the blue-stats selection step yields between **2** and **6** stats (**2** shared + **0–4** from the pool).
-
-Reminder (vNext realism):
-- The *final* forged item still applies `OverallCap[Rarity_out]` (max 5) across **blue stats + skills + ExtraProperties**; blue stats may be trimmed further if other rollables occupy slots.
+The blue-stats selection step yields between **2** and **6** blue modifiers (**2** shared + **0–4** from the pool).
 
 Parameters used (Tier 2):
 - Cross-type: `p_bad=14%`, `p_neutral=60%`, `p_good=26%`, `d=0.00`, `u=0.2423`
 - Same-type: `p_bad=11.11%`, `p_neutral=47.62%`, `p_good=41.27%`, `d=0.00`, `u=0.2423`
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math) | Cross-type (default) | Same-type |
 | :---: | :---: | :---: | :--- | ---: | ---: |
 | -1 | 0 | 2 | Cross: `p_bad = 14%` (no down-chain)<br>Same: `p_bad = 11.11%` | 14.00% | 11.11% |
 | 0 | 1 | 3 | Cross: `p_neutral = 60%`<br>Same: `p_neutral = 47.62%` | 60.00% | 47.62% |
 | +1 | 2 | 4 | Cross: `p_good × (1-u) = 26% × 0.7577 = 19.70%`<br>Same: `p_good × 0.7577 = 41.27% × 0.7577 = 31.27%` | 19.70% | 31.27% |
-| +2 | 3 | 5 | Cross: `p_good × u × (1-u) = 26% × 0.2423 × 0.7577 = 4.77%`<br>Same: `p_good × 0.2423 × 0.7577 = 41.27% × 0.2423 × 0.7577 = 7.57%` | 4.77% | 7.57% |
-| +3 | 4 | 6 | Cross: `p_good × u^2 × (1-u) = 26% × 0.2423^2 × 0.7577 = 1.16%`<br>Same: `p_good × 0.2423^2 × 0.7577 = 41.27% × 0.2423^2 × 0.7577 = 1.83%` | 1.16% | 1.83% |
-| +3+ | 4 | 6 | Cross: `p_good × u^3 = 26% × 0.2423^3 = 0.37%` (overflow; clamped)<br>Same: `p_good × 0.2423^3 = 41.27% × 0.2423^3 = 0.59%` | 0.37% | 0.59% |
+| +2+ | 3+ | 5+ | Cross: `p_good × u = 26% × 0.2423 = 6.30%`<br>Same: `p_good × u = 41.27% × 0.2423 = 10.00%` | 6.30% | 10.00% |
 #### Tier 3 (Pool size = 5–7)
 
 ##### Example 1 (Pool size = 5)
@@ -1027,10 +1040,10 @@ Item B: Scout’s Boots
  - +10% Air Resistance
  - +10% Earth Resistance
 ─────────────────────────────────────────
-Shared stats:
+Shared Blue Stats:
  - +1 Finesse
  - +0.5m Movement
-Pool stats:
+Pool Blue Stats:
  - +2 Initiative
  - +10% Fire Resistance
  - +1 Sneaking
@@ -1039,28 +1052,22 @@ Pool stats:
 ```
 
 Inputs for this example:
-- `S = 2` (Shared stats)
-- `P = 5` (Pool size)
-- `E = floor((P + 1) / 3) = floor(6 / 3) = 2` (Expected baseline)
+- `Sb = 2` (Shared Blue Stats)
+- `Pb_size = 5` (Pool Blue Stats size)
+- `E = floor((Pb_size + 1) / 3) = floor(6 / 3) = 2` (Expected baseline)
 
-Before applying the overall rollable-slot cap, the blue-stats selection step yields between **2** and **7** stats (**2** shared + **0–5** from the pool).
-
-Reminder (vNext realism):
-- The *final* forged item still applies `OverallCap[Rarity_out]` (max 5) across **blue stats + skills + ExtraProperties**; blue stats may be trimmed further if other rollables occupy slots.
+The blue-stats selection step yields between **2** and **7** blue modifiers (**2** shared + **0–5** from the pool).
 
 Parameters used (Tier 3):
 - Cross-type: `p_bad=30%`, `p_neutral=52%`, `p_good=18%`, `d=0.30`, `u=0.25`
 - Same-type: `p_bad=25.42%`, `p_neutral=44.07%`, `p_good=30.51%`, `d=0.30`, `u=0.25`
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math) | Cross-type (default) | Same-type |
 | :---: | :---: | :---: | :--- | ---: | ---: |
 | -2 | 0 | 2 | Cross: `p_bad × d = 30% × 0.30 = 9.00%` (cap bucket)<br>Same: `p_bad × d = 25.42% × 0.30 = 7.63%` | 9.00% | 7.63% |
 | -1 | 1 | 3 | Cross: `p_bad × (1-d) = 30% × 0.70 = 21.00%`<br>Same: `p_bad × 0.70 = 25.42% × 0.70 = 17.80%` | 21.00% | 17.80% |
 | 0 | 2 | 4 | Cross: `p_neutral = 52%`<br>Same: `p_neutral = 44.07%` | 52.00% | 44.07% |
-| +1 | 3 | 5 | Cross: `p_good × (1-u) = 18% × 0.75 = 13.50%`<br>Same: `p_good × 0.75 = 30.51% × 0.75 = 22.88%` | 13.50% | 22.88% |
-| +2 | 4 | 6 | Cross: `p_good × u × (1-u) = 18% × 0.25 × 0.75 = 3.38%`<br>Same: `p_good × 0.25 × 0.75 = 30.51% × 0.25 × 0.75 = 5.72%` | 3.38% | 5.72% |
-| +3 | 5 | 7 | Cross: `p_good × u^2 × (1-u) = 18% × 0.25^2 × 0.75 = 0.84%`<br>Same: `p_good × 0.25^2 × 0.75 = 30.51% × 0.25^2 × 0.75 = 1.43%` | 0.84% | 1.43% |
-| +3+ | 5 | 7 | Cross: `p_good × u^3 = 18% × 0.25^3 = 0.28%` (overflow; clamped)<br>Same: `p_good × 0.25^3 = 30.51% × 0.25^3 = 0.48%` | 0.28% | 0.48% |
+| +1+ | 3+ | 5+ | Cross: `p_good = 18%`<br>Same: `p_good = 30.51%` | 18.00% | 30.51% |
 
 ##### Example 2 (Pool size = 7)
 ```
@@ -1077,9 +1084,9 @@ Item B: Champion’s Greatsword
  - +1 Pyrokinetic
  - +1 Aerotheurge
 ─────────────────────────────────────────
-Shared stats:
+Shared Blue Stats:
  - +1 Strength
-Pool stats:
+Pool Blue Stats:
  - +1 Warfare
  - +10% Critical Chance
  - +1 Two-Handed
@@ -1090,30 +1097,23 @@ Pool stats:
 ```
 
 Inputs for this example:
-- `S = 1` (Shared stats)
-- `P = 7` (Pool size)
-- `E = floor((P + 1) / 3) = floor(8 / 3) = 2` (Expected baseline)
+- `Sb = 1` (Shared Blue Stats)
+- `Pb_size = 7` (Pool Blue Stats size)
+- `E = floor((Pb_size + 1) / 3) = floor(8 / 3) = 2` (Expected baseline)
 
-Before applying the overall rollable-slot cap, the blue-stats selection step yields between **1** and **8** stats (**1** shared + **0–7** from the pool).
-
-Reminder (vNext realism):
-- The *final* forged item still applies `OverallCap[Rarity_out]` (max 5) across **blue stats + skills + ExtraProperties**; blue stats may be trimmed further if other rollables occupy slots.
+The blue-stats selection step yields between **1** and **8** blue modifiers (**1** shared + **0–7** from the pool).
 
 Parameters used (Tier 3):
 - Cross-type: `p_bad=30%`, `p_neutral=52%`, `p_good=18%`, `d=0.30`, `u=0.25`
 - Same-type: `p_bad=25.42%`, `p_neutral=44.07%`, `p_good=30.51%`, `d=0.30`, `u=0.25`
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math) | Cross-type (default) | Same-type |
 | :---: | :---: | :---: | :--- | ---: | ---: |
 | -2 | 0 | 1 | Cross: `p_bad × d = 30% × 0.30 = 9.00%` (cap bucket)<br>Same: `p_bad × d = 25.42% × 0.30 = 7.63%` | 9.00% | 7.63% |
 | -1 | 1 | 2 | Cross: `p_bad × (1-d) = 30% × 0.70 = 21.00%`<br>Same: `p_bad × 0.70 = 25.42% × 0.70 = 17.80%` | 21.00% | 17.80% |
 | 0 | 2 | 3 | Cross: `p_neutral = 52%`<br>Same: `p_neutral = 44.07%` | 52.00% | 44.07% |
 | +1 | 3 | 4 | Cross: `p_good × (1-u) = 18% × 0.75 = 13.50%`<br>Same: `p_good × 0.75 = 30.51% × 0.75 = 22.88%` | 13.50% | 22.88% |
-| +2 | 4 | 5 | Cross: `p_good × u × (1-u) = 18% × 0.25 × 0.75 = 3.38%`<br>Same: `p_good × 0.25 × 0.75 = 30.51% × 0.25 × 0.75 = 5.72%` | 3.38% | 5.72% |
-| +3 | 5 | 6 | Cross: `p_good × u^2 × (1-u) = 18% × 0.25^2 × 0.75 = 0.84%`<br>Same: `p_good × 0.25^2 × 0.75 = 30.51% × 0.25^2 × 0.75 = 1.43%` | 0.84% | 1.43% |
-| +4 | 6 | 7 | Cross: `p_good × u^3 × (1-u) = 18% × 0.25^3 × 0.75 = 0.21%`<br>Same: `p_good × 0.25^3 × 0.75 = 30.51% × 0.25^3 × 0.75 = 0.36%` | 0.21% | 0.36% |
-| +5 | 7 | 8 | Cross: `p_good × u^4 × (1-u) = 18% × 0.25^4 × 0.75 = 0.05%`<br>Same: `p_good × 0.25^4 × 0.75 = 30.51% × 0.25^4 × 0.75 = 0.09%` | 0.05% | 0.09% |
-| +5+ | 7 | 8 | Cross: `p_good × u^5 = 18% × 0.25^5 = 0.02%` (overflow; clamped)<br>Same: `p_good × 0.25^5 = 30.51% × 0.25^5 = 0.03%` | 0.02% | 0.03% |
+| +2+ | 4+ | 5+ | Cross: `p_good × u = 18% × 0.25 = 4.50%`<br>Same: `p_good × u = 30.51% × 0.25 = 7.63%` | 4.50% | 7.63% |
 
 #### Tier 4 (Pool size = 8+)
 
@@ -1131,9 +1131,9 @@ Item B: Kite Shield
  - +1 Leadership
  - +0.5m Movement
 ─────────────────────────────────────────
-Shared stats:
+Shared Blue Stats:
  (none)
-Pool stats:
+Pool Blue Stats:
  - +2 Constitution
  - Blocking +15
  - +2 Initiative
@@ -1145,32 +1145,30 @@ Pool stats:
 ```
 
 Inputs for this example:
-- `S = 0` (Shared stats)
-- `P = 8` (Pool size)
-- `E = floor((P + 1) / 3) = floor(9 / 3) = 3` (Expected baseline)
+- `Sb = 0` (Shared Blue Stats)
+- `Pb_size = 8` (Pool Blue Stats size)
+- `E = floor((Pb_size + 1) / 3) = floor(9 / 3) = 3` (Expected baseline)
 
-Before applying the overall rollable-slot cap, the blue-stats selection step yields between **0** and **8** stats (**0** shared + **0–8** from the pool).
+The blue-stats selection step yields between **0** and **8** blue modifiers (**0** shared + **0–8** from the pool).
   - This is “riskier crafting” in practice: fewer shared stats means more “unknown” stats in the pool.
 
 Parameters used (Tier 4):
 - Cross-type: `p_bad=33%`, `p_neutral=55%`, `p_good=12%`, `d=0.40`, `u=0.25`
 - Same-type: `p_bad=29.46%`, `p_neutral=49.11%`, `p_good=21.43%`, `d=0.40`, `u=0.25`
 
-| Luck adjustment<br>(A) | Stats from pool<br>(K) | Forged item Stats<br>(T) | Chance (math) | Cross-type (default) | Same-type |
+| Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math) | Cross-type (default) | Same-type |
 | :---: | :---: | :---: | :--- | ---: | ---: |
 | -3 | 0 | 0 | Cross: `p_bad × d^2 = 33% × 0.40^2 = 5.28%` (cap bucket)<br>Same: `p_bad × d^2 = 29.46% × 0.40^2 = 4.71%` | 5.28% | 4.71% |
 | -2 | 1 | 1 | Cross: `p_bad × d × (1-d) = 33% × 0.40 × 0.60 = 7.92%`<br>Same: `p_bad × 0.40 × 0.60 = 29.46% × 0.40 × 0.60 = 7.07%` | 7.92% | 7.07% |
 | -1 | 2 | 2 | Cross: `p_bad × (1-d) = 33% × 0.60 = 19.80%`<br>Same: `p_bad × 0.60 = 29.46% × 0.60 = 17.68%` | 19.80% | 17.68% |
 | 0 | 3 | 3 | Cross: `p_neutral = 55%`<br>Same: `p_neutral = 49.11%` | 55.00% | 49.11% |
 | +1 | 4 | 4 | Cross: `p_good × (1-u) = 12% × 0.75 = 9.00%`<br>Same: `p_good × 0.75 = 21.43% × 0.75 = 16.07%` | 9.00% | 16.07% |
-| +2 | 5 | 5 | Cross: `p_good × u × (1-u) = 12% × 0.25 × 0.75 = 2.25%`<br>Same: `p_good × 0.25 × 0.75 = 21.43% × 0.25 × 0.75 = 4.02%` | 2.25% | 4.02% |
-| +3 | 6 | 6 | Cross: `p_good × u^2 × (1-u) = 12% × 0.25^2 × 0.75 = 0.56%`<br>Same: `p_good × 0.25^2 × 0.75 = 21.43% × 0.25^2 × 0.75 = 1.00%` | 0.56% | 1.00% |
-| +4 | 7 | 7 | Cross: `p_good × u^3 × (1-u) = 12% × 0.25^3 × 0.75 = 0.14%`<br>Same: `p_good × 0.25^3 × 0.75 = 21.43% × 0.25^3 × 0.75 = 0.25%` | 0.14% | 0.25% |
-| +5 | 8 | 8 | Cross: `p_good × u^4 = 12% × 0.25^4 = 0.05%` (cap bucket)<br>Same: `p_good × 0.25^4 = 21.43% × 0.25^4 = 0.08%` | 0.05% | 0.08% |
+| +2+ | 5+ | 5+ | Cross: `p_good × u = 12% × 0.25 = 3.00%`<br>Same: `p_good × u = 21.43% × 0.25 = 5.36%` | 3.00% | 5.36% |
 
 ---
 
-## 4. ExtraProperties inheritance
+### 3.5. ExtraProperties
+<a id="35-extraproperties-channel"></a>
 <a id="4-extraproperties-inheritance"></a>
 
 This section defines how **ExtraProperties** are inherited when you forge.
@@ -1179,14 +1177,14 @@ In vNext, ExtraProperties is treated as its own channel:
 - ExtraProperties consumes **1** overall rollable slot if present (regardless of how many internal effects/tooltip lines it expands into).
 - The **internal content** (tokens) is merged/selected separately, with an internal cap based on the parents.
 
-### 4.1. ExtraProperties (definition)
+#### 3.5.1. ExtraProperties (definition)
 <a id="41-extraproperties-definition"></a>
 
 ExtraProperties is a semicolon-separated list of effects stored on the item (e.g. proc chances, statuses, immunities, surfaces).
 
 Important: the tooltip may show multiple lines, but for the overall cap, ExtraProperties is counted as **one slot**.
 
-### 4.2. Shared vs pool tokens
+#### 3.5.2. Shared vs pool tokens
 <a id="42-extraproperties-shared-vs-pool"></a>
 
 Parse each parent’s ExtraProperties string into ordered tokens:
@@ -1195,10 +1193,10 @@ Parse each parent’s ExtraProperties string into ordered tokens:
 - Normalise into a canonical key for identity comparisons (e.g. strip whitespace, normalise case where safe, and isolate the “effect type” portion).
 
 Then compute:
-- **Shared tokens**: tokens that match by canonical key on both parents (guaranteed to be kept, with parameter merge if applicable).
-- **Pool tokens**: tokens present on only one parent (rolled).
+- **Shared ExtraProperties (Sp)**: tokens that match by canonical key on both parents (guaranteed to be kept, with parameter merge if applicable).
+- **Pool ExtraProperties size (Pp_size)**: tokens present on only one parent (pool candidates).
 
-### 4.3. Selection + internal cap (max of parent lines)
+#### 3.5.3. Selection + internal cap (max of parent lines)
 <a id="43-extraproperties-selection--internal-cap"></a>
 
 Let:
@@ -1208,20 +1206,22 @@ Let:
 
 Build the output token list:
 1. Keep all shared tokens (merge parameters if the same token differs in numbers, using the same “merge then clamp” philosophy as blue stats).
-2. Roll additional tokens from the pool using the same selection philosophy as Section 3 (shared + pool + variance).
+2. Roll additional tokens from the pool using the selection rule in **Section 3.2**:
+   - `P_size = Pp_size`, `P = Pp`
 3. Clamp the final token list to `InternalCap`.
 
-### 4.4. Slot competition + trimming
+#### 3.5.4. Slot competition + trimming
 <a id="44-extraproperties-slot-competition--trimming"></a>
 
 ExtraProperties occupies one **slot** in the overall rollable cap.
 
 Rule:
-- If there is at least **one shared token**, the ExtraProperties slot is **guaranteed** to be present (it consumes 1 slot and is never dropped under cap pressure).
-- Otherwise, the ExtraProperties slot is a **pool slot**. If the forge result is over the overall cap, this slot can be dropped with the same probability as any other pool slot (blue stats or skills).
+- If `Sp ≥ 1`, the ExtraProperties slot is **guaranteed** to be present (it consumes 1 slot and is protected from overall-cap trimming).
+- Otherwise, the ExtraProperties slot is a **pool slot**. If the forge result is over the overall cap, this slot competes under the universal overall-cap trimming rule in **Section 3.2** (slot-weighted).
 
 ---
-## 5. Skills inheritance
+### 3.6. Skills
+<a id="36-skills-channel"></a>
 <a id="4-skills-inheritance"></a>
 This section defines how **granted skills** are inherited when you forge (vNext).
 
@@ -1234,7 +1234,7 @@ Here are what you can expect:
 - You can sometimes carry a skill across, or gain one from the ingredient pool, but you will always be limited by the rarity’s **skill cap** (default is 1 for all non-Unique rarities).
 - Even if a skill is gained by the skill rules, it can still be dropped later if the final item is over the **overall rollable-slot cap** and the skill is not protected (no skillbook lock; not shared).
 
-### 5.1. Granted skills (definition)
+#### 3.6.1. Granted skills (definition)
 <a id="41-granted-skills-definition"></a>
 
 - **Granted skill (rollable)**: any rollable boost/stats line that grants entries via a `Skills` field in its boost definition.
@@ -1256,7 +1256,7 @@ Here are what you can expect:
   - A **jewellery** must only ever roll/inherit **jewellery skill boosts**.
 - If you ever encounter “mixed” skills in runtime data, treat that as invalid input (or ignore the mismatched skill boosts).
 
-### 5.2. Skill cap by rarity
+#### 3.6.2. Skill cap by rarity
 <a id="42-skill-cap-by-rarity"></a>
 
 This is the maximum number of **rollable granted skills** on the forged item.
@@ -1277,7 +1277,7 @@ vNext: this cap is **default + learned per save**:
 
 *Unique is ignored for now (do not consider it in vNext balancing).*
 
-### 5.2.1. Skillbook lock (preserve by exact skill ID)
+#### 3.6.2.1. Skillbook lock (preserve by exact skill ID)
 <a id="421-skillbook-lock"></a>
 
 If the player inserts a skillbook into the dedicated forge UI slot, the forge must validate it against the parent item’s granted skill(s):
@@ -1289,18 +1289,18 @@ If the player inserts a skillbook into the dedicated forge UI slot, the forge mu
 If both parents have matching skillbooks:
 - The main-slot item’s (parent A) skill is the guaranteed inherited one.
 
-### 5.3. Shared vs pool skills
+#### 3.6.3. Shared vs pool skills
 <a id="43-shared-vs-pool-skills"></a>
 
 Split granted skills into two lists:
 
-- **Shared skills (Sₛ)**: granted skills present on **both** parents (kept unless we must trim due to cap overflow).
-- **Pool skills (Pₛ)**: granted skills present on **only one** parent (rolled).
+- **Shared Skills (Ss)**: granted skills present on **both** parents (kept unless we must trim due to cap overflow).
+- **Pool Skills size (Ps_size)**: granted skills present on **only one** parent (pool candidates).
 
 #### Skill identity (dedupe key)
 Use the **skill ID** as the identity key (e.g. `Shout_Whirlwind`, `Projectile_BouncingShield`), not the boost name.
 
-### 5.4. How skills are gained (gated fill)
+#### 3.6.4. How skills are gained (gated fill)
 <a id="44-how-skills-are-gained-gated-fill"></a>
 
 Skills are **more precious than stats**, so the skill channel does **not** use the stat-style “keep half the pool” baseline.
@@ -1311,10 +1311,10 @@ Instead, skills use a **cap + gated fill** model:
 - The chance to gain a skill **increases with pool size** (`P_remaining`).
 
 #### Key values (skills)
-- **Sₛ**: number of shared rollable skills (present on both parents).
-- **Pₛ**: number of pool rollable skills (present on only one parent).
-- **SkillCap**: from [Section 5.2](#42-skill-cap-by-rarity).
-- **FreeSlots**: `max(0, SkillCap - min(Sₛ, SkillCap))`
+- **Ss**: number of shared rollable skills (present on both parents).
+- **Ps_size**: number of pool rollable skills (present on only one parent).
+- **SkillCap**: from [Section 3.6.2](#42-skill-cap-by-rarity).
+- **FreeSlots**: `max(0, SkillCap - min(Ss, SkillCap))`
 
 #### Gain chance model (rarity + pool size)
 We define a per-attempt gain chance:
@@ -1360,7 +1360,7 @@ So the actual per-attempt gain chances are:
 | Divine | 1 | 20.0% | 40.0% |
 | Divine | 2 | 28.0% | 56.0% |
 
-### 5.5. Overflow + replace (type-modified)
+#### 3.6.5. Overflow + replace (type-modified)
 <a id="45-overflow--replace-5"></a>
 
 All randomness in this subsection is **host-authoritative** and driven by `forgeSeed` (see [Section 1.3](#13-deterministic-randomness-seed--multiplayer)).
@@ -1372,7 +1372,7 @@ All randomness in this subsection is **host-authoritative** and driven by `forge
 4. Fill free slots with gated gain rolls:
    - For each free slot (at most `freeSlots` attempts):
      - Let `P_remaining = len(poolSkills)`
-     - Roll a random number; success chance is `p_attempt` ([Section 5.4](#44-how-skills-are-gained-gated-fill)).
+     - Roll a random number; success chance is `p_attempt` ([Section 3.6.4](#44-how-skills-are-gained-gated-fill)).
      - If success: pick 1 random skill from `poolSkills`, add to `finalSkills`, remove it from `poolSkills`, and decrement `freeSlots`.
      - If failure: do nothing for that slot (skills are precious; you do not retry the same slot).
 5. Optional “replace” roll (type-modified):
@@ -1393,10 +1393,10 @@ With the optional replace roll, one possible final skills outcome is:
 
 Interpretation:
 - With default `SkillCap = 1`, only one skill can ever be kept.
-- If the gain roll succeeds (Section 5.4), one of the pool skills is selected.
+- If the gain roll succeeds (Section 3.6.4), one of the pool skills is selected.
 - If the gain roll succeeds and there is still another pool skill remaining, the optional replace roll can swap which single skill you end up with.
 
-### 5.6. Scenario tables
+#### 3.6.6. Scenario tables
 <a id="46-scenario-tables"></a>
 
 These tables show the probability of ending with **0 / 1** rollable granted skills under this skill model (default `SkillCap = 1`).
@@ -1406,20 +1406,20 @@ Notes:
 - They **ignore the optional replace roll** (10% cross-type / 5% same-type), because replace mainly changes *which* skill you have, not the cap itself.
 - Weapon pools only contain weapon skills; shield pools only contain shield skills.
 
-#### Scenario A: `Sₛ = 0`, `Pₛ ≥ 1` (no shared skill; at most one can be gained)
+#### Scenario A: `Ss = 0`, `Ps_size ≥ 1` (no shared skill; at most one can be gained)
 
 With default `SkillCap = 1`, there is only **one** free slot. Therefore:
 - `P(final 1 skill) = p_attempt`
 - `P(final 0 skills) = 1 - p_attempt`
 
-Use the `p_attempt` table in **Section 5.4** for the actual values.
+Use the `p_attempt` table in **Section 3.6.4** for the actual values.
 
-#### Scenario B: `Sₛ ≥ 1` (shared skill exists)
+#### Scenario B: `Ss ≥ 1` (shared skill exists)
 
 With default `SkillCap = 1`, any shared skill consumes the entire skill cap:
 - Final is always **1 skill** (the shared one), unless later dropped by the **overall rollable-slot cap** (if not protected by the skillbook lock/shared rule).
 
-### 5.7. Worked example (Divine)
+#### 3.6.7. Worked example (Divine)
 <a id="47-worked-example-divine"></a>
 
 This is a **weapon** example (weapon-only skill boosts).
@@ -1434,8 +1434,8 @@ Parent B granted skills:
 - `Projectile_SkyShot`
 
 Split into lists (deduped by skill ID):
-- Shared skills `Sₛ = 0`: (none)
-- Pool skills `Pₛ = 2`: `Shout_Whirlwind`, `Projectile_SkyShot`
+- Shared skills `Ss = 0`: (none)
+- Pool skills `Ps_size = 2`: `Shout_Whirlwind`, `Projectile_SkyShot`
 
 Compute free slots:
 - `SkillCap = 1`
@@ -1453,7 +1453,7 @@ Final skills before cap:
 
 Apply `SkillCap = 1`:
 - If you gained a skill: you are at cap.
-- If you gained a skill and one pool skill remains, the optional replace roll (Section 5.5) can still swap which single skill you end up with.
+- If you gained a skill and one pool skill remains, the optional replace roll (Section 3.6.5) can still swap which single skill you end up with.
 
 Result:
 Result (vNext):
@@ -1461,7 +1461,8 @@ Result (vNext):
 - It will have at most `SkillCap[Divine]` rollable granted skills (default+learned per save).
 
 ---
-## 6. Rune slots inheritance
+## 4. Rune slots inheritance
+<a id="4-rune-slots-inheritance"></a>
 <a id="5-rune-slots-inheritance"></a>
 
 This section defines how many **empty rune slots** the forged item ends up with.
@@ -1493,7 +1494,8 @@ Examples (non-Unique):
 | 0 | 1 | 1 with 50%, else 0 | 1 (100%) |
 | 1 | 0 | 1 with 50%, else 0 | 1 (100%) |
 ---
-## 7. Implementation reference 
+## 5. Implementation reference 
+<a id="5-implementation-reference"></a>
 <a id="6-implementation-reference"></a>
 
 This section is a developer reference for implementing the rules in this document.

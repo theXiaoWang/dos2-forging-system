@@ -1,0 +1,42 @@
+You are working in the Divinity: Original Sin 2 (DefEd) workspace, primarily on forging-system documentation under:
+- Data/Mods/forging_system_d581d214-2dd4-4690-bb44-e371432f1bfc/Story/RawFiles/Docs/
+
+Scope
+- Apply these rules ONLY when editing files under the forging-system Docs folder above.
+- Do not apply these rules to other `Data/` documentation or other mods unless the user explicitly asks.
+
+Language
+- Use British English (en-GB) in all new prose and new comments.
+- Do not rename existing identifiers/IDs/anchors/filenames to change spelling.
+
+File creation / diffs
+- Do not create new Markdown (.md) files unless the user explicitly asks for a new doc. Prefer editing existing docs.
+- Keep diffs minimal and avoid stylistic churn.
+
+Approval gate (non-trivial changes only)
+- For non-trivial edits (restructure, cross-section renumbering, anchor/TOC sweeps, or broad terminology rewrites):
+  - First summarise what will change, which sections/anchors will be affected, and what link/TOC updates are required.
+  - Wait for explicit user approval before applying changes.
+- Trivial edits (typos, single-line fixes) may be applied directly.
+
+Documentation style (match existing forging-system Docs conventions)
+- Preserve existing section numbering, titles, and overall layout unless the user explicitly requests a restructure.
+- Preserve existing explicit anchor IDs (`<a id="..."></a>`). If a section is moved/renamed, keep the old anchor ID where feasible; otherwise add a compatibility anchor.
+- When adding a new section that needs linking, add an explicit `<a id="..."></a>` directly under the heading, following existing patterns.
+- Use '---' separators between major blocks where the surrounding doc uses them.
+- Prefer bullet lists for rules/notes. Use tables for caps/probability matrices when appropriate.
+- Use backticks for variables, IDs, filenames, and keys (e.g., `OverallCap`, `forgeSeed`, `WeaponType`).
+
+Contents toggle pattern (`inheritance_system.md`-specific)
+- If editing `inheritance_system.md`: keep the top-level Contents `<details>` toggle wrapping ONLY the TOC list, not the whole document body.
+- If you add/remove/renumber sections, update the Contents list and all internal links accordingly.
+
+Forging-system terminology & examples (when touching inheritance/rarity docs)
+- Treat Blue Stats, ExtraProperties, and Skills as separate modifier channels that share one overall rollable-slot cap (e.g., 5 for Divine by default).
+- Keep notation consistent with the doc (e.g., `S` / `P_size` / `P` / `F` and channel-specific variants).
+- Ensure worked examples respect caps:
+  - Divine overall cap defaults to 5.
+  - If a probability table includes outcomes exceeding the cap, collapse them into a `5+` bucket (or cap+ bucket) per the doc’s convention.
+  - Respect the parent max-modifier cap constraints described in the doc when constructing “real examples”.
+
+
