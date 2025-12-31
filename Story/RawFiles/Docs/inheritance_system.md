@@ -536,7 +536,7 @@ In vNext, stats modifiers are split into three dedicated channels, each with its
 
 The forged item applies one shared cap across these channels:
 
-- `OverallCap[Rarity_out]` (default max 5 for Divine; default+learned per save; see [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap))
+- `OverallCap[Rarity_out, ItemType_out]` (default+learned per save, tracked per (rarity, item type) pair; see [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap))
 
 ### 3.1. Introduction + design principles
 
@@ -563,7 +563,7 @@ This selection rule is **universal** for all three modifier channels:
 - **ExtraProperties** ([Section 3.5](#4-extraproperties-inheritance))
 - **Skills** ([Section 3.6](#4-skills-inheritance))
 
-Each channel has its own **unshared pool candidates list** and is selected independently, then everything competes under the single **overall rollable slots cap** (`OverallCap`, max 5 by default for Divine).
+Each channel has its own **unshared pool candidates list** and is selected independently, then everything competes under the single **overall rollable slots cap** (`OverallCap[Rarity_out, ItemType_out]`, default+learned per save, tracked per (rarity, item type) pair).
 
 #### Universal notation (used across all channels)
 
@@ -718,7 +718,7 @@ Then:
 
 **Cap bucket (why it exists and how tables show it):**
 
-The cap bucket represents cases where `A` would theoretically go beyond `±N_*`, but is clamped. This is particularly relevant because the default overall cap for Divine is **5** (see [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap)). Even if `A` could add more pool stats, the final forged item is limited by `OverallCap`, so higher `A` values that would result in more than 5 total forged stats are impractical.
+The cap bucket represents cases where `A` would theoretically go beyond `±N_*`, but is clamped. This is particularly relevant because the final forged item is limited by `OverallCap[Rarity_out, ItemType_out]` (see [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap)). Even if `A` could add more pool stats, the final forged item is limited by the cap for that specific (rarity, item type) pair, so higher `A` values that would result in more than the cap total forged stats are impractical.
 
 Some worked-example tables expand the cap bucket into:
 
@@ -737,7 +737,7 @@ For a given channel:
 
 #### Step 5: Apply the overall modifier cap (cross-channel)
 
-The forged item has a single cap `OverallCap[Rarity_out]` across:
+The forged item has a single cap `OverallCap[Rarity_out, ItemType_out]` across:
 
 - Blue stats
 - ExtraProperties (slot)
@@ -787,15 +787,16 @@ Split into lists:
 
 Now calculate how many pool stats you keep:
 
+- Pool size `Pb_size = 4` → **Tier 2** (pool size 2–4)
 - Expected baseline: `E = floor((Pb_size + 1) / 3) = floor(5 / 3) = 1`
-- Suppose your luck adjustment roll comes out as `V = +1`
-- Modifiers from pool (kept): `Pb = clamp(E + V, 0, Pb_size) = clamp(1 + 1, 0, 4) = 2`
+- Suppose your luck adjustment roll comes out as `A = +1`
+- Modifiers from pool (kept): `Pb = clamp(E + A, 0, Pb_size) = clamp(1 + 1, 0, 4) = 2`
 - Planned forged blue modifiers (before overall trimming): `Fb = Sb + Pb = 2 + 2 = 4`
 
 Finally apply the overall rollable-slot cap:
 
-- Assume the rarity system gives the new item **Rare** → `OverallCap[Rare] = 5`
-- Final (blue only, no other channels in this example): `Final = min(Fb, OverallCap) = min(4, 5) = 4`
+- Assume the rarity system gives the new item **Legendary Boots** → `OverallCap[Legendary, Boots] = 4` (default, or learned if higher)
+- Final (blue only, no other channels in this example): `Final = min(Fb, OverallCap) = min(4, 4) = 4`
 
 So you end up with:
 
@@ -822,7 +823,7 @@ These two standalone examples are meant to show the difference between:
 #### Safe forging (realistic cap: `OverallCap ≤ 5`, with skills/ExtraProperties competing)
 
 ```
-Output rarity: Divine ⇒ `OverallCap[Divine] = 5` (default).
+Output rarity: Divine ⇒ `OverallCap[Divine, Warhammer] = 5` (default, or learned if higher).
 
 Item A: Divine Warhammer
  - Blue stats: +3 Strength, +2 Warfare, +15% Critical Chance, +20% Fire Resistance  (4)
@@ -842,7 +843,7 @@ Pool candidates (unshared, per channel):
 
 Inputs for this example:
 
-- `OverallCap[Divine] = 5`
+- `OverallCap[Divine, Warhammer] = 5` (default, or learned if higher)
 - Shared totals (protected): `S_total = Sb + Ss + Sp = 3 + 0 + 0 = 3`
 
 This is the perfect example for **Safe Forging**:
@@ -867,7 +868,7 @@ Concrete outcome intuition:
 #### YOLO forging (realistic cap: `OverallCap ≤ 5`, everything competes)
 
 ```
-Output rarity: Divine ⇒ `OverallCap[Divine] = 5` (default).
+Output rarity: Divine ⇒ `OverallCap[Divine, Warhammer] = 5` (default, or learned if higher).
 
 Item A: Divine Warhammer
  - Blue stats: +3 Strength, +2 Warfare, +2 Two-Handed, +15% Accuracy  (4)
@@ -887,7 +888,7 @@ Pool candidates (unshared, per channel):
 
 Inputs for this example:
 
-- `OverallCap[Divine] = 5`
+- `OverallCap[Divine, Warhammer] = 5` (default, or learned if higher)
 
 This is the perfect example for **YOLO forging**:
 
@@ -1035,7 +1036,7 @@ vNext note:
 
 - The worked examples below focus on the **blue-stats selection step** (blue stats channel only).
 - To keep the tables readable and consistent, we assume:
-  - Output rarity is **Divine**, so `OverallCap = 5` (default).
+  - Output rarity is **Divine**, so `OverallCap[Divine, ItemType] = 5` (default, or learned if higher).
   - Other channels (Skills / ExtraProperties) do not occupy slots in these tables.
 - Therefore, any outcomes where the blue-stats result would exceed 5 are bucketed into **`5+`** (meaning “would be >5, then clamped by the overall cap”).
 
@@ -1653,7 +1654,7 @@ Apply `SkillCap = 1`:
 Result:
 Result (vNext):
 
-- The forged item can roll up to `OverallCap[Divine]` **overall rollable slots** (blue stats + ExtraProperties + skills), where `OverallCap` is default+learned per save.
+- The forged item can roll up to `OverallCap[Divine, ItemType]` **overall rollable slots** (blue stats + ExtraProperties + skills), where `OverallCap` is default+learned per save, tracked per (rarity, item type) pair.
 - It will have at most `SkillCap[Divine]` rollable granted skills (default+learned per save).
 
 ---
