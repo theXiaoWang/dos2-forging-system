@@ -530,9 +530,9 @@ This section defines how **stats modifiers** are inherited when you forge.
 
 In vNext, stats modifiers are split into three dedicated channels, each with its own unshared pool:
 
-- **Blue Stats**: numeric “blue text” boosts like Strength, crit, resistances, etc.
-- **ExtraProperties**: semicolon-separated tokens (counts as **1 slot** overall if present)
-- **Skills**: rollable granted skills (each counts as **1 slot** overall)
+- **Blue Stats**: numeric "blue text" boosts like Strength, crit, resistances, etc.
+- **ExtraProperties**: semicolon-separated tokens like proc chances, statuses, immunities, surfaces (counts as **1 slot** overall if present)
+- **Skills**: rollable granted skills like Shout_Whirlwind, Projectile_BouncingShield, Target_Restoration (each counts as **1 slot** overall)
 
 The forged item applies one shared cap across these channels:
 
@@ -550,8 +550,8 @@ Design principles:
 
 The universal rules are defined next:
 
-- **Selection rule + overall cap trimming** (Section 3.2)
-- **Merging rule** (Section 3.3)
+- **Selection rule + overall cap trimming** ([Section 3.2](#34-selection-rule-shared--pool--cap))
+- **Merging rule** ([Section 3.3](#33-merging-rule-how-numbers-are-merged))
 
 ### 3.2. Selection rule (all modifiers)
 
@@ -613,13 +613,24 @@ E =
 \end{cases}
 $$
 
-#### Step 3: Choose the tier (sets luck odds)
+#### Step 3: Roll the luck adjustment (first roll + chain)
 
-The tier depends only on **pool size**:
+The system samples a **luck adjustment** `A` using a "first roll + chain" model.
+This `A` is a **variance** added to the expected baseline **E**, changing how many pool stats you keep.
+
+**What Bad/Neutral/Good rolls mean:**
+
+- The system rolls **Bad/Neutral/Good** to determine a luck adjustment `A`:
+  - **Bad roll**: `A = -1` (you keep **1 less** than the baseline `E`)
+  - **Neutral roll**: `A = 0` (you keep the **same as** the baseline `E`)
+  - **Good roll**: `A = +1` (you keep **1 more** than the baseline `E`)
+- The first roll sets `A` to one of these three values: `-1`, `0`, or `+1`
+- Chains can then modify `A` further (see below)
+- The final pool count is `P = E + A` (clamped between 0 and `P_size`)
 
 | Pool size | Tier           | First roll chances (Bad / Neutral / Good) | Chain chance (Down / Up) |
 | :-------- | :------------- | :---------------------------------------- | :----------------------- |
-| **1**     | Tier 1 (Safe)  | `0% / 60% / 40%`                          | None                     |
+| **1**     | Tier 1 (Safe)  | `0% / 50% / 50%`                          | None                     |
 | **2–4**   | Tier 2 (Early) | `14% / 60% / 26%`                         | `0% / 24.23%`            |
 | **5–7**   | Tier 3 (Mid)   | `30% / 52% / 18%`                         | `30% / 25%`              |
 | **8+**    | Tier 4 (Risky) | `33% / 55% / 12%`                         | `40% / 25%`              |
@@ -662,28 +673,24 @@ Then normalise:
 $$Z=w_{bad}+w_{neutral}+w_{good}$$
 $$p_{bad,same}=w_{bad}/Z,\ \ p_{neutral,same}=w_{neutral}/Z,\ \ p_{good,same}=w_{good}/Z$$
 
-#### Step 4: Roll the luck adjustment (can chain)
-
-The system samples a **luck adjustment** `A` using a "first roll + chain" model.
-This `A` is a **variance** added to the expected baseline **E**, changing how many pool stats you keep:
-
-- **Bad roll** (`A < 0`): you keep fewer pool stats than the baseline.
-- **Neutral roll** (`A = 0`): you keep the expected baseline.
-- **Good roll** (`A > 0`): you keep more pool stats than the baseline.
-
-##### First roll (choose Bad / Neutral / Good)
+**First roll (choose Bad / Neutral / Good):**
 
 Each tier defines `p_bad`, `p_neutral`, `p_good` (sum to 100%).
 
-##### Chain (push further down/up)
+The first roll sets the initial value of `A`:
 
-If the first roll is:
+- **Bad roll**: `A = -1`
+- **Neutral roll**: `A = 0` (stops here, no chain)
+- **Good roll**: `A = +1`
 
-- **Bad**: set `A = -1`, then repeatedly apply a **down-chain** with probability `p_chain_down`:
+**Chain (push further down/up):**
+
+After the first roll, chains can modify `A` further:
+
+- **If first roll was Bad** (`A = -1`): repeatedly apply a **down-chain** with probability `p_chain_down`:
   - on success: `A -= 1` and try again
   - on failure: stop
-- **Neutral**: set `A = 0` and stop
-- **Good**: set `A = +1`, then repeatedly apply an **up-chain** with probability `p_chain_up`:
+- **If first roll was Good** (`A = +1`): repeatedly apply an **up-chain** with probability `p_chain_up`:
   - on success: `A += 1` and try again
   - on failure: stop
 
@@ -709,18 +716,18 @@ Then:
   `P(A = +n) = p_good × u^(n-1) × (1 - u)`
 - `P(A = +N_up) = p_good × u^(N_up-1)` _(cap bucket; includes all deeper chains; i.e. "hit the cap or go beyond it")_
 
-**How tables may show the cap bucket (Option A):**
+**Cap bucket (why it exists and how tables show it):**
 
-- Some worked-example tables expand the cap bucket into:
-  - "Stop at the cap" (exactly `A = ±N_*`), and
+The cap bucket represents cases where `A` would theoretically go beyond `±N_*`, but is clamped. This is particularly relevant because the default overall cap for Divine is **5** (see [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap)). Even if `A` could add more pool stats, the final forged item is limited by `OverallCap`, so higher `A` values that would result in more than 5 total forged stats are impractical.
+
+Some worked-example tables expand the cap bucket into:
+
+- "Stop at the cap" (exactly `A = ±N_*`), and
 - "Overflow; clamped" (the chain would go beyond `±N_*`, but `P` is clamped).
-- If an overflow row rounds to `0.00%`, the table may omit it for readability.
-
-All tier parameters are defined in the **Step 3** table above.
 
 **Safety rule (always true):** you can't keep fewer than **0** pool modifiers, and you can't keep more than the **pool size**.
 
-#### Step 5: Build the per-channel result list
+#### Step 4: Build the per-channel result list
 
 For a given channel:
 
@@ -728,7 +735,7 @@ For a given channel:
 2. Add **P** random modifiers from the channel's pool candidates list (uniformly).
 3. This yields the channel's planned result count: `F = S + P`.
 
-#### Step 6: Apply the overall modifier cap (cross-channel)
+#### Step 5: Apply the overall modifier cap (cross-channel)
 
 The forged item has a single cap `OverallCap[Rarity_out]` across:
 
@@ -1058,13 +1065,13 @@ Inputs for this example:
 
 Parameters used (Tier 1):
 
-- Cross-type: `p_bad=0%`, `p_neutral=60%`, `p_good=40%`, `d=0.00`, `u=0.00` (no chain)
-- Same-type: `p_bad=0%`, `p_neutral=42.86%`, `p_good=57.14%`, `d=0.00`, `u=0.00` (no chain)
+- Cross-type: `p_bad=0%`, `p_neutral=50%`, `p_good=50%`, `d=0.00`, `u=0.00` (no chain)
+- Same-type: `p_bad=0%`, `p_neutral=50%`, `p_good=50%`, `d=0.00`, `u=0.00` (no chain)
 
-| Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math)                                                          | Cross-type (default) | Same-type |
-| :--------------------: | :-------------------------: | :---------------------------: | :--------------------------------------------------------------------- | -------------------: | --------: |
-|           0            |              0              |               1               | Cross: `p_neutral = 60%`<br>Same: `p_neutral = 42.86%`                 |               60.00% |    42.86% |
-|           +1           |              1              |               2               | Cross: `p_good = 40%` (no chain)<br>Same: `p_good = 57.14%` (no chain) |               40.00% |    57.14% |
+| Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math)                                                       | Cross-type (default) | Same-type |
+| :--------------------: | :-------------------------: | :---------------------------: | :------------------------------------------------------------------ | -------------------: | --------: |
+|           0            |              0              |               1               | Cross: `p_neutral = 50%`<br>Same: `p_neutral = 50%`                 |               50.00% |    50.00% |
+|           +1           |              1              |               2               | Cross: `p_good = 50%` (no chain)<br>Same: `p_good = 50%` (no chain) |               50.00% |    50.00% |
 
 #### Tier 2 (Pool size = 2–4)
 
