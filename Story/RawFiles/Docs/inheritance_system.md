@@ -750,7 +750,7 @@ This section defines how we trim when `F_total > OverallCap`.
 - Shared modifiers are protected (not dropped by cap trimming).
 - ExtraProperties slot is protected if `Sp ≥ 1` (shared ExtraProperties exists).
 
-**Fair trimming rule (Option A, slot-weighted):**
+**Trimming rule (slot-weighted):**
 
 - After protected/shared slots are counted, the remaining slots are allocated by rolling between _pending pool-picked slots_.
 - Weight per channel is:
@@ -789,23 +789,23 @@ Now calculate how many pool stats you keep:
 
 - Pool size `Pb_size = 4` → **Tier 2** (pool size 2–4)
 - Expected baseline: `E = floor((Pb_size + 1) / 3) = floor(5 / 3) = 1`
-- Suppose your luck adjustment roll comes out as `A = +1`
-- Modifiers from pool (kept): `Pb = clamp(E + A, 0, Pb_size) = clamp(1 + 1, 0, 4) = 2`
-- Planned forged blue modifiers (before overall trimming): `Fb = Sb + Pb = 2 + 2 = 4`
+- First roll: Good roll → `A = +1`
+- Chain up: Chain succeeds → `A = +2` (final luck adjustment)
+- Modifiers from pool (kept): `Pb = clamp(E + A, 0, Pb_size) = clamp(1 + 2, 0, 4) = 3`
+- Planned forged blue modifiers (before overall trimming): `Fb = Sb + Pb = 2 + 3 = 5`
 
 Finally apply the overall rollable-slot cap:
 
 - Assume the rarity system gives the new item **Legendary Boots** → `OverallCap[Legendary, Boots] = 4` (default, or learned if higher)
-- Final (blue only, no other channels in this example): `Final = min(Fb, OverallCap) = min(4, 4) = 4`
+- Final (blue only, no other channels in this example): `Final = min(Fb, OverallCap) = min(5, 4) = 4`
 
 So you end up with:
 
 - The 2 shared blue stats (always)
-- Plus 2 of the pool blue stats (no trimming needed in this example)
+- Plus 2 of the pool blue stats (3 were kept from the pool, but 1 was trimmed by the overall cap)
 
 #### Corner cases (park for later work)
 
-- **Protection stacking vs OverallCap**: if multiple "protected" sources (shared modifiers, skillbook lock, `Sp ≥ 1` protecting the EP slot) ever imply more than `OverallCap`, the system needs an explicit priority rule for what breaks first.
 - **ExtraProperties internal payload vs 1-slot accounting**: `Sp ≥ 1` can guarantee the EP slot, but internal token selection (`Pp_size → Pp`, clamped by `InternalCap`) may still represent multiple tooltip lines. This may skew balance compared to blue stats/skills.
 - **Parent max-modifier cap implications**: if parent items themselves are capped to 5 total modifiers (blue + skills + EP slot), some pool sizes become impossible in certain scenarios (e.g. `Sb = 4` and EP present implies `Pb_size = 0` on both parents).
 
@@ -1350,7 +1350,7 @@ Then compute:
 - **Shared ExtraProperties (Sp)**: tokens that match by canonical key on both parents (guaranteed to be kept, with parameter merge if applicable).
 - **Pool ExtraProperties size (Pp_size)**: tokens present on only one parent (pool candidates).
 
-#### 3.5.3. Selection + internal cap (max of parent lines)
+#### 3.5.3. Selection + internal cap (max of parent lines, with same-count bonus)
 
 <a id="43-extraproperties-selection--internal-cap"></a>
 
@@ -1358,14 +1358,33 @@ Let:
 
 - `A = tokenCount(parentA)`
 - `B = tokenCount(parentB)`
-- `InternalCap = max(A, B)`
+- `InternalCap = max(A, B)` (base cap)
+
+**Same-count bonus rule:**
+
+If both parents have the same number of EP tokens (`A == B`) AND the forged item inherits the ExtraProperties slot (either through shared EP `Sp ≥ 1` or through pool selection), the internal cap gets a **+1 bonus**:
+
+- `InternalCap = A + 1` (allows inheriting all unique tokens from both parents)
+
+**When the bonus applies:**
+
+- Both parents have the same token count (`A == B`)
+- The forged item inherits the ExtraProperties slot (protected by `Sp ≥ 1`, or selected from pool)
+
+**When the bonus does NOT apply:**
+
+- Parents have different token counts (`A != B`) → use `InternalCap = max(A, B)`
+- The forged item does not inherit the ExtraProperties slot
 
 Build the output token list:
 
-1. Keep all shared tokens (merge parameters if the same token differs in numbers, using the same “merge then clamp” philosophy as blue stats).
-2. Roll additional tokens from the pool using the selection rule in **Section 3.2**:
+1. Keep all shared tokens (merge parameters if the same token differs in numbers, using the same "merge then clamp" philosophy as blue stats).
+2. Determine `InternalCap`:
+   - If `A == B` and EP slot is inherited: `InternalCap = A + 1`
+   - Otherwise: `InternalCap = max(A, B)`
+3. Roll additional tokens from the pool using the selection rule in **Section 3.2**:
    - `P_size = Pp_size`, `P = Pp`
-3. Clamp the final token list to `InternalCap`.
+4. Clamp the final token list to `InternalCap`.
 
 #### 3.5.4. Slot competition + trimming
 
@@ -1377,6 +1396,41 @@ Rule:
 
 - If `Sp ≥ 1`, the ExtraProperties slot is **guaranteed** to be present (it consumes 1 slot and is protected from overall-cap trimming).
 - Otherwise, the ExtraProperties slot is a **pool slot**. If the forge result is over the overall cap, this slot competes under the universal overall-cap trimming rule in **Section 3.2** (slot-weighted).
+
+**Examples:**
+
+**Example 1: Same count with bonus**
+
+```
+Parent A: "Poison Immunity; Set Silence for 2 turns 10% chance" (2 tokens)
+Parent B: "Poison Immunity; Set Warm Always" (2 tokens)
+─────────────────────────────────────────
+Shared: "Poison Immunity" → `Sp = 1` (1 token, EP slot protected)
+Pool: "Set Silence for 2 turns 10% chance", "Set Warm Always" → `Pp_size = 2`
+─────────────────────────────────────────
+InternalCap determination:
+- `A == B == 2` (same count)
+- EP slot is inherited (protected by `Sp ≥ 1`)
+- `InternalCap = 2 + 1 = 3` (bonus applies)
+─────────────────────────────────────────
+Result: All 3 tokens possible:
+- "Poison Immunity" (shared, guaranteed)
+- "Set Silence for 2 turns 10% chance" (from pool, if selected)
+- "Set Warm Always" (from pool, if selected)
+```
+
+**Example 2: Different counts (no bonus)**
+
+```
+Parent A: "Poison Immunity; Set Silence for 2 turns 10% chance" (2 tokens)
+Parent B: "Set Warm Always" (1 token)
+─────────────────────────────────────────
+Shared: (none) → `Sp = 0`
+Pool: "Poison Immunity", "Set Silence for 2 turns 10% chance", "Set Warm Always" → `Pp_size = 3`
+InternalCap: Since `A != B`, use `max(2, 1) = 2` (no bonus)
+─────────────────────────────────────────
+Result: Capped at 2 tokens maximum
+```
 
 ---
 
