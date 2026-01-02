@@ -508,3 +508,116 @@ IF (Length(poolSkills) > 0 AND Length(finalSkills) > 0 AND RollPercentSeeded(for
 ApplyGrantedSkillsToForgedItem(finalSkills)
 ```
 
+### Weapon boost inheritance pseudocode
+
+```python
+# WEAPON BOOST INHERITANCE (WEAPONS ONLY)
+# - Weapon boosts are discrete boost entries (elemental damage, armour-piercing, etc.)
+# - Determines both boost kind (Fire, Water, Poison, Air, Earth, ArmourPiercing) and tier (Small, Untiered, Medium, Large)
+# - Uses shared/pool model with tier merging rules
+
+// Step 0: Determine presence
+if (both parents have boosts):
+    has_boost = true  // Shared, deterministic
+else if (exactly one parent has boost):
+    if (TypeMatch == true):
+        has_boost = true  // Same-type: 100% (2× capped)
+    else:
+        has_boost = random_choice(true, false)  // Cross-type: 50%
+else:
+    has_boost = false  // Neither has boost
+
+if (!has_boost):
+    return no_boost
+
+// Step 1: Determine boost kind (main slot priority)
+if (slot1 has boost):
+    K_out = K_slot1  // Main slot decides
+else if (slot2 has boost):
+    K_out = K_slot2  // Fallback to secondary slot
+
+// Step 2: Determine tier
+// Helper function: map tier name to numeric value within boost kind's system
+function map_tier_to_boost_kind_system(tier_name, boost_kind):
+    if (boost_kind is 4-tier):  // Elemental, ArmourPiercing
+        if (tier_name == "Small"): return 0
+        if (tier_name == "Untiered"): return 1
+        if (tier_name == "Medium"): return 2
+        if (tier_name == "Large"): return 3
+    else if (boost_kind is 3-tier):  // Vampiric, MagicArmourRefill
+        if (tier_name == "Small"): return 0  // Map Small to Untiered (lowest)
+        if (tier_name == "Untiered"): return 0
+        if (tier_name == "Medium"): return 1
+        if (tier_name == "Large"): return 2
+    else if (boost_kind is 1-tier):  // Chill
+        return 0  // Always Untiered
+
+// Helper function: convert numeric tier back to tier name, capped to boost kind's max
+function convert_numeric_to_tier_name(tier_num, boost_kind):
+    if (boost_kind is 4-tier):
+        if (tier_num == 0): return "Small"
+        if (tier_num == 1): return "Untiered"
+        if (tier_num == 2): return "Medium"
+        if (tier_num == 3): return "Large"
+        return "Large"  // Cap to max
+    else if (boost_kind is 3-tier):  // Vampiric, MagicArmourRefill
+        if (tier_num == 0): return "Untiered"
+        if (tier_num == 1): return "Medium"
+        if (tier_num == 2): return "Large"
+        return "Large"  // Cap to max
+    else if (boost_kind is 1-tier):  // Chill
+        return "Untiered"  // Always Untiered
+
+// Extract tier names from boost names
+T1_name = extract_tier_from_boost_name(slot1_boost_name)
+T2_name = extract_tier_from_boost_name(slot2_boost_name)
+
+// Map to numeric values within selected boost kind's system
+T1_mapped = map_tier_to_boost_kind_system(T1_name, K_out)
+T2_mapped = map_tier_to_boost_kind_system(T2_name, K_out)
+
+if (both parents have boosts):
+    if (T1_mapped == T2_mapped):
+        T_out_num = T1_mapped  // Same tier = deterministic
+    else if (abs(T1_mapped - T2_mapped) == 3 and get_max_tier(K_out) == 3):  // Small + Large (4-tier)
+        T_out_num = 2 if (TypeMatch == true) else 1  // Same-type: Medium; Cross-type: Untiered
+    else if (abs(T1_mapped - T2_mapped) >= 2):  // Gap >= 2 (midpoint merge)
+        T_out_num = clamp(floor((T1_mapped + T2_mapped) / 2), 0, get_max_tier(K_out))  // Midpoint merge, capped
+    else:  // Adjacent tiers (gap = 1)
+        if (TypeMatch == true):
+            T_out_num = clamp(max(T1_mapped, T2_mapped), 0, get_max_tier(K_out))  // Same-type: pick higher, capped
+        else:
+            T_out_num = clamp(random_choice(T1_mapped, T2_mapped), 0, get_max_tier(K_out))  // Cross-type: 50/50, capped
+else if (only one parent has boost):
+    // Treat missing parent as lowest tier (0) in boost kind's system
+    T_boosted_num = map_tier_to_boost_kind_system(tier_name_of_parent_with_boost, K_out)
+    T_missing_num = 0  // Lowest tier in that boost kind's system
+    if (T_boosted_num == get_max_tier(K_out) and T_missing_num == 0 and get_max_tier(K_out) >= 2):
+        if (get_max_tier(K_out) == 3):  // 4-tier: Small + Large
+            T_out_num = 2 if (TypeMatch == true) else 1  // Same-type: Medium; Cross-type: Untiered
+        else:
+            T_out_num = clamp(floor((T_boosted_num + T_missing_num) / 2), 0, get_max_tier(K_out))  // Midpoint merge, capped
+    else if (T_boosted_num == T_missing_num):
+        T_out_num = T_boosted_num
+    else:  // Adjacent (gap = 1)
+        if (TypeMatch == true):
+            T_out_num = clamp(max(T_boosted_num, T_missing_num), 0, get_max_tier(K_out))  // Same-type: pick higher
+        else:
+            T_out_num = clamp(random_choice(T_boosted_num, T_missing_num), 0, get_max_tier(K_out))  // Cross-type: 50/50
+
+// Convert numeric tier back to tier name
+T_out = convert_numeric_to_tier_name(T_out_num, K_out)
+
+// Helper function stubs (implementation details)
+function get_max_tier(boost_kind):
+    if (boost_kind is 4-tier): return 3  // Large
+    if (boost_kind is 3-tier): return 2  // Large
+    if (boost_kind is 1-tier): return 0  // Untiered only
+
+function extract_tier_from_boost_name(boost_name):
+    if (boost_name ends with "_Small"): return "Small"
+    if (boost_name ends with "_Medium"): return "Medium"
+    if (boost_name ends with "_Large"): return "Large"
+    return "Untiered"  // No tier suffix
+```
+

@@ -11,30 +11,14 @@ When you forge two items, this system decides **which and how stats are inherite
 - If both items share the same stats **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as **shared stats**, but the forged item will **merge the numbers** into a new value.
 - If a stats line is **not shared**, it goes into the **pool**, and keeping it is **more RNG**.
 - If both items are very different, it’s **riskier but can be more rewarding**.
-- Depending on your forging strategy, you could get a **steady, average**
-  result, or a **unpredictable, volatile** result which can get **lucky** or
-  **unlucky** streaks.
+- Depending on your forging strategy, you could get a **steady, average** 
+result, or a **unpredictable, volatile** result which can get **lucky** or 
+**unlucky** streaks.
 
-In short:
+In short: 
 
-- **More matching lines = more predictable forging**, and **vice versa**
+- **More matching lines = more predictable forging**, and **vice versa** 
 - **Closer stats values = merged numbers more consistent**.
-
----
-
-## vNext restructuring note (read this first)
-
-These docs are being restructured to match the new vNext balancing model:
-
-- A hidden **default + learned (per-save) cap** system driven by what the player has actually acquired in vanilla gameplay.
-- A single **overall rollable slots cap** shared across:
-  - Blue stats
-  - ExtraProperties (counts as **1 slot** if present)
-  - Skills (each rollable skill counts as **1 slot**)
-- Skills remain rollable, but can be **preserved** by:
-  - A matching **skillbook lock** in the forge UI (exact skill ID match), and/or
-  - Being **shared** between both parents.
-- ExtraProperties is treated as a standalone channel and can be **guaranteed** if there are shared ExtraProperties tokens.
 
 <details>
 <summary><strong>Contents (click to expand)</strong></summary>
@@ -82,6 +66,7 @@ These docs are being restructured to match the new vNext balancing model:
   - [4.5.2. Shared vs pool tokens](#42-extraproperties-shared-vs-pool)
   - [4.5.3. Selection + internal cap](#43-extraproperties-selection--internal-cap)
   - [4.5.4. Slot competition + trimming](#44-extraproperties-slot-competition--trimming)
+  - [4.5.5. Worked examples](#455-worked-examples)
 - [4.6. Skills](#46-skills-inheritance)
   - [4.6.1. Granted skills (definition)](#41-granted-skills-definition)
   - [4.6.2. Skill cap by rarity](#42-skill-cap-by-rarity)
@@ -90,7 +75,7 @@ These docs are being restructured to match the new vNext balancing model:
   - [4.6.5. Overflow + replace (type-modified)](#45-overflow--replace-5)
   - [4.6.6. Scenario tables](#46-scenario-tables)
   - [4.6.7. Worked example (Divine)](#47-worked-example-divine)
-  </details>
+</details>
 
 <details>
 <summary><strong><a href="#5-rune-slots-inheritance">5. Rune slots inheritance</a></strong></summary>
@@ -126,7 +111,7 @@ Additionally, enforce **item-type compatibility**:
 - **Shields**: shield can only forge with shield.
 - **Armour**: each armour slot only forges with the same slot (boots ↔ boots, helmet ↔ helmet, gloves ↔ gloves, chest ↔ chest, pants ↔ pants).
 - **Jewellery**: ring ↔ ring, amulet ↔ amulet.
-
+ 
 #### Output type selection
 
 The forged output item is always the same **item type/slot** as the ingredient in the **Main Slot** (first forge slot).
@@ -141,9 +126,9 @@ The forged output item is always the same **item type/slot** as the ingredient i
 <a id="12-forge-flow-overview"></a>
 This document splits forging into independent “channels”, because vanilla item generation works the same way.
 
-vNext note: blue stats, ExtraProperties, and skills now share a single **overall rollable slots cap** defined in:
+Blue stats, ExtraProperties, and skills share a single **overall rollable slots cap** defined in:
 
-- [`rarity_system.md` → Caps (vNext)](rarity_system.md#22-caps-vnext-default--learned-per-save)
+- [`rarity_system.md` → Caps](rarity_system.md#22-caps-vnext-default--learned-per-save)
 
 - **Base values** (base damage / armour / magic armour): determined by **item type + the white tooltip values**.
 - **Blue stats** (stats modifiers): rollable modifiers (e.g. attributes, crit).
@@ -205,7 +190,7 @@ This base-value model is intentionally generic: it works for any item that has m
 - **Shields**: base armour, base magic armour, and base blocking.
 - **Armour pieces** (helmets/chest/gloves/boots/pants): base armour and/or base magic armour.
 - **Jewellery** (rings/amulets): base magic armour.
-- **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): Section 2 is a **no-op** for those numeric channels.
+- **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): [Section 2](#2-base-values-inheritance) is a **no-op** for those numeric channels.
 
 Overview on how the forged item's base values are calculated:
 
@@ -249,8 +234,8 @@ This section defines the **inputs**, **notation**, and the **balance knobs** use
 
 #### Balance knobs (tuning table)
 
-These are the **balance knobs** (tuning defaults). The symbol dictionary used by the algorithm is in **Section 2.5**: [Notation legend](#25-notation-legend-shared).
-These are used by the tooltip-only base-value models in Section 2.
+These are the **balance knobs** (tuning defaults). The symbol dictionary used by the algorithm is in [Section 2.5](#25-normalisation-raw-to-percentile).
+These are used by the tooltip-only base-value models in [Section 2](#2-base-values-inheritance).
 | Parameter | Meaning | Default | Notes |
 | :--- | :--- | :---: | :--- |
 | `w` | Slot 1 dominance weight | Derived | Computed from the parents’ rarities (rarity dominance rule below). Slot 1 always remains the main parent. Used by non-weapons and by weapons when `WeaponType` matches. |
@@ -380,7 +365,7 @@ Rules:
 
 - If `TypeMatch=false`: `avg_out = A` (cross-type weapons do not change damage).
 - Otherwise (`TypeMatch=true`):
-  - Compute `w` from parent rarities (Section 2.3), so donor pull strength is `t = (1 - w)`
+  - Compute `w` from parent rarities ([Section 2.3](#23-inputs-and-tuning-parameters)), so donor pull strength is `t = (1 - w)`
   - `delta = (B - A)`
   - `avg_base = A + t × delta`
   - `gain = max(0, delta / max(A, 1))`
@@ -398,7 +383,7 @@ Inputs (per channel):
 
 - `A = Base(slot1)` (e.g. physical armour)
 - `B = Base(slot2)` (same channel)
-- `w` from rarity dominance (Section 2.3), so donor pull strength is `t = (1 - w)`
+- `w` from rarity dominance ([Section 2.3](#23-inputs-and-tuning-parameters)), so donor pull strength is `t = (1 - w)`
 
 Rules:
 
@@ -587,9 +572,9 @@ In Divinity: Original Sin 2, weapons can have **additional damage or effects** b
 
 - `_Boost_Weapon_Damage_Bonus` (and its tiered variants) uses the `DamageBoost` field, which **modifies base physical damage** directly.
 - This boost is **already reflected in the white tooltip damage range** used by [Section 2](#2-base-values-inheritance) for base value inheritance.
-- Therefore, `_Boost_Weapon_Damage_Bonus` is **not inherited via this section** (Section 3) to avoid double-counting. It is implicitly handled through the base damage merge in Section 2.
+- Therefore, `_Boost_Weapon_Damage_Bonus` is **not inherited via this section** ([Section 3](#3-weapon-boost-inheritance)) to avoid double-counting. It is implicitly handled through the base damage merge in [Section 2](#2-base-values-inheritance).
 
-**Boost types in vanilla (non-unique items):**
+**Boost types in vanilla (non-unique weapons):**
 
 The game defines several boost families for **non-unique weapons**, each with **different tier availability**:
 
@@ -686,6 +671,17 @@ Weapon boost inheritance follows a **shared/pool model** with **tier merging rul
 - The tier selection in vanilla is driven by **which boost entry gets assigned** (via rarity buckets or crafting combos), not computed from level.
 - This design treats boost inheritance as a **discrete property selection** (like Skills or ExtraProperties) rather than numeric merging.
 
+#### Weapon-type match modifier (Same-type vs Cross-type)
+
+For **weapons**, the system distinguishes between **same-type** and **cross-type** forging:
+
+- **Same-type**: Both parents have the exact same `WeaponType` (e.g., both are Crossbows).
+- **Cross-type**: Parents have different `WeaponType` values (e.g., Spear + 2H Sword).
+
+Let `TypeMatch = (WeaponType_1 == WeaponType_2)`. Same-type forging (`TypeMatch=true`) generally provides more favourable outcomes (e.g., 100% chance to keep boosts vs 50% for cross-type).
+
+**Note:** This concept is also used in modifier inheritance (see [Section 4.2](#42-selection-rule-shared--pool--cap) for details).
+
 #### Step 0: Presence (pool vs shared)
 
 First, determine whether the forged weapon **has a boost at all**:
@@ -743,23 +739,9 @@ The table below shows merging outcomes for **4-tier boosts** (elemental, ArmourP
 | **Medium (2)** | Untiered (deterministic merge) | Same-type: Medium (deterministic)<br>Cross-type: Untiered or Medium (50/50) | Medium (deterministic) | Same-type: Large (deterministic)<br>Cross-type: Medium or Large (50/50) |
 | **Large (3)** | Same-type: Medium (deterministic)<br>Cross-type: Untiered (deterministic) | Medium (deterministic merge) | Same-type: Large (deterministic)<br>Cross-type: Medium or Large (50/50) | Large (deterministic) |
 
-**When only one parent has a boost (and it is kept):**
-
-Treat the missing parent as having the **lowest tier (0)** within the selected boost kind's tier system:
-- **4-tier boosts** (elemental, ArmourPiercing): missing parent = Small (tier 0)
-
-**Example outcomes (4-tier boost, e.g., Fire):**
-
-| Parent with Boost | Missing Parent | Result Tier (Same-type) | Result Tier (Cross-type) |
-| :---------------- | :------------- | :---------------------- | :----------------------- |
-| Large             | Small (tier 0) | Medium (deterministic) | Untiered (deterministic) |
-| Medium            | Small (tier 0) | Untiered (deterministic merge) | Untiered (deterministic merge) |
-| Untiered          | Small (tier 0) | Untiered (deterministic) | Small or Untiered (50/50) |
-| Small             | Small (tier 0) | Small (deterministic) | Small (deterministic) |
-
-**Note:** For 3-tier and 1-tier boost examples (unique weapons only), see [Section 3.1.1](#311-special-boost-types-unique-weapons).
-
 **Tier merging rules:**
+
+When only one parent has a boost, treat the missing parent as **Small (tier 0)** and apply the same merging rules below.
 
 1. **Same tier** → keep that tier (shared, deterministic).
 2. **Gap ≥2** (deterministic merge):
@@ -772,113 +754,9 @@ Treat the missing parent as having the **lowest tier (0)** within the selected b
    - **Cross-type**: pick one randomly (50/50).
 4. **Result capping**: Final tier must be one that actually exists for the selected boost kind.
 
-#### Complete algorithm
+**Note:** For 3-tier and 1-tier boost examples (unique weapons only), see [Section 3.1.1](#311-special-boost-types-unique-weapons).
 
-```
-// Step 0: Determine presence
-if (both parents have boosts):
-    has_boost = true  // Shared, deterministic
-else if (exactly one parent has boost):
-    if (TypeMatch == true):
-        has_boost = true  // Same-type: 100% (2× capped)
-    else:
-        has_boost = random_choice(true, false)  // Cross-type: 50%
-else:
-    has_boost = false  // Neither has boost
-
-if (!has_boost):
-    return no_boost
-
-// Step 1: Determine boost kind (main slot priority)
-if (slot1 has boost):
-    K_out = K_slot1  // Main slot decides
-else if (slot2 has boost):
-    K_out = K_slot2  // Fallback to secondary slot
-
-// Step 2: Determine tier
-// Helper function: map tier name to numeric value within boost kind's system
-function map_tier_to_boost_kind_system(tier_name, boost_kind):
-    if (boost_kind is 4-tier):  // Elemental, ArmourPiercing
-        if (tier_name == "Small"): return 0
-        if (tier_name == "Untiered"): return 1
-        if (tier_name == "Medium"): return 2
-        if (tier_name == "Large"): return 3
-    else if (boost_kind is 3-tier):  // Vampiric, MagicArmourRefill (see Section 3.1.1)
-        if (tier_name == "Small"): return 0  // Map Small to Untiered (lowest)
-        if (tier_name == "Untiered"): return 0
-        if (tier_name == "Medium"): return 1
-        if (tier_name == "Large"): return 2
-    else if (boost_kind is 1-tier):  // Chill (see Section 3.1.1)
-        return 0  // Always Untiered
-
-// Helper function: convert numeric tier back to tier name, capped to boost kind's max
-function convert_numeric_to_tier_name(tier_num, boost_kind):
-    if (boost_kind is 4-tier):
-        if (tier_num == 0): return "Small"
-        if (tier_num == 1): return "Untiered"
-        if (tier_num == 2): return "Medium"
-        if (tier_num == 3): return "Large"
-        return "Large"  // Cap to max
-    else if (boost_kind is 3-tier):  // Vampiric, MagicArmourRefill (see Section 3.1.1)
-        if (tier_num == 0): return "Untiered"
-        if (tier_num == 1): return "Medium"
-        if (tier_num == 2): return "Large"
-        return "Large"  // Cap to max
-    else if (boost_kind is 1-tier):  // Chill (see Section 3.1.1)
-        return "Untiered"  // Always Untiered
-
-// Extract tier names from boost names
-T1_name = extract_tier_from_boost_name(slot1_boost_name)
-T2_name = extract_tier_from_boost_name(slot2_boost_name)
-
-// Map to numeric values within selected boost kind's system
-T1_mapped = map_tier_to_boost_kind_system(T1_name, K_out)
-T2_mapped = map_tier_to_boost_kind_system(T2_name, K_out)
-
-if (both parents have boosts):
-    if (T1_mapped == T2_mapped):
-        T_out_num = T1_mapped  // Same tier = deterministic
-    else if (abs(T1_mapped - T2_mapped) == 3 and get_max_tier(K_out) == 3):  // Small + Large (4-tier)
-        T_out_num = 2 if (TypeMatch == true) else 1  // Same-type: Medium; Cross-type: Untiered
-    else if (abs(T1_mapped - T2_mapped) >= 2):  // Gap >= 2 (midpoint merge)
-        T_out_num = clamp(floor((T1_mapped + T2_mapped) / 2), 0, get_max_tier(K_out))  // Midpoint merge, capped
-    else:  // Adjacent tiers (gap = 1)
-        if (TypeMatch == true):
-            T_out_num = clamp(max(T1_mapped, T2_mapped), 0, get_max_tier(K_out))  // Same-type: pick higher, capped
-        else:
-            T_out_num = clamp(random_choice(T1_mapped, T2_mapped), 0, get_max_tier(K_out))  // Cross-type: 50/50, capped
-else if (only one parent has boost):
-    // Treat missing parent as lowest tier (0) in boost kind's system
-    T_boosted_num = map_tier_to_boost_kind_system(tier_name_of_parent_with_boost, K_out)
-    T_missing_num = 0  // Lowest tier in that boost kind's system
-    if (T_boosted_num == get_max_tier(K_out) and T_missing_num == 0 and get_max_tier(K_out) >= 2):
-        if (get_max_tier(K_out) == 3):  // 4-tier: Small + Large
-            T_out_num = 2 if (TypeMatch == true) else 1  // Same-type: Medium; Cross-type: Untiered
-        else:
-            T_out_num = clamp(floor((T_boosted_num + T_missing_num) / 2), 0, get_max_tier(K_out))  // Midpoint merge, capped
-    else if (T_boosted_num == T_missing_num):
-        T_out_num = T_boosted_num
-    else:  // Adjacent (gap = 1)
-        if (TypeMatch == true):
-            T_out_num = clamp(max(T_boosted_num, T_missing_num), 0, get_max_tier(K_out))  // Same-type: pick higher
-        else:
-            T_out_num = clamp(random_choice(T_boosted_num, T_missing_num), 0, get_max_tier(K_out))  // Cross-type: 50/50
-
-// Convert numeric tier back to tier name
-T_out = convert_numeric_to_tier_name(T_out_num, K_out)
-
-// Helper function stubs (implementation details)
-function get_max_tier(boost_kind):
-    if (boost_kind is 4-tier): return 3  // Large
-    if (boost_kind is 3-tier): return 2  // Large
-    if (boost_kind is 1-tier): return 0  // Untiered only
-
-function extract_tier_from_boost_name(boost_name):
-    if (boost_name ends with "_Small"): return "Small"
-    if (boost_name ends with "_Medium"): return "Medium"
-    if (boost_name ends with "_Large"): return "Large"
-    return "Untiered"  // No tier suffix
-```
+**Note:** For pseudocode implementation reference, see [forging_system_implementation_blueprint_se.md → Weapon boost inheritance pseudocode](forging_system_implementation_blueprint_se.md#weapon-boost-inheritance-pseudocode).
 
 ### 3.3. Worked examples
 
@@ -939,11 +817,12 @@ function extract_tier_from_boost_name(boost_name):
 
 ## 4. Stats Modifier Inheritance
 
+<a id="4-stats-modifiers-inheritance"></a>
 <a id="3-stats-modifiers-inheritance"></a>
 
 This section defines how **stats modifiers** are inherited when you forge.
 
-In vNext, stats modifiers are split into three dedicated channels, each with its own unshared pool:
+Stats modifiers are split into three dedicated channels, each with its own unshared pool:
 
 - **Blue Stats**: numeric "blue text" boosts like Strength, crit, resistances, etc.
 - **ExtraProperties**: semicolon-separated tokens like proc chances, statuses, immunities, surfaces (counts as **1 slot** overall if present)
@@ -1030,6 +909,18 @@ E =
 \end{cases}
 $$
 
+**Cap-proximity dampener (when near overall cap):**
+
+When a channel is already close to the overall cap (`S ≥ OverallCap - 1`), apply a dampener to make reaching the cap less automatic:
+
+- **Cross-type**: With probability `q_cross = 0.45`, reduce the effective baseline: `E_eff = max(0, E - 1)`
+- **Same-type**: With probability `q_same = 0.30`, reduce the effective baseline: `E_eff = max(0, E - 1)`
+- Otherwise, use `E_eff = E` (no dampener)
+
+This ensures that even with high shared stats, reaching the cap requires some luck, and same-type forging maintains a noticeable advantage over cross-type.
+
+**Note:** The dampener only applies when `S ≥ OverallCap - 1`. For channels that are not near the cap, always use `E_eff = E`.
+
 #### Step 3: Roll the luck adjustment (first roll + chain)
 
 The system samples a **luck adjustment** `A` using a "first roll + chain" model.
@@ -1043,14 +934,29 @@ This `A` is a **variance** added to the expected baseline **E**, changing how ma
   - **Good roll**: `A = +1` (you keep **1 more** than the baseline `E`)
 - The first roll sets `A` to one of these three values: `-1`, `0`, or `+1`
 - Chains can then modify `A` further (see below)
-- The final pool count is `P = E + A` (clamped between 0 and `P_size`)
+- The final pool count is `P = E_eff + A` (clamped between 0 and `P_size`), where `E_eff` is the effective baseline after applying the cap-proximity dampener (if applicable)
 
-| Pool size | Tier           | First roll chances (Bad / Neutral / Good) | Chain chance (Down / Up) |
-| :-------- | :------------- | :---------------------------------------- | :----------------------- |
-| **1**     | Tier 1 (Safe)  | `0% / 50% / 50%`                          | None                     |
-| **2–4**   | Tier 2 (Early) | `14% / 60% / 26%`                         | `0% / 24.23%`            |
-| **5–7**   | Tier 3 (Mid)   | `30% / 52% / 18%`                         | `30% / 25%`              |
-| **8+**    | Tier 4 (Risky) | `33% / 55% / 12%`                         | `40% / 25%`              |
+**Default (cross-type, applies to all items):**
+
+| Pool size | Tier           | First roll chances (Bad / Neutral / Good) | Chain chance (Down / Up; stop probabilities in parentheses) |
+| :-------- | :------------- | :---------------------------------------- | :---------------------------------------------------------- |
+| **1**     | Tier 1 (Safe)  | `0% / 50% / 50%`                          | None                                                        |
+| **2–4**   | Tier 2 (Early) | `14% / 60% / 26%`                         | `0% (stop 100%) / 25% (stop 75%)`                            |
+| **5–7**   | Tier 3 (Mid)   | `30% / 52% / 18%`                         | `30% (stop 70%) / 25% (stop 75%)`                           |
+| **8+**    | Tier 4 (Risky) | `33% / 55% / 12%`                         | `40% (stop 60%) / 25% (stop 75%)`                           |
+
+**Weapons only (same-type comparison):**
+
+For weapons with the same `WeaponType` (e.g., two swords), same-type probabilities are derived by doubling the "good" branch and renormalising. Chain chances remain the same.
+
+| Pool size | Tier           | Cross-type (Bad / Neutral / Good) | Same-type (Bad / Neutral / Good) | Chain chance (Down / Up; stop probabilities in parentheses) |
+| :-------- | :------------- | :-------------------------------- | :------------------------------- | :---------------------------------------------------------- |
+| **1**     | Tier 1 (Safe)  | `0% / 50% / 50%`                  | `0% / 33.33% / 66.67%`           | None                                                        |
+| **2–4**   | Tier 2 (Early) | `14% / 60% / 26%`                 | `11.11% / 47.62% / 41.27%`       | `0% (stop 100%) / 25% (stop 75%)`                            |
+| **5–7**   | Tier 3 (Mid)   | `30% / 52% / 18%`                 | `25.42% / 44.07% / 30.51%`       | `30% (stop 70%) / 25% (stop 75%)`                           |
+| **8+**    | Tier 4 (Risky) | `33% / 55% / 12%`                 | `29.46% / 49.11% / 21.43%`       | `40% (stop 60%) / 25% (stop 75%)`                           |
+
+**Note:** Non-weapon items always use cross-type probabilities (but `TypeMatch=true` for eligibility), as type mismatches are not allowed.
 
 Notation used below:
 
@@ -1058,6 +964,8 @@ Notation used below:
 - `u` = up-chain chance (`p_chain_up`)
 
 #### Weapon-type match modifier (Cross-type vs Same-type)
+
+**Note:** This concept is introduced in [Section 3.2](#32-weapon-boost-inheritance-rules) (Weapon Boost Inheritance). This section describes how it applies to modifier inheritance.
 
 For **weapons**, we treat **exact same `WeaponType`** as "same-type". For other item categories, type mismatches are not allowed by eligibility rules, so they always behave like "same-type".
 
@@ -1071,13 +979,12 @@ The luck adjustment `A` is sampled from a tier-specific distribution:
 - **Cross-type (default)** distribution if `TypeMatch=false`
 - **Same-type** distribution if `TypeMatch=true`
 
-Same-type is derived from the cross-type baseline by **doubling the "good" branch** and renormalising (this doubles every `A > 0` outcome):
+Same-type is derived from the cross-type baseline by **doubling the "good" branch** and renormalising (this doubles every `A > 0` outcome).
 
-For a tier with cross-type first-roll chances:
-
-- `p_bad_cross`
-- `p_neutral_cross`
-- `p_good_cross`
+Given the cross-type first-roll probabilities for a tier (from the table above):
+- `p_bad_cross` = cross-type Bad probability
+- `p_neutral_cross` = cross-type Neutral probability
+- `p_good_cross` = cross-type Good probability
 
 We define same-type weights:
 
@@ -1111,17 +1018,19 @@ After the first roll, chains can modify `A` further:
   - on success: `A += 1` and try again
   - on failure: stop
 
-Finally apply the clamp via `P = clamp(E + A, 0, P_size)`. Equivalently, `A` is effectively clamped to:
+Finally apply the clamp via `P = clamp(E_eff + A, 0, P_size)`. Equivalently, `A` is effectively clamped to:
 
-- `A_min = -E` (cannot keep fewer than 0 pool modifiers)
-- `A_max = P_size - E` (cannot keep more than all pool modifiers)
+- `A_min = -E_eff` (cannot keep fewer than 0 pool modifiers)
+- `A_max = P_size - E_eff` (cannot keep more than all pool modifiers)
 
 Closed form probabilities (after clamping) for any tier:
 
 Let `d = p_chain_down`, `u = p_chain_up`, and let:
 
-- `N_down = E` (max negative magnitude, since `A_min = -E`)
-- `N_up = P_size - E` (max positive magnitude, since `A_max = P_size - E`)
+- `N_down = E_eff` (max negative magnitude, since `A_min = -E_eff`)
+- `N_up = P_size - E_eff` (max positive magnitude, since `A_max = P_size - E_eff`)
+
+**Note:** Use `E_eff` (the effective baseline after cap-proximity dampener) instead of `E` when calculating probabilities.
 
 Then:
 
@@ -1154,6 +1063,8 @@ For a given channel:
 
 #### Step 5: Apply the overall modifier cap (cross-channel)
 
+<a id="45-apply-overall-modifier-cap"></a>
+
 The forged item has a single cap `OverallCap[Rarity_out, ItemType_out]` across:
 
 - Blue stats
@@ -1179,7 +1090,7 @@ If a channel wins a slot:
 
 - **Blue stats**: pick one of the remaining pool-picked blue stats uniformly.
 - **Skills**: pick one of the remaining pool-picked skills uniformly.
-- **ExtraProperties**: keep the EP slot (then apply Section 4.5 internal token selection).
+- **ExtraProperties**: keep the EP slot (then apply [Section 4.5.3](#43-extraproperties-selection--internal-cap) internal token selection).
 
 Imagine you're forging these two **boots** (boots can only forge with boots):
 
@@ -1208,7 +1119,7 @@ Now calculate how many pool stats you keep:
 - Expected baseline: `E = floor((Pb_size + 1) / 3) = floor(5 / 3) = 1`
 - First roll: Good roll → `A = +1`
 - Chain up: Chain succeeds → `A = +2` (final luck adjustment)
-- Modifiers from pool (kept): `Pb = clamp(E + A, 0, Pb_size) = clamp(1 + 2, 0, 4) = 3`
+- Modifiers from pool (kept): `Pb = clamp(E_eff + A, 0, Pb_size) = clamp(1 + 2, 0, 4) = 3` (assuming no dampener applies in this example)
 - Planned forged blue modifiers (before overall trimming): `Fb = Sb + Pb = 2 + 3 = 5`
 
 Finally apply the overall rollable-slot cap:
@@ -1280,7 +1191,7 @@ Concrete outcome intuition:
   - Skills: `Ps = 1` (kept 1 from `Ps_size = 1`)
   - EP slot: pending
   - Then `F_total = Sb + Pb + Ss + Ps + EPslot = 3 + 1 + 0 + 1 + 1 = 6` ⇒ over cap by 1.
-- Using the **slot-weighted** overall trimming rule (Section 4.2):
+- Using the **slot-weighted** overall trimming rule ([Step 5 of Section 4.2](#45-apply-overall-modifier-cap)):
   - weight(Blue) = `Pb = 1`, weight(Skills) = `Ps = 1`, weight(EP) = `1`
   - one of these three pool-picked slots is dropped (each **33.33%** in this case).
 
@@ -1320,9 +1231,9 @@ This is the perfect example for **YOLO forging**:
 
 ---
 
-### 3.3. Merging rule (Blue Stats / ExtraProperties)
+### 4.3. Merging rule (Blue Stats / ExtraProperties)
 
-<a id="33-merging-rule-how-numbers-are-merged"></a>
+<a id="43-merging-rule-how-numbers-are-merged"></a>
 
 Sometimes both parents have the **same stats**, but the **numbers** are different:
 
@@ -1452,13 +1363,14 @@ Key values:
 
 <a id="36-worked-examples-stats-modifiers"></a>
 
-vNext note:
+**Note:**
 
+- The probability tables below (tiers, `p_bad/p_neutral/p_good`, chain `d/u`) come from the **universal selection rule** in [Section 4.2](#42-selection-rule-shared--pool--cap) and can be applied to any modifier channel that uses that rule. We show them using **Blue Stats** (can be ExtraProperties or Skills) only because it is the most direct/visible channel for worked maths.
 - The worked examples below focus on the **blue-stats selection step** (blue stats channel only).
 - To keep the tables readable and consistent, we assume:
   - Output rarity is **Divine**, so `OverallCap[Divine, ItemType] = 5` (default, or learned if higher).
   - Other channels (Skills / ExtraProperties) do not occupy slots in these tables.
-- Therefore, any outcomes where the blue-stats result would exceed 5 are bucketed into **`5+`** (meaning “would be >5, then clamped by the overall cap”).
+- Therefore, any outcomes where the blue-stats result would reach or exceed 5 are bucketed into **`5+`** (meaning "≥5, at or above the overall cap").
 
 #### Tier 1 (Pool size = 1, no chains)
 
@@ -1526,17 +1438,85 @@ The blue-stats selection step yields between **1** and **4** blue modifiers (**1
 
 Parameters used (Tier 2):
 
-- Cross-type: `p_bad=14%`, `p_neutral=60%`, `p_good=26%`, `d=0.00`, `u=0.2423`
-- Same-type: `p_bad=11.11%`, `p_neutral=47.62%`, `p_good=41.27%`, `d=0.00`, `u=0.2423`
+- Cross-type: `p_bad=14%`, `p_neutral=60%`, `p_good=26%`, `d=0.00`, `u=0.25`
+- Same-type: `p_bad=11.11%`, `p_neutral=47.62%`, `p_good=41.27%`, `d=0.00`, `u=0.25`
 
 | Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math)                                                                                                | Cross-type (default) | Same-type |
 | :--------------------: | :-------------------------: | :---------------------------: | :----------------------------------------------------------------------------------------------------------- | -------------------: | --------: |
 |           -1           |              0              |               1               | Cross: `p_bad = 14%` (no down-chain)<br>Same: `p_bad = 11.11%`                                               |               14.00% |    11.11% |
 |           0            |              1              |               2               | Cross: `p_neutral = 60%`<br>Same: `p_neutral = 47.62%`                                                       |               60.00% |    47.62% |
-|           +1           |              2              |               3               | Cross: `p_good × (1-u) = 26% × (1-0.2423) = 19.70%`<br>Same: `p_good × (1-u) = 41.27% × (1-0.2423) = 31.27%` |               19.70% |    31.27% |
-|           +2           |              3              |               4               | Cross: `p_good × u = 26% × 0.2423 = 6.30%` (cap bucket)<br>Same: `p_good × u = 41.27% × 0.2423 = 10.00%`     |                6.30% |    10.00% |
+|           +1           |              2              |               3               | Cross: `p_good × (1-u) = 26% × (1-0.25) = 19.50%`<br>Same: `p_good × (1-u) = 41.27% × (1-0.25) = 30.95%` |               19.50% |    30.95% |
+|           +2           |              3              |               4               | Cross: `p_good × u = 26% × 0.25 = 6.50%` (cap bucket)<br>Same: `p_good × u = 41.27% × 0.25 = 10.32%`     |                6.50% |    10.32% |
 
-##### Example 2 (Pool size = 4, weapon-only cross-subtype allowed)
+##### Example 2 (Pool size = 2, near-cap case with dampener)
+
+```
+Parent A: Divine Warhammer
+ - +2 Strength          (shared)
+ - +1 Two-Handed        (shared)
+ - +1 Warfare           (shared)
+ - +10% Critical Chance (shared)
+ - +10% Fire Resistance (pool)
+
+Parent B: Divine Warhammer
+ - +2 Strength          (shared)
+ - +1 Two-Handed        (shared)
+ - +1 Warfare           (shared)
+ - +10% Critical Chance (shared)
+ - +12% Poison Resistance (pool)
+─────────────────────────────────────────
+Shared Blue Stats:
+ - +2 Strength
+ - +1 Two-Handed
+ - +1 Warfare
+ - +10% Critical Chance
+Pool Blue Stats:
+ - +10% Fire Resistance
+ - +12% Poison Resistance
+```
+
+Inputs for this example:
+
+- `Sb = 4` (Shared Blue Stats)
+- `Pb_size = 2` (Pool Blue Stats size)
+- `E = floor((Pb_size + 1) / 3) = floor(3 / 3) = 1` (Expected baseline)
+- `Sb = 4 ≥ OverallCap - 1 = 4` → **Cap-proximity dampener applies**
+
+The blue-stats selection step yields between **4** and **6** blue modifiers (**4** shared + **0–2** from the pool).
+
+Parameters used (Tier 2):
+
+- Cross-type: `p_bad=14%`, `p_neutral=60%`, `p_good=26%`, `d=0.00`, `u=0.25`
+- Same-type: `p_bad=11.11%`, `p_neutral=47.62%`, `p_good=41.27%`, `d=0.00`, `u=0.25`
+
+**Near-cap summary tables (clear):**
+
+When `Sb = 4` (cap-1), you are deciding whether you can fill the **last slot** from the pool.
+
+**Tier 1 (Pool size = 1) variant:** `Sb = 4`, `Pb_size = 1`, `E = 0` (no chains)
+
+| Result bucket | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math) | Cross-type | Same-type |
+| :------------ | :-------------------------: | :---------------------------: | :------------ | ---------: | --------: |
+| Below cap | 0 | 4 | Cross: `p_neutral = 50%`<br>Same: `p_neutral = 33.33%` | 50.00% | 33.33% |
+| `5+` | 1 | 5+ | Cross: `p_good = 50%`<br>Same: `p_good = 66.67%` | 50.00% | 66.67% |
+
+**This Tier 2 (Pool size = 2) case with dampener:** `Sb = 4`, `Pb_size = 2`, `E = 1`
+
+Cap-proximity dampener (applies because `Sb ≥ OverallCap - 1`):
+
+- Cross-type: dampener triggers with probability `q_cross = 0.45`
+- Same-type: dampener triggers with probability `q_same = 0.30`
+
+| Result bucket | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math) | Cross-type | Same-type |
+| :------------ | :-------------------------: | :---------------------------: | :------------ | ---------: | --------: |
+| Below cap | 0 | 4 | Cross: `(1-q_cross)×p_bad + q_cross×(p_bad+p_neutral)`<br>Same: `(1-q_same)×p_bad + q_same×(p_bad+p_neutral)` | 41.00% | 25.40% |
+| `5+` | 1+ | 5+ | Cross: `(1-q_cross)×(1-p_bad) + q_cross×p_good`<br>Same: `(1-q_same)×(1-p_bad) + q_same×p_good` | 59.00% | 74.60% |
+
+Notes:
+
+- This table shows the **final** outcome probabilities after accounting for the dampener’s trigger chance.
+
+##### Example 3 (Pool size = 4, weapon-only cross-subtype allowed)
 
 ```
 Parent A: Knight's Dagger
@@ -1571,15 +1551,15 @@ The blue-stats selection step yields between **2** and **6** blue modifiers (**2
 
 Parameters used (Tier 2):
 
-- Cross-type: `p_bad=14%`, `p_neutral=60%`, `p_good=26%`, `d=0.00`, `u=0.2423`
-- Same-type: `p_bad=11.11%`, `p_neutral=47.62%`, `p_good=41.27%`, `d=0.00`, `u=0.2423`
+- Cross-type: `p_bad=14%`, `p_neutral=60%`, `p_good=26%`, `d=0.00`, `u=0.25`
+- Same-type: `p_bad=11.11%`, `p_neutral=47.62%`, `p_good=41.27%`, `d=0.00`, `u=0.25`
 
 | Luck adjustment<br>(A) | Modifiers from pool<br>(Pb) | Forged item modifiers<br>(Fb) | Chance (math)                                                                                         | Cross-type (default) | Same-type |
 | :--------------------: | :-------------------------: | :---------------------------: | :---------------------------------------------------------------------------------------------------- | -------------------: | --------: |
 |           -1           |              0              |               2               | Cross: `p_bad = 14%` (no down-chain)<br>Same: `p_bad = 11.11%`                                        |               14.00% |    11.11% |
 |           0            |              1              |               3               | Cross: `p_neutral = 60%`<br>Same: `p_neutral = 47.62%`                                                |               60.00% |    47.62% |
-|           +1           |              2              |               4               | Cross: `p_good × (1-u) = 26% × 0.7577 = 19.70%`<br>Same: `p_good × 0.7577 = 41.27% × 0.7577 = 31.27%` |               19.70% |    31.27% |
-|          +2+           |             3+              |              5+               | Cross: `p_good × u = 26% × 0.2423 = 6.30%`<br>Same: `p_good × u = 41.27% × 0.2423 = 10.00%`           |                6.30% |    10.00% |
+|           +1           |              2              |               4               | Cross: `p_good × (1-u) = 26% × 0.75 = 19.50%`<br>Same: `p_good × (1-u) = 41.27% × 0.75 = 30.95%` |               19.50% |    30.95% |
+|          +2+           |             3+              |              5+               | Cross: `p_good × u = 26% × 0.25 = 6.50%`<br>Same: `p_good × u = 41.27% × 0.25 = 10.32%`           |                6.50% |    10.32% |
 
 #### Tier 3 (Pool size = 5–7)
 
@@ -1628,7 +1608,7 @@ Parameters used (Tier 3):
 |           -2           |              0              |               2               | Cross: `p_bad × d = 30% × 0.30 = 9.00%` (cap bucket)<br>Same: `p_bad × d = 25.42% × 0.30 = 7.63%` |                9.00% |     7.63% |
 |           -1           |              1              |               3               | Cross: `p_bad × (1-d) = 30% × 0.70 = 21.00%`<br>Same: `p_bad × 0.70 = 25.42% × 0.70 = 17.80%`     |               21.00% |    17.80% |
 |           0            |              2              |               4               | Cross: `p_neutral = 52%`<br>Same: `p_neutral = 44.07%`                                            |               52.00% |    44.07% |
-|          +1+           |             3+              |              5+               | Cross: `p_good = 18%`<br>Same: `p_good = 30.51%`                                                  |               18.00% |    30.51% |
+|          +1+           |             3+              |              5+               | Cross: `p_good = 18%` (cap bucket; includes A = +1, +2, +3)<br>Same: `p_good = 30.51%` (cap bucket; includes A = +1, +2, +3) |               18.00% |    30.51% |
 
 ##### Example 2 (Pool size = 7)
 
@@ -1717,7 +1697,7 @@ Inputs for this example:
 
 The blue-stats selection step yields between **0** and **8** blue modifiers (**0** shared + **0–8** from the pool).
 
-- This is “riskier crafting” in practice: fewer shared stats means more “unknown” stats in the pool.
+  - This is “riskier crafting” in practice: fewer shared stats means more “unknown” stats in the pool.
 
 Parameters used (Tier 4):
 
@@ -1737,13 +1717,14 @@ Parameters used (Tier 4):
 
 ### 4.5. ExtraProperties
 
+<a id="45-extraproperties-inheritance"></a>
 <a id="45-extraproperties-channel"></a>
 <a id="35-extraproperties-channel"></a>
 <a id="4-extraproperties-inheritance"></a>
 
 This section defines how **ExtraProperties** are inherited when you forge.
 
-In vNext, ExtraProperties is treated as its own channel:
+ExtraProperties is treated as its own channel:
 
 - ExtraProperties consumes **1** overall rollable slot if present (regardless of how many internal effects/tooltip lines it expands into).
 - The **internal content** (tokens) is merged/selected separately, with an internal cap based on the parents.
@@ -1808,7 +1789,7 @@ Build the output token list:
 2. Determine `InternalCap`:
    - If `A == B` and EP slot is inherited: `InternalCap = A + 1`
    - Otherwise: `InternalCap = max(A, B)`
-3. Roll additional tokens from the pool using the selection rule in **Section 4.2**:
+3. Roll additional tokens from the pool using the selection rule in [Section 4.2](#42-selection-rule-shared--pool--cap):
    - `P_size = Pp_size`, `P = Pp`
 4. Clamp the final token list to `InternalCap`.
 
@@ -1821,9 +1802,11 @@ ExtraProperties occupies one **slot** in the overall rollable cap.
 Rule:
 
 - If `Sp ≥ 1`, the ExtraProperties slot is **guaranteed** to be present (it consumes 1 slot and is protected from overall-cap trimming).
-- Otherwise, the ExtraProperties slot is a **pool slot**. If the forge result is over the overall cap, this slot competes under the universal overall-cap trimming rule in **Section 4.2** (slot-weighted).
+- Otherwise, the ExtraProperties slot is a **pool slot**. If the forge result is over the overall cap, this slot competes under the universal overall-cap trimming rule in [Step 5 of Section 4.2](#45-apply-overall-modifier-cap) (slot-weighted).
 
-**Examples:**
+#### 4.5.5. Worked examples
+
+<a id="455-worked-examples"></a>
 
 **Example 1: Same count with bonus**
 
@@ -1862,13 +1845,14 @@ Result: Capped at 2 tokens maximum
 
 ### 4.6. Skills
 
+<a id="46-skills-inheritance"></a>
 <a id="46-skills-channel"></a>
 <a id="36-skills-channel"></a>
 <a id="4-skills-inheritance"></a>
-This section defines how **granted skills** are inherited when you forge (vNext).
+This section defines how **granted skills** are inherited when you forge.
 
 - Granted skills are a separate channel from normal **blue stats**.
-- vNext: each rollable granted skill consumes **1** overall rollable slot (shared cap with blue stats + ExtraProperties).
+- Each rollable granted skill consumes **1** overall rollable slot (shared cap with blue stats + ExtraProperties).
 - Skills are rollable; unless preserved by the **skillbook lock** or shared between both parents, they can be lost when applying the overall cap (equal drop chance among pool slots).
 - Skills also have a per-save learned **skill count cap** (`SkillCap[r]`) defined in [`rarity_system.md`](rarity_system.md#222-skill-cap-vnext).
 
@@ -1908,11 +1892,11 @@ Here are what you can expect:
 
 This is the maximum number of **rollable granted skills** on the forged item.
 
-vNext: this cap is **default + learned per save**:
+This cap is **default + learned per save**:
 
 - Default values are listed below.
 - The save can learn higher values if the player ever obtains an item of that rarity with more rollable granted skills.
-- See: [`rarity_system.md` → Skill count cap (vNext)](rarity_system.md#222-skill-cap-vnext)
+- See: [`rarity_system.md` → Skill count cap](rarity_system.md#222-skill-cap-vnext)
 
 | Rarity index | Name      | Granted skill cap |
 | :----------- | :-------- | :---------------: |
@@ -1923,7 +1907,7 @@ vNext: this cap is **default + learned per save**:
 | **4**        | Legendary |       **1**       |
 | **5**        | Divine    |       **1**       |
 
-_Unique is ignored for now (do not consider it in vNext balancing)._
+_Unique is ignored for now (do not consider it in balancing)._
 
 #### 4.6.2.1. Skillbook lock (preserve by exact skill ID)
 
@@ -2057,7 +2041,7 @@ With the optional replace roll, one possible final skills outcome is:
 Interpretation:
 
 - With default `SkillCap = 1`, only one skill can ever be kept.
-- If the gain roll succeeds (Section 4.6.4), one of the pool skills is selected.
+- If the gain roll succeeds ([Section 4.6.4](#44-how-skills-are-gained-gated-fill)), one of the pool skills is selected.
 - If the gain roll succeeds and there is still another pool skill remaining, the optional replace roll can swap which single skill you end up with.
 
 #### 4.6.6. Scenario tables
@@ -2079,7 +2063,7 @@ With default `SkillCap = 1`, there is only **one** free slot. Therefore:
 - `P(final 1 skill) = p_attempt`
 - `P(final 0 skills) = 1 - p_attempt`
 
-Use the `p_attempt` table in **Section 4.6.4** for the actual values.
+Use the `p_attempt` table in [Section 4.6.4](#44-how-skills-are-gained-gated-fill) for the actual values.
 
 #### Scenario B: `Ss ≥ 1` (shared skill exists)
 
@@ -2124,16 +2108,15 @@ Attempt to fill free slots:
 
 Final skills before cap:
 
-- If gain succeeded: one of `{Shout_Whirlwind, Projectile_SkyShot}`
-- If gain failed: (none)
+ - If gain succeeded: one of `{Shout_Whirlwind, Projectile_SkyShot}`
+ - If gain failed: (none)
 
 Apply `SkillCap = 1`:
 
 - If you gained a skill: you are at cap.
-- If you gained a skill and one pool skill remains, the optional replace roll (Section 4.6.5) can still swap which single skill you end up with.
+- If you gained a skill and one pool skill remains, the optional replace roll ([Section 4.6.5](#45-overflow--replace-5)) can still swap which single skill you end up with.
 
 Result:
-Result (vNext):
 
 - The forged item can roll up to `OverallCap[Divine, ItemType]` **overall rollable slots** (blue stats + ExtraProperties + skills), where `OverallCap` is default+learned per save, tracked per (rarity, item type) pair.
 - It will have at most `SkillCap[Divine]` rollable granted skills (default+learned per save).
@@ -2174,8 +2157,8 @@ Examples (non-Unique):
 | :------------: | :------------: | :-------------------------------- | :---------------------------------- |
 |       0        |       0        | 0                                 | 0                                   |
 |       1        |       1        | 1                                 | 1                                   |
-|       0        |       1        | 1 with 50%, else 0                | 1 (100%)                            |
-|       1        |       0        | 1 with 50%, else 0                | 1 (100%)                            |
+|       0        |       1        | 1 or 0 (50%)                      | 1 (100%)                            |
+|       1        |       0        | 1 or 0 (50%)                      | 1 (100%)                            |
 
 ---
 
