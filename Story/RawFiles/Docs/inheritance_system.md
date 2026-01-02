@@ -373,7 +373,30 @@ Rules:
   - On upgrade failure: `avg_out = avg_base`
   - On upgrade success: roll `u ~ U(0,1)` and compute `avg_out = avg_base + (B - avg_base) × u^2` (higher is harder)
 
-Finally, round to the displayed integer midpoint and let the engine display min/max using the weapon’s `Damage Range` rules.
+Finally, round to the displayed integer midpoint and let the engine display min/max using the weapon's `Damage Range` rules.
+
+#### Weapon Damage Type inheritance
+
+The forged weapon's `Damage Type` field is inherited from the **main slot (slot 1)** when same-type weapon forging occurs (`TypeMatch = true`):
+
+- `DamageType_out = DamageType(slot1)`
+
+**Notes:**
+
+- This rule applies only to **same-type weapon forging** (`TypeMatch = true`), where both parents share the same `WeaponType` and base damage can be merged.
+- For **cross-type weapon forging** (`TypeMatch = false`), base damage is unchanged and the output type follows slot 1, so the damage type naturally follows from the output item type.
+- This rule is most relevant for weapons that can have different damage types within the same `WeaponType`:
+  - **Staffs**: can be Physical (base), Fire, Water, Poison, Earth, or Air
+  - **Wands**: default to Fire, but can have Fire, Air, Water, or Poison variants
+  - **Unique weapons**: can override their base class damage type (e.g., a unique 2H axe with Fire damage)
+
+**Examples:**
+
+- Fire Staff (slot 1) + Water Staff (slot 2) → Forged: Fire Staff (damage type follows slot 1)
+- Fire Wand (slot 1) + Air Wand (slot 2) → Forged: Fire Wand (damage type follows slot 1)
+- 2H Axe (Physical damage, slot 1) + Fire Staff (slot 2) → Forged: 2H Axe (Physical damage, damage type follows slot 1)
+
+This maintains slot 1 identity consistency with the base damage merge and output type selection rules.
 
 #### Non-weapons (tooltip-only; per channel)
 
@@ -558,15 +581,22 @@ This section defines how **weapon boosts** (elemental damage, armour-piercing, e
 
 <a id="31-weapon-boosts-definition"></a>
 
-In Divinity: Original Sin 2, weapons can have **additional damage or effects** beyond their base physical damage. These appear as **weapon boost properties** referenced by the weapon's `Boosts` field.
+In Divinity: Original Sin 2, weapons can have **additional damage or effects** beyond their base damage. These appear as **weapon boost properties** referenced by the weapon's `Boosts` field.
 
 **How it works in the game:**
 
 - Weapon boosts are **not base values** (they don't appear in the white damage range calculation).
 - Weapon boosts are **not blue stat modifiers** (they're not part of the rollable modifier system).
 - Instead, weapon boosts are **discrete boost entries** that either:
-  - Add a **second damage line** (e.g., "53–62 Poison" alongside "353–411 Physical"), or
+  - Add a **second damage line** (e.g., "32–39 Poison" alongside "311–381 Fire"), or
   - Provide **special effects** (e.g., vampiric healing, magic armour refill).
+
+**Crafting note (vanilla):**
+
+- Some boosts are applied via **crafting combos** (`BoostType="ItemCombo"`) rather than being rolled during loot generation.
+- Example: a poison vial can apply `Boost_Weapon_Crafting_Damage_Poison` → `_Boost_Weapon_Crafting_Damage_Poison` (10% `DamageFromBase`, Poison damage type, plus a small `POISONED` on-hit token).
+- If the boost damage type **differs** from the weapon’s base `Damage Type`, it shows as a **second damage line**.
+- If the boost damage type **matches** the weapon’s base `Damage Type` (e.g., Poison staff + Poison boost), the result can appear “merged” into the base damage line in the tooltip (it is still implemented as a boost entry).
 
 **Important exclusion:**
 
@@ -609,7 +639,7 @@ The following boost types are **rarely encountered** in normal gameplay, as they
 
 **Note:** These special boost types follow the same inheritance rules as common boost types (see [Section 3.2](#32-weapon-boost-inheritance-rules)), but use different tier systems (3-tier or 1-tier instead of 4-tier).
 
-**3-tier boost merging table:**
+**3-tier boost merging table (same-type only):**
 
 Applies to boost kinds that have **no Small tier** (Vampiric, MagicArmourRefill):
 
@@ -617,17 +647,17 @@ Applies to boost kinds that have **no Small tier** (Vampiric, MagicArmourRefill)
 
 | | Untiered (0) | Medium (1) | Large (2) |
 | :--- | :--- | :--- | :--- |
-| **Untiered (0)** | Untiered (deterministic) | Same-type: Medium (deterministic)<br>Cross-type: Untiered or Medium (50/50) | Medium (deterministic merge) |
-| **Medium (1)** | Same-type: Medium (deterministic)<br>Cross-type: Untiered or Medium (50/50) | Medium (deterministic) | Same-type: Large (deterministic)<br>Cross-type: Medium or Large (50/50) |
-| **Large (2)** | Medium (deterministic merge) | Same-type: Large (deterministic)<br>Cross-type: Medium or Large (50/50) | Large (deterministic) |
+| **Untiered (0)** | Untiered (deterministic) | Medium (deterministic) | Medium (deterministic merge) |
+| **Medium (1)** | Medium (deterministic) | Medium (deterministic) | Large (deterministic) |
+| **Large (2)** | Medium (deterministic merge) | Large (deterministic) | Large (deterministic) |
 
-**Example outcomes when only one parent has a 3-tier boost:**
+**Example outcomes when only one parent has a 3-tier boost (same-type only):**
 
-| Parent with Boost | Missing Parent | Result Tier (Same-type) | Result Tier (Cross-type) |
-| :---------------- | :------------- | :---------------------- | :----------------------- |
-| Large             | Untiered (tier 0) | Medium (deterministic merge) | Medium (deterministic merge) |
-| Medium            | Untiered (tier 0) | Medium (deterministic) | Untiered or Medium (50/50) |
-| Untiered          | Untiered (tier 0) | Untiered (deterministic) | Untiered (deterministic) |
+| Parent with Boost | Missing Parent | Result Tier |
+| :---------------- | :------------- | :---------- |
+| Large             | Untiered (tier 0) | Medium (deterministic merge) |
+| Medium            | Untiered (tier 0) | Medium (deterministic) |
+| Untiered          | Untiered (tier 0) | Untiered (deterministic) |
 
 **Special cases for unique weapon boosts:**
 
@@ -660,57 +690,83 @@ Unique weapons:
 
 <a id="32-weapon-boost-inheritance-rules"></a>
 
-Weapon boost inheritance follows a **shared/pool model** with **tier merging rules**. The system determines both the **boost kind** (Fire, Water, Poison, Air, Earth, ArmourPiercing; for special types see [Section 3.1.1](#311-special-boost-types-unique-weapons)) and the **tier** (Small, Untiered, Medium, or Large, depending on what's available for that boost kind) for the forged weapon.
+Weapon boost inheritance follows a **shared/pool model** with **tier merging rules** and a small number of **boost slots** (vanilla-aligned). The system determines the output boost list (0–2 entries depending on weapon type), and for each boost slot determines the **boost kind** (Fire, Water, Poison, Air, Earth, ArmourPiercing; for special types see [Section 3.1.1](#311-special-boost-types-unique-weapons)) and the **tier** (Small, Untiered, Medium, or Large, depending on what's available for that boost kind).
 
 **Note:** `_Boost_Weapon_Damage_Bonus` is excluded from this system (see [Section 3.1](#31-weapon-boosts-definition) for details).
 
 **Design rationale (based on vanilla game code):**
 
-- In vanilla, weapon boosts are **single boost entries** (one `Boosts` field value), not continuous stats.
+- In vanilla, weapon boosts are **discrete boost entries** (not continuous stats). Some special/unique weapons may carry multiple boost entries, but most gameplay behaves like a small-slot system (0–2).
 - Tiers are **discrete** (Small/Medium/Large are separate boost entries with different `DamageFromBase` percentages or `Value` fields).
 - The tier selection in vanilla is driven by **which boost entry gets assigned** (via rarity buckets or crafting combos), not computed from level.
 - This design treats boost inheritance as a **discrete property selection** (like Skills or ExtraProperties) rather than numeric merging.
 
-#### Weapon-type match modifier (Same-type vs Cross-type)
+#### Weapon-type match requirement (same-type only)
 
-For **weapons**, the system distinguishes between **same-type** and **cross-type** forging:
+Weapon boosts are inherited **only** when forging two weapons of the exact same `WeaponType`.
 
-- **Same-type**: Both parents have the exact same `WeaponType` (e.g., both are Crossbows).
-- **Cross-type**: Parents have different `WeaponType` values (e.g., Spear + 2H Sword).
-
-Let `TypeMatch = (WeaponType_1 == WeaponType_2)`. Same-type forging (`TypeMatch=true`) generally provides more favourable outcomes (e.g., 100% chance to keep boosts vs 50% for cross-type).
+Let `TypeMatch = (WeaponType_1 == WeaponType_2)`. This section only applies when `TypeMatch=true`.
 
 **Note:** This concept is also used in modifier inheritance (see [Section 4.2](#42-selection-rule-shared--pool--cap) for details).
 
+#### Boost slot caps (vanilla-aligned)
+
+Vanilla behaviour implies that different weapon types support different numbers of weapon-boost entries in normal gameplay:
+
+- **Wands**: `MaxBoostSlots = 0` (no weapon boosts)
+- **Staffs**: `MaxBoostSlots = 1`
+- **All other weapons**: `MaxBoostSlots = 2`
+
+This system follows that model. The forged output is clamped to `MaxBoostSlots[WeaponType_out]`.
+
 #### Step 0: Presence (pool vs shared)
 
-First, determine whether the forged weapon **has a boost at all**:
+First, determine whether the forged weapon **has boosts at all**:
 
-- **Both parents have boosts** → forged weapon **always has a boost** (shared, deterministic).
-- **Exactly one parent has a boost** → forged weapon keeps a boost with probability `p_keep`:
-  - **Cross-type default**: `p_keep = 50%`
-  - **Same-type** (`TypeMatch=true`): `p_keep = 100%` (2× capped, same pattern as rune slots)
-- **Neither parent has a boost** → forged weapon has **no boost** (deterministic).
+- If `TypeMatch=false`: this channel is skipped and the forged weapon has **no weapon boosts**.
+- Otherwise (`TypeMatch=true`): continue below.
 
-This mirrors the vanilla pattern: a weapon either has a boost entry or it doesn't.
+Determine `cap = MaxBoostSlots[WeaponType_out]`:
 
-#### Step 1: Boost kind selection
+- If `cap = 0` (wands): forged weapon has **no weapon boosts** (deterministic).
+- Otherwise (`cap ≥ 1`):
+  - Parse each parent’s `Boosts` field into a list (split on `;`, ignore empty entries).
+  - Ignore `_Boost_Weapon_Damage_Bonus` (and tiered variants) as described in [Section 3.1](#31-weapon-boosts-definition).
+  - Clamp each parent’s list to `cap` entries (deterministic; keep the first `cap` boost entries).
 
-**Note:** This step only runs when Step 0 has already determined that the forged weapon will have a boost.
+Presence outcomes:
 
-Determine which boost kind (damage type) is inherited:
+- If both parents have at least one boost entry → forged weapon will attempt to inherit boosts (deterministic).
+- If exactly one parent has boost entries → forged weapon inherits that parent’s boosts (deterministic).
+- If neither parent has boost entries → forged weapon has **no weapon boosts** (deterministic).
 
-- **Main slot (slot 1) has a boost** → use main slot's boost kind:
-  - Fire (slot 1) + Air (slot 2) → **Fire** (main slot decides)
+This mirrors vanilla weapon behaviour: weapon boosts behave like a small number of discrete slots, not an unbounded stack.
 
-- **Main slot has no boost, secondary slot (slot 2) has a boost** → use secondary slot's boost kind (only if Step 0 determined the boost is kept):
-  - (no boost, slot 1) + Fire (slot 2) → **Fire** (fallback to secondary slot, subject to same-type 100% / cross-type 50% rule from Step 0)
+#### Step 1: Slot model (staff vs other weapons)
 
-The main slot always determines the boost kind when it has one, maintaining slot 1 identity consistency with the base damage merge in [Section 2](#2-base-values-inheritance).
+Let `cap = MaxBoostSlots[WeaponType_out]`.
 
-#### Step 2: Tier merging
+- If `cap = 0`: stop (no boosts).
+- If `cap = 1`: inherit only **Slot A**.
+- If `cap = 2`: inherit **Slot A**, then (if available) **Slot B**.
 
-After determining presence and boost kind, determine the tier using **both parents' tiers** (regardless of which boost kind was selected).
+#### Step 2: Slot A (primary) — kind selection + tier merging
+
+If both parents have at least one boost entry, use the first entry in each parent list as the Slot A candidates:
+
+- `A1 = boostList_slot1[0]` (if present)
+- `B1 = boostList_slot2[0]` (if present)
+
+If only one parent has boost entries, Slot A is taken from that parent deterministically.
+
+Boost kind selection for Slot A:
+
+- If slot 1 has `A1`: use slot 1’s boost kind (main-slot priority).
+- Otherwise, use slot 2’s boost kind.
+
+Tier merging for Slot A:
+
+- Use both parents’ Slot A tiers when both are present; if one is missing, treat it as **Small (tier 0)** in the selected boost kind’s tier system.
 
 **Tier extraction from boost names:**
 
@@ -728,90 +784,92 @@ After determining presence and boost kind, determine the tier using **both paren
 3. **Apply merging logic** to the mapped numeric tiers.
 4. **Cap result** to valid tiers for the selected boost kind (cannot produce tiers that don't exist).
 
-**When both parents have boosts (4-tier boost example):**
+**Tier merging matrix (4-tier boosts; same-type only):**
 
 The table below shows merging outcomes for **4-tier boosts** (elemental, ArmourPiercing), which are the common boost types for non-unique weapons. For 3-tier and 1-tier boost examples (unique weapons only), see [Section 3.1.1](#311-special-boost-types-unique-weapons).
 
 | | Small (0) | Untiered (1) | Medium (2) | Large (3) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Small (0)** | Small (deterministic) | Same-type: Untiered (deterministic)<br>Cross-type: Small or Untiered (50/50) | Untiered (deterministic merge) | Same-type: Medium (deterministic)<br>Cross-type: Untiered (deterministic) |
-| **Untiered (1)** | Same-type: Untiered (deterministic)<br>Cross-type: Small or Untiered (50/50) | Untiered (deterministic) | Same-type: Medium (deterministic)<br>Cross-type: Untiered or Medium (50/50) | Medium (deterministic merge) |
-| **Medium (2)** | Untiered (deterministic merge) | Same-type: Medium (deterministic)<br>Cross-type: Untiered or Medium (50/50) | Medium (deterministic) | Same-type: Large (deterministic)<br>Cross-type: Medium or Large (50/50) |
-| **Large (3)** | Same-type: Medium (deterministic)<br>Cross-type: Untiered (deterministic) | Medium (deterministic merge) | Same-type: Large (deterministic)<br>Cross-type: Medium or Large (50/50) | Large (deterministic) |
+| **Small (0)** | Small (deterministic) | Untiered (deterministic) | Untiered (deterministic merge) | Medium (deterministic; Small + Large special case) |
+| **Untiered (1)** | Untiered (deterministic) | Untiered (deterministic) | Medium (deterministic) | Medium (deterministic merge) |
+| **Medium (2)** | Untiered (deterministic merge) | Medium (deterministic) | Medium (deterministic) | Large (deterministic) |
+| **Large (3)** | Medium (deterministic; Small + Large special case) | Medium (deterministic merge) | Large (deterministic) | Large (deterministic) |
 
 **Tier merging rules:**
 
-When only one parent has a boost, treat the missing parent as **Small (tier 0)** and apply the same merging rules below.
+When only one parent has a boost, treat the missing parent as **Small (tier 0)** and apply the same merging rules below (within the selected boost kind’s tier system).
 
 1. **Same tier** → keep that tier (shared, deterministic).
 2. **Gap ≥2** (deterministic merge):
    - **4-tier special case** (Small (0) + Large (3)):
-     - **Same-type** (`TypeMatch=true`) → Medium (2)
-     - **Cross-type** → Untiered (1)
+     - Result → Medium (2)
    - **All other cases**: midpoint merge (rounded down), capped to max tier for that boost kind.
 3. **Adjacent tiers** (gap =1):
-   - **Same-type** (`TypeMatch=true`): pick the **higher tier** (deterministic, player-favouring).
-   - **Cross-type**: pick one randomly (50/50).
+   - Pick the **higher tier** (deterministic, player-favouring).
 4. **Result capping**: Final tier must be one that actually exists for the selected boost kind.
 
 **Note:** For 3-tier and 1-tier boost examples (unique weapons only), see [Section 3.1.1](#311-special-boost-types-unique-weapons).
 
 **Note:** For pseudocode implementation reference, see [forging_system_implementation_blueprint_se.md → Weapon boost inheritance pseudocode](forging_system_implementation_blueprint_se.md#weapon-boost-inheritance-pseudocode).
 
+#### Step 3: Slot B (secondary; cap = 2 only)
+
+Only if `cap = 2`:
+
+- Let `A2 = boostList_slot1[1]` (if present) and `B2 = boostList_slot2[1]` (if present).
+- If both exist: inherit Slot B using the same kind-selection and tier-merging rules as Slot A (main-slot priority for kind; tiers merged deterministically).
+- If exactly one exists: inherit that boost as Slot B deterministically.
+- If neither exists: no Slot B.
+
 ### 3.3. Worked examples
 
 <a id="33-weapon-boost-worked-examples"></a>
 
-##### Example 1: Fire Large (slot 1) + Fire Large (slot 2) (same boost kind, same tier)
+##### Example 1: Slot A (single-boost case): Fire Large (slot 1) + Fire Large (slot 2)
 
-- **Presence**: Fire boost kept (both parents have boosts, deterministic)
-- **Boost kind**: Fire (main slot decides, same as secondary slot)
-- **Tier**: Large (same tier, deterministic)
-- **Result**: Fire Large (deterministic)
+- **TypeMatch**: true (same `WeaponType`)
+- **cap**: 2 (non-staff weapon)
+- **Slot A**: Fire Large (deterministic)
+- **Slot B**: none (no second boost candidates)
 
-##### Example 2: Fire Small (slot 1) + Fire Large (slot 2) (same boost kind, extreme gap)
+##### Example 2: Slot A (extreme gap): Fire Small (slot 1) + Fire Large (slot 2)
 
-- **Presence**: Fire boost kept (both parents have boosts, deterministic)
-- **Boost kind**: Fire (main slot decides, same as secondary slot)
-- **Tier**:
-  - Same-type: Medium (deterministic, Small + Large → Medium)
-  - Cross-type: Untiered (deterministic, Small + Large → Untiered)
-- **Result**:
-  - Same-type: Fire Medium (deterministic)
-  - Cross-type: Fire Untiered (deterministic)
+- **TypeMatch**: true
+- **cap**: 2
+- **Slot A**: Fire Medium (deterministic; Small + Large → Medium)
+- **Slot B**: none
 
-##### Example 3: Fire Medium (slot 1) + Fire Large (slot 2) (same boost kind, adjacent tiers)
+##### Example 3: Slot A (adjacent tiers): Fire Medium (slot 1) + Fire Large (slot 2)
 
-- **Presence**: Fire boost kept (both parents have boosts, deterministic)
-- **Boost kind**: Fire (main slot decides, same as secondary slot)
-- **Tier**: 
-  - Same-type: Large (deterministic, picks higher tier)
-  - Cross-type: Medium or Large (50/50)
-- **Result**: 
-  - Same-type: Fire Large (deterministic)
-  - Cross-type: Fire Medium (50%) or Fire Large (50%)
+- **TypeMatch**: true
+- **cap**: 2
+- **Slot A**: Fire Large (deterministic; adjacent tiers pick higher)
+- **Slot B**: none
 
-##### Example 4: Fire Large (slot 1) + Air Medium (slot 2) (different boost kinds, main slot priority, adjacent tiers)
+##### Example 4: Two-boost case (cap = 2): Slot A and Slot B both inherited
 
-- **Presence**: Boost kept (both parents have boosts, deterministic)
-- **Boost kind**: Fire (main slot decides, regardless of tier)
-- **Tier**: 
-  - Same-type: Large (deterministic, picks higher tier)
-  - Cross-type: Medium or Large (50/50, adjacent tiers — uses both parents' tiers for merging)
-- **Result**: 
-  - Same-type: Fire Large (deterministic)
-  - Cross-type: Fire Medium (50%) or Fire Large (50%)
+Assume both parents are the same weapon type and each has two boost entries:
 
-##### Example 5: (no boost, slot 1) + Fire Medium (slot 2) (fallback to secondary slot, gap ≥2 merge case)
+- Slot 1 `Boosts`: Fire Medium; Air Small
+- Slot 2 `Boosts`: Fire Large; Water Untiered
 
-- **Presence**: Fire boost kept (same-type: 100% chance; cross-type: 50% chance, else no boost)
-- **Boost kind**: Fire (secondary slot used, main slot has no boost — only if boost is kept)
-- **Tier**: Untiered (deterministic merge, Medium + Small [implicit] → Untiered)
-- **Result**:
-  - Same-type: Fire Untiered (100%, deterministic)
-  - Cross-type: Fire Untiered (50%) or no boost (50%)
+Result:
 
-**Note:** Untiered is a real tier. In 4-tier boosts, Small + Large resolves to Untiered (cross-type) or Medium (same-type). In single-parent cases, the missing parent is treated as tier 0 of the selected boost kind’s tier system.
+- **TypeMatch**: true
+- **cap**: 2
+- **Slot A**: Fire Large (kind from slot 1’s first entry; tier Medium + Large → Large)
+- **Slot B**: Air Untiered (kind from slot 1’s second entry; tier Small + Untiered → Untiered)
+
+##### Example 5: Fallback when slot 1 has no boost
+
+If slot 1 has no boost entries and slot 2 has one:
+
+- **TypeMatch**: true
+- **cap**: 2
+- **Slot A**: inherit slot 2’s boost deterministically (fallback)
+- **Slot B**: none
+
+**Note:** Untiered is a real tier. In 4-tier boosts, Small + Large resolves to Medium (special case). In single-parent cases, the missing parent is treated as tier 0 of the selected boost kind’s tier system.
 
 ---
 
