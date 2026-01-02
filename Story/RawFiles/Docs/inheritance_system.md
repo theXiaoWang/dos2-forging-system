@@ -105,6 +105,14 @@ Reject an ingredient if it has:
 
 Empty rune slots are allowed.
 
+Additionally, reject an ingredient weapon if it is affected by a **temporary weapon-enchant status** (these are not permanent weapon boost entries, and must not be “baked in” via forging), for example:
+
+- `FIRE_BRAND` (Fire Brand)
+- `VENOM_COATING` (Venom Coating)
+- `VENOM_AURA` (Venom Aura)
+- `SIPHON_POISON` (Siphon Poison)
+- `ARROWHEAD_*` (Elemental Arrowheads)
+
 Additionally, enforce **item-type compatibility**:
 
 - **Weapons**: weapon can forge with weapon (cross weapon sub-types allowed, e.g. dagger ↔ axe).
@@ -577,6 +585,8 @@ This section defines how **weapon boosts** (elemental damage, armour-piercing, e
 
 **Note:** This documentation focuses on **non-unique items**. Unique weapons with special boost types (Vampiric, MagicArmourRefill, Chill) are treated as special cases and documented separately (see [Section 3.1.1](#311-special-boost-types-unique-weapons)).
 
+**Important:** Temporary weapon-enchant effects from skills/consumables (e.g. Venom Coating, Elemental Arrowheads, Fire Brand, etc.) are implemented as **statuses** that grant a conditional `BonusWeapon` while active, not as permanent weapon `Boosts`. These temporary effects must not be present on forging ingredients (see [Section 1.1](#11-ingredient-eligibility)).
+
 ### 3.1. Weapon boosts (definition)
 
 <a id="31-weapon-boosts-definition"></a>
@@ -639,30 +649,18 @@ The following boost types are **rarely encountered** in normal gameplay, as they
 
 **Note:** These special boost types follow the same inheritance rules as common boost types (see [Section 3.2](#32-weapon-boost-inheritance-rules)), but use different tier systems (3-tier or 1-tier instead of 4-tier).
 
-**3-tier boost merging table (same-type only):**
+**Special cases for unique weapon boosts (tier availability):**
 
-Applies to boost kinds that have **no Small tier** (Vampiric, MagicArmourRefill):
+These boost kinds have **limited tier availability** in vanilla, but they still follow the same **score-and-select** inheritance rules in [Section 3.2](#32-weapon-boost-inheritance-rules).
 
-- Untiered (0), Medium (1), Large (2)
+When converting a numeric score back into a concrete tier name, clamp to tiers that actually exist for that boost kind:
 
-| | Untiered (0) | Medium (1) | Large (2) |
-| :--- | :--- | :--- | :--- |
-| **Untiered (0)** | Untiered (deterministic) | Medium (deterministic) | Medium (deterministic merge) |
-| **Medium (1)** | Medium (deterministic) | Medium (deterministic) | Large (deterministic) |
-| **Large (2)** | Medium (deterministic merge) | Large (deterministic) | Large (deterministic) |
-
-**Example outcomes when only one parent has a 3-tier boost (same-type only):**
-
-| Parent with Boost | Missing Parent | Result Tier |
-| :---------------- | :------------- | :---------- |
-| Large             | Untiered (tier 0) | Medium (deterministic merge) |
-| Medium            | Untiered (tier 0) | Medium (deterministic) |
-| Untiered          | Untiered (tier 0) | Untiered (deterministic) |
-
-**Special cases for unique weapon boosts:**
-
-- **3-tier boosts** (Vampiric, MagicArmourRefill): Missing parent treated as Untiered (tier 0), not Small. Outcomes that would produce Small are capped to Untiered.
-- **1-tier boosts** (Chill): Missing parent treated as Untiered (tier 0). Result is always Untiered, regardless of merging logic.
+- **3-tier boosts** (Vampiric, MagicArmourRefill):
+  - Valid tiers: Untiered, `_Medium`, `_Large` (**no `_Small`**)
+  - If rounding would produce `_Small`, clamp it to **Untiered**
+- **1-tier boosts** (Chill):
+  - Valid tier: Untiered only
+  - Any non-zero rounded tier clamps to **Untiered**
 
 </details>
 
@@ -690,7 +688,13 @@ Unique weapons:
 
 <a id="32-weapon-boost-inheritance-rules"></a>
 
-Weapon boost inheritance follows a **shared/pool model** with **tier merging rules** and a small number of **boost slots** (vanilla-aligned). The system determines the output boost list (0–2 entries depending on weapon type), and for each boost slot determines the **boost kind** (Fire, Water, Poison, Air, Earth, ArmourPiercing; for special types see [Section 3.1.1](#311-special-boost-types-unique-weapons)) and the **tier** (Small, Untiered, Medium, or Large, depending on what's available for that boost kind).
+Weapon boost inheritance uses a **score-and-select** model with a small number of **boost slots** (vanilla-aligned).
+
+The system:
+
+- Computes a numeric score for every boost kind seen on either parent (after bias rolls),
+- Selects up to `cap` boost kinds (weapon-type cap),
+- Converts the selected kind scores into concrete boost tiers (`None`, `_Small`, untiered, `_Medium`, `_Large`), respecting tier availability for special boost kinds.
 
 **Note:** `_Boost_Weapon_Damage_Bonus` is excluded from this system (see [Section 3.1](#31-weapon-boosts-definition) for details).
 
@@ -700,14 +704,6 @@ Weapon boost inheritance follows a **shared/pool model** with **tier merging rul
 - Tiers are **discrete** (Small/Medium/Large are separate boost entries with different `DamageFromBase` percentages or `Value` fields).
 - The tier selection in vanilla is driven by **which boost entry gets assigned** (via rarity buckets or crafting combos), not computed from level.
 - This design treats boost inheritance as a **discrete property selection** (like Skills or ExtraProperties) rather than numeric merging.
-
-#### Weapon-type match requirement (same-type only)
-
-Weapon boosts are inherited **only** when forging two weapons of the exact same `WeaponType`.
-
-Let `TypeMatch = (WeaponType_1 == WeaponType_2)`. This section only applies when `TypeMatch=true`.
-
-**Note:** This concept is also used in modifier inheritance (see [Section 4.2](#42-selection-rule-shared--pool--cap) for details).
 
 #### Boost slot caps (vanilla-aligned)
 
@@ -719,12 +715,11 @@ Vanilla behaviour implies that different weapon types support different numbers 
 
 This system follows that model. The forged output is clamped to `MaxBoostSlots[WeaponType_out]`.
 
-#### Step 0: Presence (pool vs shared)
+#### Step 0: Eligibility + inputs
 
-First, determine whether the forged weapon **has boosts at all**:
+Weapon boosts are inherited **only** when forging two weapons of the exact same `WeaponType`.
 
-- If `TypeMatch=false`: this channel is skipped and the forged weapon has **no weapon boosts**.
-- Otherwise (`TypeMatch=true`): continue below.
+Let `TypeMatch = (WeaponType_1 == WeaponType_2)`. If `TypeMatch=false`, this channel is skipped and the forged weapon has **no weapon boosts**.
 
 Determine `cap = MaxBoostSlots[WeaponType_out]`:
 
@@ -734,142 +729,236 @@ Determine `cap = MaxBoostSlots[WeaponType_out]`:
   - Ignore `_Boost_Weapon_Damage_Bonus` (and tiered variants) as described in [Section 3.1](#31-weapon-boosts-definition).
   - Clamp each parent’s list to `cap` entries (deterministic; keep the first `cap` boost entries).
 
-Presence outcomes:
-
-- If both parents have at least one boost entry → forged weapon will attempt to inherit boosts (deterministic).
-- If exactly one parent has boost entries → forged weapon inherits that parent’s boosts (deterministic).
-- If neither parent has boost entries → forged weapon has **no weapon boosts** (deterministic).
+If `cap ≥ 1` and `TypeMatch=true`, the system always attempts boost inheritance using the scoring rules below. (If both parent lists are empty after filtering, the result is no boosts.)
 
 This mirrors vanilla weapon behaviour: weapon boosts behave like a small number of discrete slots, not an unbounded stack.
 
-#### Step 1: Slot model (staff vs other weapons)
+#### Step 1: Tier-to-score mapping (universal scale)
 
-Let `cap = MaxBoostSlots[WeaponType_out]`.
+This section uses a universal numeric scale for scoring:
 
-- If `cap = 0`: stop (no boosts).
-- If `cap = 1`: inherit only **Slot A**.
-- If `cap = 2`: inherit **Slot A**, then (if available) **Slot B**.
+- `None` = 0
+- `_Small` = 1
+- **Untiered** (no suffix) = 2
+- `_Medium` = 3
+- `_Large` = 4
 
-#### Step 2: Slot A (primary) — kind selection + tier merging
+For special boost kinds with missing tiers (see [Section 3.1.1](#311-special-boost-types-unique-weapons)), conversion back to a concrete tier clamps to tiers that exist.
 
-If both parents have at least one boost entry, use the first entry in each parent list as the Slot A candidates:
+#### Step 2: Score every boost kind (after bias)
 
-- `A1 = boostList_slot1[0]` (if present)
-- `B1 = boostList_slot2[0]` (if present)
+For each boost kind `k` present on either parent (Fire/Water/Poison/Air/Earth/ArmourPiercing, and special kinds where relevant):
 
-If only one parent has boost entries, Slot A is taken from that parent deterministically.
+1. Extract each parent’s tier score for that kind:
+   - `s_main(k)` = tier score on the **main slot** parent (0 if absent)
+   - `s_sec(k)` = tier score on the **secondary slot** parent (0 if absent)
+2. Compute the weighted base score:
 
-Boost kind selection for Slot A:
+`baseScore(k) = 0.6 * s_main(k) + 0.4 * s_sec(k)`
 
-- If slot 1 has `A1`: use slot 1’s boost kind (main-slot priority).
-- Otherwise, use slot 2’s boost kind.
+3. Roll bias for every kind:
 
-Tier merging for Slot A:
+- Roll `bias(k) ~ U(0, 0.7)` (seeded).
 
-- Use both parents’ Slot A tiers when both are present; if one is missing, treat it as **Small (tier 0)** in the selected boost kind’s tier system.
+4. Final score (after bias):
 
-**Tier extraction from boost names:**
+`score(k) = clamp(baseScore(k) + bias(k), 0, 4)`
 
-- Boost names ending in `_Small` → **Small tier**
-- Boost names ending in `_Medium` → **Medium tier**
-- Boost names ending in `_Large` → **Large tier**
-- Boost names with **no tier suffix** → **Untiered tier**
+#### Step 3: Select boost kinds under the weapon cap (score-and-select)
 
-**Tier mapping and merging process:**
+Select boost kinds using the following process:
 
-1. **Extract tier** from each parent's boost name (Small, Untiered, Medium, or Large).
-2. **Map tiers to numeric values** within the selected boost kind's tier system:
-   - For **4-tier boosts** (elemental, ArmourPiercing): Small=0, Untiered=1, Medium=2, Large=3
-   - For **3-tier and 1-tier boosts** (unique weapons only): see [Section 3.1.1](#311-special-boost-types-unique-weapons)
-3. **Apply merging logic** to the mapped numeric tiers.
-4. **Cap result** to valid tiers for the selected boost kind (cannot produce tiers that don't exist).
+1. Build `C1 = { k | score(k) >= 1 }` (candidates that can naturally reach at least `_Small`).
+2. Sort `C1` by:
+   - Higher `score(k)` first
+   - If tied: higher `s_main(k)` first (main-slot dominance)
+   - If still tied and both are secondary-only: earlier index in the secondary parent boost list wins (`[0]` first)
+3. Pick the first `cap` kinds from `C1`.
 
-**Tier merging matrix (4-tier boosts; same-type only):**
+#### Step 4: Fallback fill (only when cap is not filled)
 
-The table below shows merging outcomes for **4-tier boosts** (elemental, ArmourPiercing), which are the common boost types for non-unique weapons. For 3-tier and 1-tier boost examples (unique weapons only), see [Section 3.1.1](#311-special-boost-types-unique-weapons).
+If `|picked| < cap` and **all remaining unpicked kinds** have `score(k) < 1`, then fill the remaining slots using a secondary conversion:
 
-| | Small (0) | Untiered (1) | Medium (2) | Large (3) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Small (0)** | Small (deterministic) | Untiered (deterministic) | Untiered (deterministic merge) | Medium (deterministic; Small + Large special case) |
-| **Untiered (1)** | Untiered (deterministic) | Untiered (deterministic) | Medium (deterministic) | Medium (deterministic merge) |
-| **Medium (2)** | Untiered (deterministic merge) | Medium (deterministic) | Medium (deterministic) | Large (deterministic) |
-| **Large (3)** | Medium (deterministic; Small + Large special case) | Medium (deterministic merge) | Large (deterministic) | Large (deterministic) |
+For each remaining kind with `0 < score(k) < 1`:
 
-**Tier merging rules:**
+`fillScore(k) = 1 + score(k) / 2`
 
-When only one parent has a boost, treat the missing parent as **Small (tier 0)** and apply the same merging rules below (within the selected boost kind’s tier system).
+Then:
 
-1. **Same tier** → keep that tier (shared, deterministic).
-2. **Gap ≥2** (deterministic merge):
-   - **4-tier special case** (Small (0) + Large (3)):
-     - Result → Medium (2)
-   - **All other cases**: midpoint merge (rounded down), capped to max tier for that boost kind.
-3. **Adjacent tiers** (gap =1):
-   - Pick the **higher tier** (deterministic, player-favouring).
-4. **Result capping**: Final tier must be one that actually exists for the selected boost kind.
+- Sort remaining by `fillScore(k)` (same tie-breaks as above)
+- Add until `cap` is filled (or no `0 < score(k) < 1` remain)
 
-**Note:** For 3-tier and 1-tier boost examples (unique weapons only), see [Section 3.1.1](#311-special-boost-types-unique-weapons).
+This ensures that weak leftover boosts (e.g. a secondary-only `_Small` giving `score=0.4`) can still occupy an otherwise empty boost slot as `_Small`, while never producing untiered or higher via the fallback path (`fillScore < 1.5` when `score < 1`).
 
-**Note:** For pseudocode implementation reference, see [forging_system_implementation_blueprint_se.md → Weapon boost inheritance pseudocode](forging_system_implementation_blueprint_se.md#weapon-boost-inheritance-pseudocode).
+#### Step 5: Convert selected kind scores back into concrete tiers
 
-#### Step 3: Slot B (secondary; cap = 2 only)
+Convert each selected kind’s numeric value into a tier score using **round half up**:
 
-Only if `cap = 2`:
+- If the kind was selected in **Step 3**: use `score(k)`
+- If the kind was selected in **Step 4 (fallback fill)**: use `fillScore(k)`
 
-- Let `A2 = boostList_slot1[1]` (if present) and `B2 = boostList_slot2[1]` (if present).
-- If both exist: inherit Slot B using the same kind-selection and tier-merging rules as Slot A (main-slot priority for kind; tiers merged deterministically).
-- If exactly one exists: inherit that boost as Slot B deterministically.
-- If neither exists: no Slot B.
+`tierScore_out = clamp(floor(score + 0.5), 0, 4)`
+
+Then map:
+
+- 0 → None (do not include this kind)
+- 1 → `_Small`
+- 2 → Untiered
+- 3 → `_Medium`
+- 4 → `_Large`
+
+For pseudocode implementation reference, see [forging_system_implementation_blueprint_se.md → Weapon boost inheritance pseudocode](forging_system_implementation_blueprint_se.md#weapon-boost-inheritance-pseudocode).
+
+*Note:* If the computed tier name does not exist for that boost kind in vanilla, clamp it to the nearest valid tier for that kind (see [Section 3.1.1](#311-special-boost-types-unique-weapons)).
 
 ### 3.3. Worked examples
 
 <a id="33-weapon-boost-worked-examples"></a>
 
-##### Example 1: Slot A (single-boost case): Fire Large (slot 1) + Fire Large (slot 2)
+##### Example 1: Shared-kind scoring (cap = 2): Fire + Water
 
-- **TypeMatch**: true (same `WeaponType`)
-- **cap**: 2 (non-staff weapon)
-- **Slot A**: Fire Large (deterministic)
-- **Slot B**: none (no second boost candidates)
+Assume the following bias rolls for illustration:
 
-##### Example 2: Slot A (extreme gap): Fire Small (slot 1) + Fire Large (slot 2)
+- `bias(Fire) = +0.30`
+- `bias(Water) = +0.10`
 
-- **TypeMatch**: true
-- **cap**: 2
-- **Slot A**: Fire Medium (deterministic; Small + Large → Medium)
-- **Slot B**: none
+Inputs:
 
-##### Example 3: Slot A (adjacent tiers): Fire Medium (slot 1) + Fire Large (slot 2)
+- Weapon type: Sword (cap = 2)
+- Slot 1 `Boosts` (main): Fire `_Large` + Water `_Medium`
+- Slot 2 `Boosts` (secondary): Fire `_Small` + Water (untiered)
 
-- **TypeMatch**: true
-- **cap**: 2
-- **Slot A**: Fire Large (deterministic; adjacent tiers pick higher)
-- **Slot B**: none
+```
+Parent A (main):  Fire _Large, Water _Medium
+Parent B (sec):   Fire _Small, Water (untiered)
+---------------------------------------------
+Tier scores:
+  Fire:  s_main=4, s_sec=1
+  Water: s_main=3, s_sec=2
 
-##### Example 4: Two-boost case (cap = 2): Slot A and Slot B both inherited
+Scores (after bias):
+  Fire:  score = 0.6*4 + 0.4*1 + 0.30 = 3.10
+  Water: score = 0.6*3 + 0.4*2 + 0.10 = 2.70
 
-Assume both parents are the same weapon type and each has two boost entries:
+Pick top cap=2 kinds with score>=1:
+  Fire (3.10), Water (2.70)
 
-- Slot 1 `Boosts`: Fire Medium; Air Small
-- Slot 2 `Boosts`: Fire Large; Water Untiered
+Convert (round half up):
+  Fire 3.10 -> 3 -> _Medium
+  Water 2.70 -> 3 -> _Medium
+```
+
+##### Example 2: Mixed kinds (cap = 2): main-slot dominance with score-and-select
+
+Assume the following bias rolls for illustration:
+
+- `bias(Fire) = +0.20`
+- `bias(Air) = +0.60`
+- `bias(Water) = +0.70`
+
+Inputs:
+
+- Weapon type: Sword (cap = 2)
+- Slot 1 `Boosts` (main): Fire `_Large` + Air `_Medium`
+- Slot 2 `Boosts` (secondary): Fire `_Small` + Water (untiered)
+
+```
+Parent A (main):  Fire _Large, Air _Medium
+Parent B (sec):   Fire _Small, Water (untiered)
+---------------------------------------------
+Tier scores:
+  Fire:  s_main=4, s_sec=1
+  Air:   s_main=3, s_sec=0
+  Water: s_main=0, s_sec=2
+
+Scores (after bias):
+  Fire:  score = 0.6*4 + 0.4*1 + 0.20 = 3.00
+  Air:   score = 0.6*3 + 0.4*0 + 0.60 = 2.40
+  Water: score = 0.6*0 + 0.4*2 + 0.70 = 1.50
+
+Pick top cap=2 kinds with score>=1:
+  Fire (3.00), Air (2.40)
+
+Convert (round half up):
+  Fire 3.00 -> 3 -> _Medium
+  Air  2.40 -> 2 -> (untiered)
+```
+
+##### Example 3: Secondary-only leftovers filled as `_Small` (fallback fill)
+
+Assume the following bias rolls for illustration:
+
+- `bias(Fire) = +0.10`
+- `bias(ArmourPiercing) = +0.05`
+- `bias(Air) = +0.10`
+
+Inputs:
+
+- Weapon type: Sword (cap = 2)
+- Slot 1 `Boosts` (main): Fire `_Large`
+- Slot 2 `Boosts` (secondary): ArmourPiercing `_Small`; Air `_Small`
+
+```
+Parent A (main):  Fire _Large
+Parent B (sec):   ArmourPiercing _Small, Air _Small
+---------------------------------------------
+Tier scores:
+  Fire:           s_main=4, s_sec=0
+  ArmourPiercing: s_main=0, s_sec=1  (secondary index [0])
+  Air:            s_main=0, s_sec=1  (secondary index [1])
+
+Scores (after bias):
+  Fire:           score = 0.6*4 + 0.4*0 + 0.10 = 2.50
+  ArmourPiercing: score = 0.6*0 + 0.4*1 + 0.05 = 0.45
+  Air:            score = 0.6*0 + 0.4*1 + 0.10 = 0.50
+
+Primary pick (score>=1), cap=2:
+  Fire (2.50)  -> 1 slot filled, 1 slot free
+
+Fallback fill (all remaining scores < 1):
+  fillScore = 1 + score/2
+  Air:            1 + 0.50/2 = 1.25
+  ArmourPiercing: 1 + 0.45/2 = 1.225
+
+Pick best fillScore (ties resolved by secondary list order):
+  Air (1.25) -> rounds to _Small
 
 Result:
+  Fire (from normal score) + Air _Small (fallback fill)
+```
 
-- **TypeMatch**: true
-- **cap**: 2
-- **Slot A**: Fire Large (kind from slot 1’s first entry; tier Medium + Large → Large)
-- **Slot B**: Air Untiered (kind from slot 1’s second entry; tier Small + Untiered → Untiered)
+##### Example 4: Staff cap (cap = 1)
 
-##### Example 5: Fallback when slot 1 has no boost
+Assume the following bias rolls for illustration:
 
-If slot 1 has no boost entries and slot 2 has one:
+- `bias(Water) = +0.70`
+- `bias(Air) = +0.20`
+- `bias(Poison) = +0.60`
 
-- **TypeMatch**: true
-- **cap**: 2
-- **Slot A**: inherit slot 2’s boost deterministically (fallback)
-- **Slot B**: none
+Inputs:
 
-**Note:** Untiered is a real tier. In 4-tier boosts, Small + Large resolves to Medium (special case). In single-parent cases, the missing parent is treated as tier 0 of the selected boost kind’s tier system.
+- Weapon type: Staff (cap = 1)
+- Slot 1 `Boosts` (main): Air `_Large` + Water `_Medium`
+- Slot 2 `Boosts` (secondary): Poison `_Small` + Water (untiered)
+
+```
+Weapon type: Staff (cap=1)
+Parent A (main):  Air _Large, Water _Medium
+Parent B (sec):   Poison _Small, Water (untiered)
+---------------------------------------------
+Tier scores:
+  Water:  s_main=3, s_sec=2
+  Air:    s_main=4, s_sec=0
+  Poison: s_main=0, s_sec=1
+
+Scores (after bias):
+  Water:  score = 0.6*3 + 0.4*2 + 0.70 = 3.30
+  Air:    score = 0.6*4 + 0.4*0 + 0.20 = 2.60
+  Poison: score = 0.6*0 + 0.4*1 + 0.60 = 1.00
+
+Pick top cap=1 kind with score>=1:
+  Water (3.30)
+```
 
 ---
 
@@ -1023,7 +1112,7 @@ Notation used below:
 
 #### Weapon-type match modifier (Cross-type vs Same-type)
 
-**Note:** This concept is introduced in [Section 3.2](#32-weapon-boost-inheritance-rules) (Weapon Boost Inheritance). This section describes how it applies to modifier inheritance.
+**Note:** `TypeMatch` is used in multiple systems (weapon boosts, base values, modifier inheritance). This section defines how it affects the modifier inheritance probability model.
 
 For **weapons**, we treat **exact same `WeaponType`** as "same-type". For other item categories, type mismatches are not allowed by eligibility rules, so they always behave like "same-type".
 

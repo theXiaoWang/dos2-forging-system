@@ -1,0 +1,37 @@
+
+/* Please visit the URL below for more information: */
+/*   https://shd101wyy.github.io/markdown-preview-enhanced/#/customize-css */
+
+.markdown-preview.markdown-preview {
+  // modify your style here
+  // eg: background-color: blue;
+  }
+
+/* Move the TOC sidebar to the left */
+.md-sidebar-toc {
+  left: 0 !important;
+  right: auto !important;
+  border-right: 1px solid #e0e0e0; /* Optional: adds a separator line */
+  border-left: none !important;
+  width: 420px !important; /* Wider TOC panel */
+}
+
+/* Push the main content to the right so it isn't hidden behind the TOC */
+.markdown-preview.markdown-preview {
+  padding-left: 520px !important; /* Match the TOC width */
+  padding-right: 16px !important;
+}
+
+/* Move the topbar toolbar buttons (Go to top / Refresh / TOC) to the top-left */
+.topbar {
+  left: 12px !important;
+  right: auto !important;
+  padding-right: 0 !important;
+  padding-left: 8px !important;
+}
+
+/* Override the flex container inside topbar to align left instead of right */
+.topbar .flex.flex-row.justify-end {
+  justify-content: flex-start !important;
+  float: left !important;
+}

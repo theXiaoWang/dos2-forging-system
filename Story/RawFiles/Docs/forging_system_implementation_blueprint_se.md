@@ -511,113 +511,133 @@ ApplyGrantedSkillsToForgedItem(finalSkills)
 ### Weapon boost inheritance pseudocode
 
 ```python
-# WEAPON BOOST INHERITANCE (WEAPONS ONLY)
+# WEAPON BOOST INHERITANCE (WEAPONS ONLY; SAME `WeaponType` ONLY)
 # - Weapon boosts are discrete boost entries (elemental damage, armour-piercing, etc.)
-# - Determines both boost kind (Fire, Water, Poison, Air, Earth, ArmourPiercing) and tier (Small, Untiered, Medium, Large)
-# - Uses shared/pool model with tier merging rules
+# - Uses a score-and-select model: score all boost kinds (after bias), then keep the largest ones under the weapon cap.
 
-// Step 0: Determine presence
-if (both parents have boosts):
-    has_boost = true  // Shared, deterministic
-else if (exactly one parent has boost):
-    if (TypeMatch == true):
-        has_boost = true  // Same-type: 100% (2× capped)
+def max_boost_slots(weapon_type_out: str) -> int:
+    # Vanilla-aligned caps:
+    # - Wands: 0
+    # - Staffs: 1
+    # - Other weapons: 2
+    if weapon_type_out == "Wand":
+        return 0
+    if weapon_type_out == "Staff":
+        return 1
+    return 2
+
+def tier_name_to_score(tier_name: str) -> int:
+    # Universal scale:
+    # None=0, Small=1, Untiered=2, Medium=3, Large=4
+    if tier_name == "None":
+        return 0
+    if tier_name == "Small":
+        return 1
+    if tier_name == "Untiered":
+        return 2
+    if tier_name == "Medium":
+        return 3
+    if tier_name == "Large":
+        return 4
+    raise ValueError("unknown tier")
+
+def round_half_up(x: float) -> int:
+    return int(floor(x + 0.5))
+
+def score_to_tier_name_clamped(boost_kind: str, score: float) -> str:
+    # Convert numeric score -> tier name (then clamp to tiers that exist for that boost kind).
+    t = max(0, min(4, round_half_up(score)))
+    if t == 0:
+        return "None"
+    if t == 1:
+        tier = "Small"
+    elif t == 2:
+        tier = "Untiered"
+    elif t == 3:
+        tier = "Medium"
     else:
-        has_boost = random_choice(true, false)  // Cross-type: 50%
-else:
-    has_boost = false  // Neither has boost
+        tier = "Large"
 
-if (!has_boost):
-    return no_boost
+    # Clamp for special boost kinds (examples; implement with a lookup table):
+    # - 3-tier boosts (no Small): Small -> Untiered
+    # - 1-tier boosts (only Untiered): any -> Untiered
+    if boost_kind in ["Vampiric", "MagicArmourRefill"]:
+        if tier == "Small":
+            tier = "Untiered"
+    if boost_kind in ["Chill"]:
+        tier = "Untiered"
+    return tier
 
-// Step 1: Determine boost kind (main slot priority)
-if (slot1 has boost):
-    K_out = K_slot1  // Main slot decides
-else if (slot2 has boost):
-    K_out = K_slot2  // Fallback to secondary slot
+def weapon_boost_inheritance(slot1_item, slot2_item, forgeSeed):
+    weapon_type_out = slot1_item.weapon_type  # slot 1 identity rule
+    cap = max_boost_slots(weapon_type_out)
+    if cap == 0:
+        return []
 
-// Step 2: Determine tier
-// Helper function: map tier name to numeric value within boost kind's system
-function map_tier_to_boost_kind_system(tier_name, boost_kind):
-    if (boost_kind is 4-tier):  // Elemental, ArmourPiercing
-        if (tier_name == "Small"): return 0
-        if (tier_name == "Untiered"): return 1
-        if (tier_name == "Medium"): return 2
-        if (tier_name == "Large"): return 3
-    else if (boost_kind is 3-tier):  // Vampiric, MagicArmourRefill
-        if (tier_name == "Small"): return 0  // Map Small to Untiered (lowest)
-        if (tier_name == "Untiered"): return 0
-        if (tier_name == "Medium"): return 1
-        if (tier_name == "Large"): return 2
-    else if (boost_kind is 1-tier):  // Chill
-        return 0  // Always Untiered
+    # Same `WeaponType` only
+    TypeMatch = (slot1_item.weapon_type == slot2_item.weapon_type)
+    if not TypeMatch:
+        return []
 
-// Helper function: convert numeric tier back to tier name, capped to boost kind's max
-function convert_numeric_to_tier_name(tier_num, boost_kind):
-    if (boost_kind is 4-tier):
-        if (tier_num == 0): return "Small"
-        if (tier_num == 1): return "Untiered"
-        if (tier_num == 2): return "Medium"
-        if (tier_num == 3): return "Large"
-        return "Large"  // Cap to max
-    else if (boost_kind is 3-tier):  // Vampiric, MagicArmourRefill
-        if (tier_num == 0): return "Untiered"
-        if (tier_num == 1): return "Medium"
-        if (tier_num == 2): return "Large"
-        return "Large"  // Cap to max
-    else if (boost_kind is 1-tier):  // Chill
-        return "Untiered"  // Always Untiered
+    # Parse + filter boost lists; clamp list length to cap (keep first cap entries)
+    list1 = ParseBoosts(slot1_item.boosts)  # split by ';'
+    list2 = ParseBoosts(slot2_item.boosts)
+    list1 = FilterOutDamageBoostBonus(list1)
+    list2 = FilterOutDamageBoostBonus(list2)
+    list1 = list1[:cap]
+    list2 = list2[:cap]
 
-// Extract tier names from boost names
-T1_name = extract_tier_from_boost_name(slot1_boost_name)
-T2_name = extract_tier_from_boost_name(slot2_boost_name)
+    # Build per-kind inputs (score 0..4 per parent, after tier parsing)
+    kinds = UnionBoostKinds(list1, list2)
+    s_main = {}  # kind -> score (0..4)
+    s_sec = {}
+    sec_index = {}  # kind -> earliest index in secondary list (tie-break)
+    for k in kinds:
+        s_main[k] = TierScoreForKind(list1, k)  # 0 if absent
+        s_sec[k] = TierScoreForKind(list2, k)
+        sec_index[k] = EarliestIndexOfKind(list2, k)  # None if absent
 
-// Map to numeric values within selected boost kind's system
-T1_mapped = map_tier_to_boost_kind_system(T1_name, K_out)
-T2_mapped = map_tier_to_boost_kind_system(T2_name, K_out)
+    # Step: compute scores AFTER bias
+    score = {}
+    for k in kinds:
+        base = 0.6 * s_main[k] + 0.4 * s_sec[k]
+        bias = RollUniformSeeded(forgeSeed, 0.0, 0.7)  # one roll per kind
+        score[k] = clamp(base + bias, 0.0, 4.0)
 
-if (both parents have boosts):
-    if (T1_mapped == T2_mapped):
-        T_out_num = T1_mapped  // Same tier = deterministic
-    else if (abs(T1_mapped - T2_mapped) == 3 and get_max_tier(K_out) == 3):  // Small + Large (4-tier)
-        T_out_num = 2 if (TypeMatch == true) else 1  // Same-type: Medium; Cross-type: Untiered
-    else if (abs(T1_mapped - T2_mapped) >= 2):  // Gap >= 2 (midpoint merge)
-        T_out_num = clamp(floor((T1_mapped + T2_mapped) / 2), 0, get_max_tier(K_out))  // Midpoint merge, capped
-    else:  // Adjacent tiers (gap = 1)
-        if (TypeMatch == true):
-            T_out_num = clamp(max(T1_mapped, T2_mapped), 0, get_max_tier(K_out))  // Same-type: pick higher, capped
-        else:
-            T_out_num = clamp(random_choice(T1_mapped, T2_mapped), 0, get_max_tier(K_out))  // Cross-type: 50/50, capped
-else if (only one parent has boost):
-    // Treat missing parent as lowest tier (0) in boost kind's system
-    T_boosted_num = map_tier_to_boost_kind_system(tier_name_of_parent_with_boost, K_out)
-    T_missing_num = 0  // Lowest tier in that boost kind's system
-    if (T_boosted_num == get_max_tier(K_out) and T_missing_num == 0 and get_max_tier(K_out) >= 2):
-        if (get_max_tier(K_out) == 3):  // 4-tier: Small + Large
-            T_out_num = 2 if (TypeMatch == true) else 1  // Same-type: Medium; Cross-type: Untiered
-        else:
-            T_out_num = clamp(floor((T_boosted_num + T_missing_num) / 2), 0, get_max_tier(K_out))  // Midpoint merge, capped
-    else if (T_boosted_num == T_missing_num):
-        T_out_num = T_boosted_num
-    else:  // Adjacent (gap = 1)
-        if (TypeMatch == true):
-            T_out_num = clamp(max(T_boosted_num, T_missing_num), 0, get_max_tier(K_out))  // Same-type: pick higher
-        else:
-            T_out_num = clamp(random_choice(T_boosted_num, T_missing_num), 0, get_max_tier(K_out))  // Cross-type: 50/50
+    picked = []
 
-// Convert numeric tier back to tier name
-T_out = convert_numeric_to_tier_name(T_out_num, K_out)
+    # Primary pick: score >= 1
+    c1 = [k for k in kinds if score[k] >= 1.0]
+    c1.sort(key=lambda k: (
+        -score[k],
+        -s_main[k],                         # main-slot dominance
+        # Only use secondary list order to break ties when the kind is secondary-only (doc rule).
+        (sec_index[k] if (s_main[k] == 0 and sec_index[k] is not None) else 9999),
+    ))
+    picked.extend(c1[:cap])
 
-// Helper function stubs (implementation details)
-function get_max_tier(boost_kind):
-    if (boost_kind is 4-tier): return 3  // Large
-    if (boost_kind is 3-tier): return 2  // Large
-    if (boost_kind is 1-tier): return 0  // Untiered only
+    # Fallback fill: only if cap not filled AND all remaining scores are < 1
+    if len(picked) < cap:
+        remaining = [k for k in kinds if k not in picked]
+        if remaining and max([score[k] for k in remaining], default=0.0) < 1.0:
+            # fillScore = 1 + score/2 (only here)
+            c2 = [k for k in remaining if 0.0 < score[k] < 1.0]
+            c2.sort(key=lambda k: (
+                -(1.0 + score[k] / 2.0),
+                -s_main[k],
+                (sec_index[k] if (s_main[k] == 0 and sec_index[k] is not None) else 9999),
+            ))
+            needed = cap - len(picked)
+            picked.extend(c2[:needed])
 
-function extract_tier_from_boost_name(boost_name):
-    if (boost_name ends with "_Small"): return "Small"
-    if (boost_name ends with "_Medium"): return "Medium"
-    if (boost_name ends with "_Large"): return "Large"
-    return "Untiered"  // No tier suffix
+    # Convert selected kinds back to concrete boosts
+    out = []
+    for k in picked:
+        tier_name = score_to_tier_name_clamped(k, score[k] if score[k] >= 1.0 else (1.0 + score[k] / 2.0))
+        if tier_name == "None":
+            continue
+        out.append(MakeBoostName(k, tier_name))
+
+    return out
 ```
 
