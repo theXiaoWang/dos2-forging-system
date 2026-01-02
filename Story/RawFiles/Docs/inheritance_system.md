@@ -113,6 +113,8 @@ Additionally, reject an ingredient weapon if it is affected by a **temporary wea
 - `SIPHON_POISON` (Siphon Poison)
 - `ARROWHEAD_*` (Elemental Arrowheads)
 
+Additionally, ingredients must be **unequipped** (in inventory, not currently worn/held). This prevents temporary status-driven effects and tooltip overlays from polluting the values extracted for forging.
+
 Additionally, enforce **item-type compatibility**:
 
 - **Weapons**: weapon can forge with weapon (cross weapon sub-types allowed, e.g. dagger ↔ axe).
