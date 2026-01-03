@@ -2,23 +2,24 @@
 
 ## What this system does
 
-This system aims to deliver a more RPG-like forging experience, one that can be calculated, but with enough RNG to allow for that YOLO.
+This system provides a sophisticated and hardcore RPG forging experience, one that can be precisely calculated or just YOLO. 
 
-When you forge two items, this system decides **which and how stats are inherited** by the new forged item.
+The mod aims to increase playability and you can expect a big time investment through a fun, deep forging system. It gives players a true sense of growth with their gear as the game progresses; From common to legendary, every item can be upgraded, improved or used as a fuel resource, no more absolute "junk items". This creates a greater sense of achievement and allows players to forge and customize their dream unique items with both strategies and luck.
 
-- It also inherits the item's **base values**: weapon **base damage** (tooltip-midpoint based, same `WeaponType` only) and armour/shield/jewellery **base values** (tooltip-only, channel-by-channel).
-- If both items share the same stats line, you're more likely to **keep the overlapping stats**.
-- If both items share the same stats **but the numbers differ** (e.g. `+10%` vs `+14%` Critical Chance), it still counts as **shared stats**, but the forged item will **merge the numbers** into a new value.
-- If a stats line is **not shared**, it goes into the **pool**, and keeping it is **more RNG**.
-- If both items are very different, it’s **riskier but can be more rewarding**.
-- Depending on your forging strategy, you could get a **steady, average** 
-result, or a **unpredictable, volatile** result which can get **lucky** or 
-**unlucky** streaks.
+---
 
-In short: 
+When you forge two items, the forged result:
 
-- **More matching lines = more predictable forging**, and **vice versa** 
-- **Closer stats values = merged numbers more consistent**.
+- Always stays the same kind of item as the **first item you put in** (e.g. forge two swords together, you get a sword back).
+- Rolls the item's **rarity** first (Common, Rare, Epic, etc.) depends on the parent ingredients, which decides how many Stats Modifiers the result can have (e.g. Blue Stats, Extra Properties, Granted Skills).
+- Carries over and merges the item's **base values** (the white numbers you see, e.g. damage for weapons, armour for armour pieces), usually favouring the first ingredient (Note: Only **Same-Type weapon forge WILL** inherit the base damage, **Cross-Type weapon forge WILL NOT** inherit the base damage).
+- For weapons of the same type, forging can also inherit **weapon boosts** (extra damage types or effects, e.g. fire damage, poison damage, piercing damage, etc.) (e.g. 2H Sword + 2H Sword, not 2H Sword + 2H Axe).
+- Also for weapons, expect **Same-Type** weapon forge yields better chance to inherit Stats Modifiers than **Cross-Type** weapon forge (e.g. 2H Sword + 2H Sword can sometimes 2X the chance to get a good result than 2H Sword + 2H Axe).
+- Inherits everything else using a simple rule: **matching lines stay** (e.g. both items have +Strength), and **non-matching lines are a chance-based roll** from everything the two items have between them (e.g. one has +Finesse, the other has +Intelligence — you might get one, both, or neither).
+
+In short:
+- More overlap between the two items → more stable outcomes and safe progression.
+- Less overlap → more randomness, unless you hit the jackpot or just want to YOLO.
 
 <details>
 <summary><strong>Contents (click to expand)</strong></summary>
