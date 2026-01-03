@@ -7,13 +7,14 @@ This system provides a sophisticated and hardcore RPG forging experience.
 The mod aims to increase playability and you can expect a big time investment through a fun, deep forging system. It gives players a true sense of growth with their gear as the game progresses; From common to legendary, every item can be upgraded, improved or used as a fuel resource, no more absolute "junk items". This creates a greater sense of achievement and allows players to forge and customize their dream items with both strategies and calculations, or with luck, just YOLO it out.
 
 ---
+You can only forge same kind of items together, e.g. weapon ↔ weapon (can be same type or cross type), shield ↔ shield, armour ↔ armour etc. You cannot forge two different kinds of items together.
 
 When you forge two items, the forged result:
 
-- Always stays the same kind of item as the **first item you put in** (e.g. forge two swords together, you get a sword back).
-- Rolls the item's **rarity** first (Common, Rare, Epic, etc.) depends on the parent ingredients, which decides how many Stats Modifiers the result can have (e.g. Blue Stats, Extra Properties, Granted Skills).
-- Carries over and merges the item's **base values** (the white numbers you see, e.g. damage for weapons, armour for armour pieces), usually favouring the first ingredient (Note: Only **Same-Type weapon forge WILL** inherit the base damage, **Cross-Type weapon forge WILL NOT** inherit the base damage).
-- For weapons of the same type, forging can also inherit **weapon boosts** (extra damage types or effects, e.g. fire damage, poison damage, piercing damage, etc.) (e.g. 2H Sword + 2H Sword, not 2H Sword + 2H Axe).
+- Always stays the same type of item as the **item you put in the Main Slot** (first slot), both parents will be consumed (e.g. forge a sword (Main Slot) and a staff (Secondary Slot) together, you get a new sword back, but both parents will be consumed).
+- Rolls the forged item's **rarity** first (Common, Rare, Epic, etc.) depends on the parents' rarities, which decides how many Stats Modifiers the result can have (e.g. Blue Stats, Extra Properties, Granted Skills).
+- Carries over and merges the item's **base values** (the white numbers you see, e.g. damage for weapons, armour for armour pieces), usually favouring the Main Slot ingredient (Note: Only **Same-Type weapon forge WILL** inherit the base damage, **Cross-Type weapon forge WILL NOT** inherit the base damage).
+- For weapons of the same type, forging can also inherit **weapon boosts** (extra damage types or effects, e.g. fire damage, poison damage, piercing damage, etc.) (e.g. 2H Sword with Air damage + 2H Sword with Fire damage, not 2H Sword with X damage + 2H Axe with Y damage).
 - Also for weapons, expect **Same-Type** weapon forge yields better chance to inherit Stats Modifiers than **Cross-Type** weapon forge (e.g. 2H Sword + 2H Sword can sometimes 2X the chance to get a good result than 2H Sword + 2H Axe).
 - Inherits everything else using a simple rule: **matching lines stay** (e.g. both items have +Strength), and **non-matching lines are a chance-based roll** from everything the two items have between them (e.g. one has +Finesse, the other has +Intelligence — you might get one, both, or neither).
 
@@ -35,13 +36,14 @@ In short:
 <details>
 <summary><strong><a href="#2-base-values-inheritance">2. Base values Inheritance</a></strong></summary>
 
-- [2.1. Base values (definition)](#21-base-values-definition)
-- [2.2. Output rules (level/type/rarity)](#22-output-rules-leveltyperarity)
-- [2.3. Inputs and tuning parameters](#23-inputs-and-tuning-parameters)
-- [2.4. Parent measurement (tooltip values)](#24-baseline-budget-cache-and-parent-measurement)
-- [2.5. Core formulas (gain + upgrade + rarity dominance)](#25-normalisation-raw-to-percentile)
+- [2.1. What “base values” means (and why levels must be normalised)](#21-base-values-definition)
+- [2.2. Output + eligibility rules (including the level gate)](#22-output-rules-leveltyperarity)
+- [2.3. Inputs, notation, and tuning](#23-inputs-and-tuning-parameters)
+- [2.4. Measuring parents + SE normalisation (ratio-preserving levelling)](#24-baseline-budget-cache-and-parent-measurement)
+- [2.5. Core maths (pull + dampener + upgrade)](#25-normalisation-raw-to-percentile)
 - [2.6. Merge algorithms (weapons and non-weapons)](#26-merge-algorithm-percentiles-to-output-base-values)
-- [2.7. Worked examples](#27-worked-examples-base-values)
+- [2.7. Worked examples (including level normalisation)](#27-worked-examples-base-values)
+- [2.8. Implementation checklist (SE; base values)](#28-implementation-checklist-se-base-values)
 </details>
 
 <details>
@@ -59,23 +61,23 @@ In short:
 - [4.2. Selection rule (all modifiers)](#42-selection-rule-shared--pool--cap)
 - [4.3. Merging rule (Blue Stats + ExtraProperties)](#43-merging-rule-how-numbers-are-merged)
 - [4.4. Blue Stats](#44-blue-stats-channel)
-  - [4.4.1. Blue Stats (definition)](#341-blue-stats-definition)
-  - [4.4.2. Shared vs pool (Blue Stats)](#32-the-two-stats-lists)
-  - [4.4.3. Worked examples (Blue Stats)](#36-worked-examples-stats-modifiers)
+  - [4.4.1. Blue Stats (definition)](#441-blue-stats-definition)
+  - [4.4.2. Shared vs pool (Blue Stats)](#442-shared-vs-pool-blue-stats)
+  - [4.4.3. Worked examples (Blue Stats)](#443-worked-examples-blue-stats)
 - [4.5. ExtraProperties](#45-extraproperties-inheritance)
-  - [4.5.1. ExtraProperties (definition)](#41-extraproperties-definition)
-  - [4.5.2. Shared vs pool tokens](#42-extraproperties-shared-vs-pool)
-  - [4.5.3. Selection + internal cap](#43-extraproperties-selection--internal-cap)
-  - [4.5.4. Slot competition + trimming](#44-extraproperties-slot-competition--trimming)
+  - [4.5.1. ExtraProperties (definition)](#451-extraproperties-definition)
+  - [4.5.2. Shared vs pool tokens](#452-extraproperties-shared-vs-pool)
+  - [4.5.3. Selection + internal cap](#453-extraproperties-selection--internal-cap)
+  - [4.5.4. Slot competition + trimming](#454-extraproperties-slot-competition--trimming)
   - [4.5.5. Worked examples](#455-worked-examples)
 - [4.6. Skills](#46-skills-inheritance)
-  - [4.6.1. Granted skills (definition)](#41-granted-skills-definition)
-  - [4.6.2. Skill cap by rarity](#42-skill-cap-by-rarity)
-  - [4.6.3. Shared vs pool skills](#43-shared-vs-pool-skills)
-  - [4.6.4. How skills are gained (gated fill)](#44-how-skills-are-gained-gated-fill)
-  - [4.6.5. Overflow + replace (type-modified)](#45-overflow--replace-5)
-  - [4.6.6. Scenario tables](#46-scenario-tables)
-  - [4.6.7. Worked example (Divine)](#47-worked-example-divine)
+  - [4.6.1. Granted skills (definition)](#461-granted-skills-definition)
+  - [4.6.2. Skill cap by rarity](#462-skill-cap-by-rarity)
+  - [4.6.3. Shared vs pool skills](#463-shared-vs-pool-skills)
+  - [4.6.4. How skills are gained (gated fill)](#464-how-skills-are-gained-gated-fill)
+  - [4.6.5. Overflow + replace (type-modified)](#465-overflow--replace)
+  - [4.6.6. Scenario tables](#466-scenario-tables)
+  - [4.6.7. Worked example (Divine)](#467-worked-example-divine)
 </details>
 
 <details>
@@ -116,6 +118,10 @@ Additionally, reject an ingredient weapon if it is affected by a **temporary wea
 
 Additionally, ingredients must be **unequipped** (in inventory, not currently worn/held). This prevents temporary status-driven effects and tooltip overlays from polluting the values extracted for forging.
 
+**Tooltip pollution guard (required):** even with the checks above, the implementation must not bake in temporary state.
+
+- If an item is under any unknown temporary effect that changes its displayed values, the system must reject it for forging and for normalisation rather than measuring/restoring from polluted tooltip values.
+
 Additionally, enforce **item-type compatibility**:
 
 - **Weapons**: weapon can forge with weapon (cross weapon sub-types allowed, e.g. dagger ↔ axe).
@@ -150,12 +156,13 @@ Blue stats, ExtraProperties, and skills share a single **overall rollable slots 
 High-level forge order:
 
 1. Decide the output's **rarity** using the **[Rarity System](rarity_system.md)**.
-2. Decide the output's **base values** (damage/armour) using **[Section 2](#2-base-values-inheritance)**.
-3. Inherit **weapon boosts** (elemental damage, armour-piercing, vampiric, etc.) using **[Section 3](#3-weapon-boost-inheritance)** (weapons only).
-4. Inherit **blue stats** using **[Section 4.4](#44-blue-stats-channel)**.
-5. Inherit **ExtraProperties** using **[Section 4.5](#45-extraproperties-inheritance)**.
-6. Inherit **skills** using **[Section 4.6](#46-skills-inheritance)**.
-7. Inherit **rune slots** using **[Section 5](#5-rune-slots-inheritance)**.
+2. Enforce eligibility and the **level gate** (forge disabled unless both ingredients are at least the player’s level). If needed, normalise ingredients using the SE ratio-preserving process in **[Section 2.4](#24-baseline-budget-cache-and-parent-measurement)**.
+3. Decide the output's **base values** (damage/armour) using **[Section 2](#2-base-values-inheritance)**.
+4. Inherit **weapon boosts** (elemental damage, armour-piercing, vampiric, etc.) using **[Section 3](#3-weapon-boost-inheritance)** (weapons only).
+5. Inherit **blue stats** using **[Section 4.4](#44-blue-stats-channel)**.
+6. Inherit **ExtraProperties** using **[Section 4.5](#45-extraproperties-inheritance)**.
+7. Inherit **skills** using **[Section 4.6](#46-skills-inheritance)**.
+8. Inherit **rune slots** using **[Section 5](#5-rune-slots-inheritance)**.
 
 ### 1.3. Deterministic randomness (seed + multiplayer)
 
@@ -174,32 +181,38 @@ _Below is the technical breakdown for players who want the exact maths._
 
 <a id="2-base-values-inheritance"></a>
 
-This section defines how to merge **raw numeric power** (weapon damage, armour/magic armour from shields, other armour pieces, jewellery):
+This section defines how forging merges **raw numeric power** (the **white tooltip** values):
 
-- Always outputs an item at the **player’s current level**.
-- The computation itself uses only the parents’ **white tooltip values**.
+- **Weapons (Same-Type only, Cross-Type won't inherit base damage)**: base damage (white damage range; merged via a midpoint model).
+- **Shields**: base armour, base magic armour, and base blocking (merged per channel).
+- **Armour pieces** (helmets/chest/gloves/boots/pants/belts): base armour and base magic armour (merged per channel).
+- **Jewellery** (rings/amulets): typically base magic armour (merged per channel).
 
-Forging can improve the **white numbers** (base damage / base armour / base magic armour), but the base-value merge itself is constrained by:
+Core design goals:
 
-- The output **item category/slot** (slot-locked eligibility and main-slot identity),
-- Slot 1 dominance (rarity-based `w` for non-weapons, and for same-`WeaponType` weapons)
-- The donor’s own tooltip values (the “spike” pushes **towards** the donor).
+- **Output is always your current level**: `Level_out = Level_player`.
+- **Forge is visually straightforward**: in the UI, “high should give high, low should give low” when comparing white tooltip values.
+- **Underlevelled items keep their forged quality**: if you level up an underlevelled forged item, it must retain its relative strength vs baseline (e.g. `1.35×` stays `1.35×` after levelling).
 
-With the right strategy, forging is a way to **upgrade your favourite item over time**: good ingredients push it upwards more reliably, and with some luck you can sometimes get a **big jump**, or very rarely can gain an **exceptional result**.
+The key to making these goals coexist is:
 
-Here are what you can expect:
+- A **hard level gate** (forge disabled unless ingredients are at least the player’s level), and
+- A Script Extender (SE) **ratio-preserving normalisation** process (so levelling is not “vanilla template levelling”).
 
-- **If slot 1 is already very strong** (already close to the donor values you can realistically find), most forges will be **small changes** — maybe a point or two up or down, or staying about the same. This is normal: the model moves you **towards** the donor.
-- **If slot 1 is weak and the donors are strong**, you’ll see **clear improvements** more often, with very rare **exceptional results** that can feel like a real jackpot.
+Balance note:
+
+- When the donor is above the player level, the donor's pull is dampened using `t_eff` so higher-level donors still feel better, but do not explode balance for low-level outputs.
+
+**Implementation reference:** see [Section 2.8](#28-implementation-checklist-se-base-values) for a concise checklist of invariants and edge-case guards required for SE implementation.
 
 ### 2.1. Base values (definition)
 
 <a id="21-base-values-definition"></a>
-This base-value model is intentionally generic: it works for any item that has meaningful **base values** (raw template numbers, not stats modifiers/granted skills/runes).
+This base-value model is intentionally generic: it works for any item that has meaningful **base values** (raw template numbers, not blue stats / ExtraProperties / granted skills / runes).
 
 - **Weapons**: base damage range.
 - **Shields**: base armour, base magic armour, and base blocking.
-- **Armour pieces** (helmets/chest/gloves/boots/pants): base armour and/or base magic armour.
+- **Armour pieces** (helmets/chest/gloves/boots/pants/belts): base armour and/or base magic armour.
 - **Jewellery** (rings/amulets): base magic armour.
 - **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): [Section 2](#2-base-values-inheritance) is a **no-op** for those numeric channels.
 
@@ -223,6 +236,22 @@ Overview on how the forged item's base values are calculated:
 - **Output rarity**: decided by the **[Rarity System](rarity_system.md)**.
 - **Base values (all items)**: upgrades do **not** overcap. They only push the output **towards the donor** for that channel (and cross-type weapon forging does not change weapon damage).
 
+#### Hard level gate (UI rule; required)
+
+Forge is disabled unless both ingredients satisfy:
+
+- `Level_main >= Level_player`
+- `Level_donor >= Level_player`
+
+This keeps the UI “fool-proof”:
+
+- players are never asked to mentally convert “a great level 10” into “what it would be at level 15”,
+- and underlevelled forged items do not lose their quality when brought up to the player’s level.
+
+If an ingredient is underlevelled, the player must normalise it first (see [Section 2.4](#24-baseline-budget-cache-and-parent-measurement)).
+
+**Rarity note (base values):** `w` (and therefore `t`) is derived from the **two parent rarities**. `Rarity_out` does **not** influence base value inheritance.
+
 ### 2.3. Inputs and tuning parameters
 
 <a id="23-inputs-and-tuning-parameters"></a>
@@ -236,12 +265,27 @@ This section defines the **inputs**, **notation**, and the **balance knobs** use
   - `Type_out`: always the item type in the **main forge slot** (slot 1).
   - `Level_out`: always the forger’s level, `Level_out = Level_player`.
   - `Rarity_out`: decided by the **[Rarity System](rarity_system.md)**.
+- **Level inputs (for base values and the level gate)**:
+  - `Level_player`: level of the forger (drives `Level_out` and the UI level gate).
+  - `Level_main`: level of the **main** parent item (slot 1).
+  - `Level_donor`: level of the **donor** parent item (slot 2).
 - **Numeric channels (what “base values” means)**:
   - **Weapons**: one channel (white damage average).
   - **Shields**: three channels (physical armour, magic armour, and blocking).
   - **Armour pieces**: two channels (physical armour and magic armour).
   - **Jewellery**: typically one channel (magic armour).
 - **No-op rule**: if an item has no meaningful base value for a channel (e.g. the tooltip value is `0`), do **not** apply the merge to that channel.
+
+#### UI normalisation controls (player-facing; required)
+
+The level gate must be supported by UI tools that use SE normalisation (not vanilla template levelling), So other item leveling mods are not compatible with this forging system:
+
+- **Normalise selected**: normalise the selected item (or the slotted ingredient) up to `Level_player`, preserving its base-power ratio.
+- **Normalise all eligible**: scan inventory and normalise all items that:
+  - have `Level_item < Level_player`, and
+  - are eligible forging ingredients (slot compatibility, unequipped, no socketed runes, no temporary weapon-enchant status).
+
+Both buttons must produce the same result for the same item (single-item normalisation is just a filtered case of the bulk action).
 
 #### Balance knobs (tuning table)
 
@@ -254,12 +298,14 @@ These are used by the tooltip-only base-value models in [Section 2](#2-base-valu
 | `β` | Rarity dominance strength | **0.04** | Each rarity step in favour of slot 1 increases `w` by `β` (and decreases donor weight by the same amount). |
 | `w_min`, `w_max` | Clamp range for `w` | **0.50..0.90** | Prevents the donor from becoming completely irrelevant, and prevents slot 1 from ever being “overridden”. |
 | `upgradeCap` | Maximum upgrade chance | **50%** | Applies only when the donor is better (`B > A`). |
-| `k` | Upgrade difficulty exponent (“higher is harder”) | **1** | Linear upgrade chance vs relative gain. |
+| `k` | Upgrade difficulty exponent ("higher is harder") | **1** | Linear upgrade chance vs relative gain. |
 | Upgrade quality roll | `u^2` | – | On upgrade success: pushes towards donor (`Out = Base + (B-Base)×u^2`). |
-| Rounding policy | How to convert the final float into the displayed integer | Nearest (half-up) | Optional “player-favour” bias is to always round up. |
+| Rounding policy | How to convert the final float into the displayed integer | Nearest (half-up) | Optional "player-favour" bias is to always round up. |
+| `t_eff` | Level-gap dampener (effective donor pull) | Derived | `t = (1 - w)`. If `Level_donor > Level_player`: `t_eff = t × (Level_player / Level_donor)`, otherwise `t_eff = t`. Dampens donor pull when donor level exceeds player level. |
+
+**Rarity note (base values):** `w` (and therefore `t`) is derived from the **two parent rarities**. `Rarity_out` does **not** influence base value inheritance.
 
 #### Rarity dominance (Non-Unique): dynamic merge weight `w`
-
 <a id="23-rarity-dominance"></a>
 To make higher rarity ingredients matter more, `w` is not a constant.
 
@@ -309,8 +355,10 @@ On an upgrade success, we roll `u ~ U(0,1)` and use `u^2` to push the output tow
 <a id="24-baseline-budget-cache-and-parent-measurement"></a>
 <a id="24-measuring-base-values-no-runeboost-pollution"></a>
 
-This section defines how to measure the parents’ base values from real items (white tooltip numbers).
-Base values are derived directly from these measured tooltip values.
+This section defines how to:
+
+- measure parents’ base values from real items (white tooltip numbers), and
+- normalise underlevelled ingredients to satisfy the level gate without losing forged quality (SE required).
 
 #### Parent measurement
 
@@ -318,6 +366,7 @@ Important constraints (already enforced elsewhere, but repeated here because the
 
 - **Socketed runes are rejected** as ingredients ([Section 1.1](#11-ingredient-eligibility)), so rune pollution does not enter the system.
 - Try to measure from a stable state (not mid-combat / not under temporary buffs), so the tooltip reflects the item’s own base values.
+- If the implementation cannot guarantee a stable state for measurement (e.g. unknown temporary effects or tooltip overlays), it must abort measurement/normalisation for that item rather than baking in a temporary state.
 
 Weapons (single channel; uses these directly):
 
@@ -336,6 +385,86 @@ Armour pieces (two channels):
 
 ---
 
+#### SE normalisation (required): ratio-preserving levelling to satisfy the level gate
+
+If you level up ingredients using vanilla item levelling, the engine re-baselines the item’s white numbers to its template at the new level.
+That overwrites forged quality (for example, an underlevel forged weapon that is `1.35×` baseline for its own level would fall back to `1.00×`).
+
+Normalisation must preserve “base power” as a ratio relative to an expected baseline for the item identity.
+
+Definitions (per item identity, per level, per channel):
+
+- `E(identity, Level, channel)`: expected baseline white number at that level for that identity/channel (measured or table-driven).
+- `Base`: measured white number from the tooltip for that channel.
+- `r`: the item’s base-power ratio: `r = Base / max(E(...), 1)`
+
+**Identity key requirement (for `E(identity, Level, channel)`):**
+
+`identity` must be a stable key that uniquely identifies the item’s base-value curve across levels.
+
+- Use a template/stat identity (e.g. the item’s root template / stats entry name), not rarity, not affixes, and not the current tooltip values.
+- Do **not** use `WeaponType`/slot alone as `identity` (too broad; different templates in the same family can have different baselines).
+- For Unique items, treat the Unique’s template/stat as its `identity` (Unique baselines can be special).
+
+Normalisation algorithm (per channel; conceptually):
+
+1. Measure `Base_in` from the tooltip at `Level_in`.
+2. Compute `r = Base_in / max(E(identity, Level_in, channel), 1)`.
+3. Level up to the player’s level (e.g. `ItemLevelUpTo(item, Level_player)`).
+4. Compute `Base_target = r × E(identity, Level_player, channel)`.
+5. Restore `Base_target` using predefined step-ladder delta modifiers.
+
+If `Base_target` cannot be matched exactly, use the closest representable value (then apply the rounding policy).
+
+**Channel guard (required):**
+
+For any channel:
+
+- If `Base_in == 0`, skip normalisation and skip merge for that channel (treat as no-op).
+- If `E(identity, Level_in, channel) <= 0` or `E(identity, Level_player, channel) <= 0`, skip normalisation for that channel (do not fabricate ratios from a zero baseline).
+
+#### Step-ladder delta modifiers (required): per item type, per channel
+
+You cannot generate brand-new boosts “at runtime” to add an arbitrary `+X` base value.
+To realise `Base_target` precisely (and not be limited to vanilla Small/Medium/Large tiers), ship **predefined step-ladder boosts** and apply a combination of them.
+
+Recommended ladder (sustainable at high levels):
+
+- Use a compact binary / mixed-radix basis, for example:
+  - `±1, ±2, ±4, ±8, ±16, ±32, ±64, ±128, ±256, ±512, ±1024`
+- Include both positive and negative steps so you can restore both above-baseline and below-baseline items.
+
+Required ladders per item family/channel (examples of what must exist in data):
+
+| Item family | Channels | Ladder families you must define | Notes |
+| :--- | :--- | :--- | :--- |
+| Weapons | Damage (midpoint model) | `WeaponDamageStep_±{1,2,4,8,...}` | Validate that these steps affect the displayed white damage range consistently for the weapon identity you normalise. |
+| Armour pieces (incl belts/boots) | Armour, MagicArmour | `ArmourStep_±{...}`, `MagicArmourStep_±{...}` | Two independent channels. |
+| Jewellery (rings/amulets) | MagicArmour (typical) | `JewelleryMagicArmourStep_±{...}` | If a jewellery identity exposes additional base channels, treat them the same way. |
+| Shields | Armour, MagicArmour, Blocking | `ShieldArmourStep_±{...}`, `ShieldMagicArmourStep_±{...}`, `ShieldBlockingStep_±{...}` | Blocking is a real numeric channel and must be covered. |
+
+Worked “ladder selection” example (generic):
+
+- Suppose the restored target needs `Delta_target = +37` on a channel.
+- With binary steps, one valid composition is: `+32 +4 +1`.
+
+**Idempotency requirement (normalisation):**
+
+Normalising an item to `Level_player` must be idempotent: running it multiple times without changing the item must not change the result.
+
+Implementation guidance (SE):
+
+- Remove/clear previously applied step-ladder boosts for the channel before applying the new combination, or
+- Track a single stored `Base_target` (or `r`) and re-derive deltas from that source of truth.
+
+**Weapon ladder validation requirement (SE):**
+
+Before shipping, validate for each supported weapon identity family that:
+
+- Applying `WeaponDamageStep_*` changes the **white tooltip damage range** consistently (both min and max move as expected),
+- The change corresponds to the intended midpoint delta (within rounding),
+- It does not double-count any `DamageBoost`-style effects that are already reflected in the tooltip (see `_Boost_Weapon_Damage_Bonus` exclusion in [Section 3.1](#31-weapon-boosts-definition)).
+
 ### 2.5. Core formulas (gain + upgrade + rarity dominance)
 
 <a id="25-normalisation-raw-to-percentile"></a>
@@ -345,6 +474,9 @@ This section defines the shared pieces of maths used by the base-value models:
   - `delta = (B - A)`
 - **Rarity dominance (`w`)**: computes slot 1 dominance and donor influence:
   - donor pull strength is `t = (1 - w)`
+- **Level-gap dampener (`t_eff`)** (donor above player only):
+  - If `Level_donor > Level_player`: `t_eff = t × (Level_player / Level_donor)`
+  - Otherwise: `t_eff = t`
 - **Upgrade chance (donor better only):**
   - `gain = max(0, delta / max(A, 1))` (relative improvement available; 0 if donor is not better)
   - `P(upgrade) = clamp(upgradeCap × gain^k, 0, upgradeCap)`
@@ -371,20 +503,26 @@ Inputs:
 
 - `A = avgDamage(slot1)` and `B = avgDamage(slot2)` where `avgDamage = (min+max)/2`
 - `TypeMatch = (WeaponType_1 == WeaponType_2)`
+- `Level_player` (forger level), `Level_donor` (slot 2 item level)
 
 Rules:
 
 - If `TypeMatch=false`: `avg_out = A` (cross-type weapons do not change damage).
 - Otherwise (`TypeMatch=true`):
   - Compute `w` from parent rarities ([Section 2.3](#23-inputs-and-tuning-parameters)), so donor pull strength is `t = (1 - w)`
+  - Apply the level-gap dampener using the donor item level:
+    - If `Level_donor > Level_player`: `t_eff = t × (Level_player / Level_donor)`
+    - Otherwise: `t_eff = t`
   - `delta = (B - A)`
-  - `avg_base = A + t × delta`
+  - `avg_base = A + t_eff × delta`
   - `gain = max(0, delta / max(A, 1))`
   - `P(upgrade) = clamp(upgradeCap × gain^k, 0, upgradeCap)`
   - On upgrade failure: `avg_out = avg_base`
   - On upgrade success: roll `u ~ U(0,1)` and compute `avg_out = avg_base + (B - avg_base) × u^2` (higher is harder)
 
 Finally, round to the displayed integer midpoint and let the engine display min/max using the weapon's `Damage Range` rules.
+
+**Note (tooltip clarity):** if you want to show a “pre-forge preview” at `Level_player`, do not use vanilla template levelling alone. Use the SE normalisation process in [Section 2.4](#24-baseline-budget-cache-and-parent-measurement).
 
 #### Weapon Damage Type inheritance
 
@@ -418,11 +556,15 @@ Inputs (per channel):
 - `A = Base(slot1)` (e.g. physical armour)
 - `B = Base(slot2)` (same channel)
 - `w` from rarity dominance ([Section 2.3](#23-inputs-and-tuning-parameters)), so donor pull strength is `t = (1 - w)`
+- `Level_player` (forger level), `Level_donor` (slot 2 item level)
 
 Rules:
 
 - `delta = (B - A)`
-- `Base = A + t × delta`
+- Apply the level-gap dampener using the donor item level:
+  - If `Level_donor > Level_player`: `t_eff = t × (Level_player / Level_donor)`
+  - Otherwise: `t_eff = t`
+- `Base = A + t_eff × delta`
 - `gain = max(0, delta / max(A, 1))`
 - `P(upgrade) = clamp(upgradeCap × gain^k, 0, upgradeCap)`
 - On upgrade failure: `Out = Base`
@@ -433,6 +575,35 @@ Apply the same steps independently to each channel (physical armour and magic ar
 ### 2.7. Worked examples
 
 <a id="27-worked-examples-base-values"></a>
+
+Examples are organised by category: normalisation (1–2), weapons (3–6), and non-weapons (7–8).
+
+#### Normalisation examples
+
+##### Example 1: Level gate (why it exists)
+
+Player level: `Level_player = 15`.
+
+If a player tries to use a level 10 ingredient, forging is disabled until the item is normalised to at least level 15.
+
+The normalisation is ratio-preserving: if the level 10 item is "very strong for level 10", it should still look "very strong" when brought up to level 15.
+
+##### Example 2: Ratio-preserving normalisation (illustrative)
+
+Assume an identity baseline function `E(...)` yields:
+
+- `E(identity, 10, DamageMid) = 100`
+- `E(identity, 15, DamageMid) = 160`
+
+An underlevel forged ingredient at level 10 has tooltip midpoint `Base_in = 135`, so:
+
+- `r = 135 / 100 = 1.35`
+
+Normalise to level 15:
+
+- Restore `Base_target = 1.35 × 160 = 216`
+
+So after normalisation, the item remains `1.35×` baseline at the player's level.
 
 #### Weapon examples (tooltip midpoints)
 
@@ -446,12 +617,14 @@ Shared settings (weapon-only):
 | `β` | 0.04 | Rarity dominance strength |
 | `w_min`, `w_max` | 0.50..0.90 | Clamp range for `w` |
 | `upgradeCap` | 50% | Maximum upgrade chance |
-| `k` | 1 | Upgrade difficulty exponent (“higher is harder”) |
+| `k` | 1 | Upgrade difficulty exponent ("higher is harder") |
 | Upgrade quality roll | `u^2` | Pushes towards donor unless you get lucky |
 
-##### Example 1: Same `WeaponType` (Crossbow), donor is better
+##### Example 3: Same `WeaponType` (Crossbow), donor is better
 
 Both are **Crossbow** ⇒ same-type (`TypeMatch=true`).
+
+Player level: `Level_player = 15`. Both items are at level 15 (satisfy the level gate).
 
 | Item           | `WeaponType` | Tooltip damage | `avgDamage` |
 | :------------- | :----------- | :------------: | ----------: |
@@ -464,7 +637,8 @@ Compute:
 | `delta = (B-A)` | `20.5` |
 | `w = clamp(0.70 + 0.04×(0-5), 0.50, 0.90)` | `0.50` |
 | `t = (1-w)` | `0.50` |
-| `avg_base = A + t×delta` | `133.0 + 0.50×20.5 = 143.25` |
+| Level-gap dampener: `Level_donor = 15`, `Level_player = 15` ⇒ `t_eff = t` | `0.50` |
+| `avg_base = A + t_eff×delta` | `133.0 + 0.50×20.5 = 143.25` |
 | `gain = max(0, delta/max(A,1))` | `20.5/133.0 = 0.1541` |
 | `P(upgrade) = upgradeCap × gain^k` | `50% × 0.1541 = 7.71%` |
 
@@ -473,9 +647,11 @@ Compute:
 | No upgrade                 |                                  `avg_out = 143.25` | deterministic baseline       |
 | Upgrade example (`u=0.70`) | `avg_out = 143.25 + (153.5-143.25)×0.70^2 = 148.27` | exciting spike towards donor |
 
-##### Example 2: Cross-type weapons do **not** change base damage (Spear + 2H Sword)
+##### Example 4: Cross-type weapons do **not** change base damage (Spear + 2H Sword)
 
 Different `WeaponType` ⇒ cross-type (`TypeMatch=false`).
+
+Player level: `Level_player = 15`. Both items are at level 15 (satisfy the level gate).
 
 | Item           | `WeaponType` | Tooltip damage | `avgDamage` |
 | :------------- | :----------- | :------------: | ----------: |
@@ -484,7 +660,67 @@ Different `WeaponType` ⇒ cross-type (`TypeMatch=false`).
 
 Rule:
 
-- `avg_out = A = 153.5` (no upgrade roll)
+- `avg_out = A = 153.5` (no upgrade roll; cross-type weapons do not merge damage)
+
+##### Example 5: Level-gap dampener (Epic Level 15 → Divine Level 16, same `WeaponType` 2H sword)
+
+Player level: `Level_player = 15` ⇒ output is level 15.
+
+Inputs (midpoints):
+
+- Slot 1 (main): `66–73` ⇒ `A = 69.5`
+- Slot 2 (donor): `77–84` ⇒ `B = 80.5`
+
+Rarity dominance:
+
+- `r_main = Epic = 3`, `r_donor = Divine = 5` ⇒ `Δr = -2`
+- `w = clamp(0.70 + 0.04×(-2), 0.50, 0.90) = 0.62`
+- `t = (1-w) = 0.38`
+
+Level-gap dampener (donor above player):
+
+- `Level_donor = 16 > 15` ⇒ `t_eff = t × (15/16) = 0.38 × 0.9375 = 0.35625`
+
+Compute:
+
+- `delta = (B-A) = 11.0`
+- `avg_base = A + t_eff×delta = 69.5 + 0.35625×11 = 73.41875`
+- `gain = delta/max(A,1) = 11/69.5 = 0.1583`
+- `P(upgrade) = clamp(50% × 0.1583, 0, 50%) = 7.92%`
+
+Interpretation:
+
+- No-upgrade baseline midpoint is ~`73.4` (then the engine shows min/max using the weapon's `Damage Range` rules).
+- If upgrade succeeds (~`7.9%`), the midpoint is in the range `avg_out ∈ [avg_base, B]`.
+
+##### Example 6: Level-gap dampener (Divine Level 25 → Divine Level 30, same `WeaponType` 2H sword)
+
+Player level: `Level_player = 25` ⇒ output is level 25.
+
+Inputs (midpoints):
+
+- Slot 1 (main): `363–401` ⇒ `A = 382.0`
+- Slot 2 (donor): `907–1003` ⇒ `B = 955.0`
+
+Rarity dominance (Divine vs Divine):
+
+- `w = 0.70`, so `t = 0.30`
+
+Level-gap dampener (donor above player):
+
+- `Level_donor = 30 > 25` ⇒ `t_eff = 0.30 × (25/30) = 0.25`
+
+Compute:
+
+- `delta = (B-A) = 573.0`
+- `avg_base = 382.0 + 0.25×573.0 = 525.25`
+- `gain = 573/382 = 1.50`
+- `P(upgrade) = clamp(50% × 1.50, 0, 50%) = 50%` (capped)
+
+Interpretation:
+
+- No-upgrade baseline midpoint is `525.25`.
+- If upgrade succeeds (50%), the midpoint is in the range `avg_out ∈ [525.25, 955.0]` and min/max are displayed using the weapon's `Damage Range` rules.
 
 #### Non-weapon examples (tooltip-only)
 
@@ -497,10 +733,12 @@ Shared settings (non-weapons):
 | `β` | 0.04 | Rarity dominance strength |
 | `w_min`, `w_max` | 0.50..0.90 | Clamp range for `w` |
 | `upgradeCap` | 50% | Maximum upgrade chance |
-| `k` | 1 | Upgrade difficulty exponent (“higher is harder”) |
+| `k` | 1 | Upgrade difficulty exponent ("higher is harder") |
 | Upgrade quality roll | `u^2` | Pushes towards donor unless you get lucky |
 
-##### Example 4: Armour (two channels), same maths per channel (Strength chest + Intelligence chest)
+##### Example 7: Armour (two channels), same maths per channel (Strength chest + Intelligence chest)
+
+Player level: `Level_player = 20`. Both items are at level 20 (satisfy the level gate).
 
 Slot 1 (Strength chest): `713 Physical Armour`, `140 Magic Armour`  
 Slot 2 (Intelligence chest): `140 Physical Armour`, `713 Magic Armour`
@@ -511,8 +749,9 @@ Both parents are Divine, so rarity dominance is:
 
 - `w = clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70`
 - donor pull strength is `t = (1-w) = 0.30`
+- Level-gap dampener: `Level_donor = 20`, `Level_player = 20` ⇒ `t_eff = t = 0.30`
 
-| Channel  | Slot 1 `A` | Slot 2 `B` | `delta = (B-A)` |        `Base = A + t×delta` | `gain = max(0, delta/max(A,1))` | `P(upgrade)` | No-upgrade output |
+| Channel  | Slot 1 `A` | Slot 2 `B` | `delta = (B-A)` |        `Base = A + t_eff×delta` | `gain = max(0, delta/max(A,1))` | `P(upgrade)` | No-upgrade output |
 | :------- | ---------: | ---------: | --------------: | --------------------------: | ------------------------------: | :----------: | ----------------: |
 | Physical |      `713` |      `140` |          `-573` | `713 + 0.30×(-573) = 541.1` |                             `0` |     `0%`     |             `541` |
 | Magic    |      `140` |      `713` |           `573` |    `140 + 0.30×573 = 311.9` |               `573/140 = 4.093` | `50%` (cap)  |             `312` |
@@ -522,7 +761,9 @@ Interpretation:
 - The output remains a Strength chest (slot 1 identity is preserved).
 - Per-channel upgrades are possible, and a magic-channel "spike" can pull significantly towards the donor when the donor is much better.
 
-##### Example 5: Shield (three channels), same maths per channel (Tower Shield + Kite Shield)
+##### Example 8: Shield (three channels), same maths per channel (Tower Shield + Kite Shield)
+
+Player level: `Level_player = 20`. Both items are at level 20 (satisfy the level gate).
 
 Slot 1 (Tower Shield): `713 Physical Armour`, `140 Magic Armour`, `15 Blocking`  
 Slot 2 (Kite Shield): `140 Physical Armour`, `713 Magic Armour`, `10 Blocking`
@@ -533,8 +774,9 @@ Both parents are Divine, so rarity dominance is:
 
 - `w = clamp(0.70 + 0.04×(5-5), 0.50, 0.90) = 0.70`
 - donor pull strength is `t = (1-w) = 0.30`
+- Level-gap dampener: `Level_donor = 20`, `Level_player = 20` ⇒ `t_eff = t = 0.30`
 
-| Channel  | Slot 1 `A` | Slot 2 `B` | `delta = (B-A)` |        `Base = A + t×delta` | `gain = max(0, delta/max(A,1))` | `P(upgrade)` | No-upgrade output |
+| Channel  | Slot 1 `A` | Slot 2 `B` | `delta = (B-A)` |        `Base = A + t_eff×delta` | `gain = max(0, delta/max(A,1))` | `P(upgrade)` | No-upgrade output |
 | :------- | ---------: | ---------: | --------------: | --------------------------: | ------------------------------: | :----------: | ----------------: |
 | Physical |      `713` |      `140` |          `-573` | `713 + 0.30×(-573) = 541.1` |                             `0` |     `0%`     |             `541` |
 | Magic    |      `140` |      `713` |           `573` |    `140 + 0.30×573 = 311.9` |               `573/140 = 4.093` | `50%` (cap)  |             `312` |
@@ -577,6 +819,47 @@ Interpretation:
 | `Out (upgrade example, u=0.70)` | `311.9 + (713-311.9)×0.70^2 = 508.4 → 508` | exciting spike                 |
 
 </details>
+
+### 2.8. Implementation checklist (SE; base values)
+
+<a id="28-implementation-checklist-se-base-values"></a>
+
+This is a short punch-list for implementing [Section 2](#2-base-values-inheritance) without introducing level/tooltip drift bugs:
+
+- **Eligibility & measurement stability (must hold before any measurement/normalisation):**
+  - item is **unequipped** (inventory; not worn/held),
+  - no socketed runes (and no rune-origin lines),
+  - no temporary weapon-enchant statuses (e.g. `FIRE_BRAND`, `VENOM_COATING`, `ARROWHEAD_*`),
+  - if you cannot guarantee a stable tooltip state, **abort** (do not bake in polluted values).
+- **Level gate (UI):**
+  - forge disabled unless `Level_main >= Level_player` and `Level_donor >= Level_player`.
+  - if underlevelled: normalise first using SE ratio-preserving normalisation (not vanilla template levelling alone).
+- **Baseline identity (`E(identity, Level, channel)`):**
+  - `identity` must be a stable template/stat identity (not `WeaponType`/slot alone).
+  - Unique items use their own template/stat as identity.
+- **Channel guard (normalisation + merge):**
+  - if `Base_in == 0`: treat as no-op for that channel.
+  - if `E(identity, Level, channel) <= 0`: do not fabricate ratios; skip normalisation for that channel.
+- **Normalisation algorithm (per channel):**
+  - compute `r = Base_in / max(E(identity, Level_in, channel), 1)`,
+  - `ItemLevelUpTo(item, Level_player)`,
+  - restore `Base_target = r × E(identity, Level_player, channel)` using step-ladder boosts.
+- **Idempotency (required):**
+  - normalising the same item twice must produce the same result (clear previous ladder boosts or track a single source-of-truth `r`/`Base_target`).
+- **Step-ladders (required):**
+  - define per-family/channel ladders (weapons midpoint; armour/magic armour; shield blocking; jewellery magic armour),
+  - include both positive and negative steps (e.g. `±1, ±2, ±4, …`) for above/below-baseline restoration.
+- **Merge correctness:**
+  - weapons: merge only when `WeaponType` matches; otherwise keep slot 1 base damage,
+  - non-weapons: merge per channel,
+  - always apply donor dampener: `t_eff = t × (Level_player/Level_donor)` when donor above player; otherwise `t_eff = t`.
+- **Randomness (deterministic):**
+  - base-value upgrade success and `u^2` must be driven by `forgeSeed` (host-authoritative; see [Section 1.3](#13-deterministic-randomness-seed--multiplayer)).
+- **Weapon ladder validation (required before release):**
+  - confirm `WeaponDamageStep_*` moves **both** min and max consistently and matches intended midpoint delta,
+  - confirm it does not double-count `DamageBoost`-style effects already reflected in the tooltip (see `_Boost_Weapon_Damage_Bonus` exclusion in [Section 3.1](#31-weapon-boosts-definition)).
+- **Known trade-off (design):**
+  - very large level gaps can still produce strong donors even with `t_eff`; the design assumes typical gaps of `+1..+3`.
 
 ---
 
@@ -968,7 +1251,6 @@ Pick top cap=1 kind with score>=1:
 ## 4. Stats Modifier Inheritance
 
 <a id="4-stats-modifiers-inheritance"></a>
-<a id="3-stats-modifiers-inheritance"></a>
 
 This section defines how **stats modifiers** are inherited when you forge.
 
@@ -982,10 +1264,21 @@ The forged item applies one shared cap across these channels:
 
 - `OverallCap[Rarity_out, ItemType_out]` (default+learned per save, tracked per (rarity, item type) pair; see [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap))
 
+#### Level normalisation note (Stats Modifiers)
+
+The level-normalisation step described in [Section 2](#2-base-values-inheritance) (used to satisfy the level gate and preserve base-value ratios) is a **base-values-only** operation.
+
+- **Blue Stats / ExtraProperties / Skills are not scaled by level normalisation.**
+- Normalising an item to `Level_player` is intended to make **white tooltip values** comparable and forge-eligible.
+- The forging merge for Stats Modifiers (this Section 4) uses the modifiers exactly as they exist on the item after normalisation.
+
+**Implementation note (SE):**
+- If you call `ItemLevelUpTo` during normalisation, ensure you **do not re-roll** or replace stats modifiers as part of that process.
+- Other item-levelling mods that re-roll stats modifiers are not compatible with this forging system's guarantees.
+
 ### 4.1. Introduction + design principles
 
 <a id="41-stats-modifiers-definition"></a>
-<a id="31-stats-modifiers-definition"></a>
 
 Design principles:
 
@@ -1001,7 +1294,6 @@ The universal rules are defined next:
 ### 4.2. Selection rule (all modifiers)
 
 <a id="42-selection-rule-shared--pool--cap"></a>
-<a id="34-selection-rule-shared--pool--cap"></a>
 
 This selection rule is **universal** for all three modifier channels:
 
@@ -1240,7 +1532,7 @@ If a channel wins a slot:
 
 - **Blue stats**: pick one of the remaining pool-picked blue stats uniformly.
 - **Skills**: pick one of the remaining pool-picked skills uniformly.
-- **ExtraProperties**: keep the EP slot (then apply [Section 4.5.3](#43-extraproperties-selection--internal-cap) internal token selection).
+- **ExtraProperties**: keep the EP slot (then apply [Section 4.5.3](#453-extraproperties-selection--internal-cap) internal token selection).
 
 Imagine you're forging these two **boots** (boots can only forge with boots):
 
@@ -1482,11 +1774,10 @@ Apply the merge formula only when both parameters are below their respective cap
 ### 4.4. Blue Stats
 
 <a id="44-blue-stats-channel"></a>
-<a id="34-blue-stats-channel"></a>
 
 #### 4.4.1. Blue Stats (definition)
 
-<a id="341-blue-stats-definition"></a>
+<a id="441-blue-stats-definition"></a>
 
 Blue Stats are rollable numeric boosts (blue text stats) that appear on items based on their rarity. These include:
 
@@ -1495,9 +1786,11 @@ Blue Stats are rollable numeric boosts (blue text stats) that appear on items ba
 - Resistances (Fire, Poison, etc.)
 - Other numeric modifiers (Critical Chance, Accuracy, Initiative, Movement, etc.)
 
+**Note:** Blue Stats are treated as discrete modifier lines; they do not automatically "scale up" just because the item level changes during base-value normalisation (see [Section 4](#4-stats-modifiers-inheritance) level normalisation note).
+
 #### 4.4.2. Shared vs pool (Blue Stats)
 
-<a id="32-the-two-stats-lists"></a>
+<a id="442-shared-vs-pool-blue-stats"></a>
 
 - **Shared Blue Stats (Sb)**: blue stats lines on **both** parents (guaranteed).
 - **Pool Blue Stats size (Pb_size)**: blue stats lines that are **not shared** (unique to either parent). This is the combined pool candidates list from both parents.
@@ -1511,7 +1804,7 @@ Key values:
 
 #### 4.4.3. Worked examples (Blue Stats)
 
-<a id="36-worked-examples-stats-modifiers"></a>
+<a id="443-worked-examples-blue-stats"></a>
 
 **Note:**
 
@@ -1868,9 +2161,6 @@ Parameters used (Tier 4):
 ### 4.5. ExtraProperties
 
 <a id="45-extraproperties-inheritance"></a>
-<a id="45-extraproperties-channel"></a>
-<a id="35-extraproperties-channel"></a>
-<a id="4-extraproperties-inheritance"></a>
 
 This section defines how **ExtraProperties** are inherited when you forge.
 
@@ -1881,7 +2171,7 @@ ExtraProperties is treated as its own channel:
 
 #### 4.5.1. ExtraProperties (definition)
 
-<a id="41-extraproperties-definition"></a>
+<a id="451-extraproperties-definition"></a>
 
 ExtraProperties is a semicolon-separated list of effects stored on the item. These include:
 
@@ -1894,7 +2184,7 @@ Important: the tooltip may show multiple lines, but for the overall cap, ExtraPr
 
 #### 4.5.2. Shared vs pool tokens
 
-<a id="42-extraproperties-shared-vs-pool"></a>
+<a id="452-extraproperties-shared-vs-pool"></a>
 
 Parse each parent’s ExtraProperties string into ordered tokens:
 
@@ -1909,7 +2199,7 @@ Then compute:
 
 #### 4.5.3. Selection + internal cap (max of parent lines, with same-count bonus)
 
-<a id="43-extraproperties-selection--internal-cap"></a>
+<a id="453-extraproperties-selection--internal-cap"></a>
 
 Let:
 
@@ -1945,7 +2235,7 @@ Build the output token list:
 
 #### 4.5.4. Slot competition + trimming
 
-<a id="44-extraproperties-slot-competition--trimming"></a>
+<a id="454-extraproperties-slot-competition--trimming"></a>
 
 ExtraProperties occupies one **slot** in the overall rollable cap.
 
@@ -1996,9 +2286,6 @@ Result: Capped at 2 tokens maximum
 ### 4.6. Skills
 
 <a id="46-skills-inheritance"></a>
-<a id="46-skills-channel"></a>
-<a id="36-skills-channel"></a>
-<a id="4-skills-inheritance"></a>
 This section defines how **granted skills** are inherited when you forge.
 
 - Granted skills are a separate channel from normal **blue stats**.
@@ -2013,7 +2300,7 @@ Here are what you can expect:
 
 #### 4.6.1. Granted skills (definition)
 
-<a id="41-granted-skills-definition"></a>
+<a id="461-granted-skills-definition"></a>
 
 - **Granted skill (rollable)**: any rollable boost/stats line that grants entries via a `Skills` field in its boost definition.
   - Weapon example: `_Boost_Weapon_Skill_Whirlwind` → `Shout_Whirlwind`
@@ -2038,7 +2325,7 @@ Here are what you can expect:
 
 #### 4.6.2. Skill cap by rarity
 
-<a id="42-skill-cap-by-rarity"></a>
+<a id="462-skill-cap-by-rarity"></a>
 
 This is the maximum number of **rollable granted skills** on the forged item.
 
@@ -2075,7 +2362,7 @@ If both parents have matching skillbooks:
 
 #### 4.6.3. Shared vs pool skills
 
-<a id="43-shared-vs-pool-skills"></a>
+<a id="463-shared-vs-pool-skills"></a>
 
 Split granted skills into two lists:
 
@@ -2088,7 +2375,7 @@ Use the **skill ID** as the identity key (e.g. `Shout_Whirlwind`, `Projectile_Bo
 
 #### 4.6.4. How skills are gained (gated fill)
 
-<a id="44-how-skills-are-gained-gated-fill"></a>
+<a id="464-how-skills-are-gained-gated-fill"></a>
 
 Skills are **more precious than stats**, so the skill channel does **not** use the stat-style “keep half the pool” baseline.
 
@@ -2102,7 +2389,7 @@ Instead, skills use a **cap + gated fill** model:
 
 - **Ss**: number of shared rollable skills (present on both parents).
 - **Ps_size**: number of pool rollable skills (present on only one parent).
-- **SkillCap**: from [Section 4.6.2](#42-skill-cap-by-rarity).
+- **SkillCap**: from [Section 4.6.2](#462-skill-cap-by-rarity).
 - **FreeSlots**: `max(0, SkillCap - min(Ss, SkillCap))`
 
 #### Gain chance model (rarity + pool size)
@@ -2155,7 +2442,7 @@ So the actual per-attempt gain chances are:
 
 #### 4.6.5. Overflow + replace (type-modified)
 
-<a id="45-overflow--replace-5"></a>
+<a id="465-overflow--replace"></a>
 
 All randomness in this subsection is **host-authoritative** and driven by `forgeSeed` (see [Section 1.3](#13-deterministic-randomness-seed--multiplayer)).
 
@@ -2166,7 +2453,7 @@ All randomness in this subsection is **host-authoritative** and driven by `forge
 4. Fill free slots with gated gain rolls:
    - For each free slot (at most `freeSlots` attempts):
      - Let `P_remaining = len(poolSkills)`
-     - Roll a random number; success chance is `p_attempt` ([Section 4.6.4](#44-how-skills-are-gained-gated-fill)).
+     - Roll a random number; success chance is `p_attempt` ([Section 4.6.4](#464-how-skills-are-gained-gated-fill)).
      - If success: pick 1 random skill from `poolSkills`, add to `finalSkills`, remove it from `poolSkills`, and decrement `freeSlots`.
      - If failure: do nothing for that slot (skills are precious; you do not retry the same slot).
 5. Optional “replace” roll (type-modified):
@@ -2191,12 +2478,12 @@ With the optional replace roll, one possible final skills outcome is:
 Interpretation:
 
 - With default `SkillCap = 1`, only one skill can ever be kept.
-- If the gain roll succeeds ([Section 4.6.4](#44-how-skills-are-gained-gated-fill)), one of the pool skills is selected.
+- If the gain roll succeeds ([Section 4.6.4](#464-how-skills-are-gained-gated-fill)), one of the pool skills is selected.
 - If the gain roll succeeds and there is still another pool skill remaining, the optional replace roll can swap which single skill you end up with.
 
 #### 4.6.6. Scenario tables
 
-<a id="46-scenario-tables"></a>
+<a id="466-scenario-tables"></a>
 
 These tables show the probability of ending with **0 / 1** rollable granted skills under this skill model (default `SkillCap = 1`).
 
@@ -2213,7 +2500,7 @@ With default `SkillCap = 1`, there is only **one** free slot. Therefore:
 - `P(final 1 skill) = p_attempt`
 - `P(final 0 skills) = 1 - p_attempt`
 
-Use the `p_attempt` table in [Section 4.6.4](#44-how-skills-are-gained-gated-fill) for the actual values.
+Use the `p_attempt` table in [Section 4.6.4](#464-how-skills-are-gained-gated-fill) for the actual values.
 
 #### Scenario B: `Ss ≥ 1` (shared skill exists)
 
@@ -2223,7 +2510,7 @@ With default `SkillCap = 1`, any shared skill consumes the entire skill cap:
 
 #### 4.6.7. Worked example (Divine)
 
-<a id="47-worked-example-divine"></a>
+<a id="467-worked-example-divine"></a>
 
 This is a **weapon** example (weapon-only skill boosts).
 
@@ -2264,7 +2551,7 @@ Final skills before cap:
 Apply `SkillCap = 1`:
 
 - If you gained a skill: you are at cap.
-- If you gained a skill and one pool skill remains, the optional replace roll ([Section 4.6.5](#45-overflow--replace-5)) can still swap which single skill you end up with.
+- If you gained a skill and one pool skill remains, the optional replace roll ([Section 4.6.5](#465-overflow--replace)) can still swap which single skill you end up with.
 
 Result:
 
@@ -2276,7 +2563,6 @@ Result:
 ## 5. Rune slots inheritance
 
 <a id="5-rune-slots-inheritance"></a>
-<a id="4-rune-slots-inheritance"></a>
 
 This section defines how many **empty rune slots** the forged item ends up with.
 
@@ -2315,7 +2601,6 @@ Examples (non-Unique):
 ## 6. Implementation reference
 
 <a id="6-implementation-reference"></a>
-<a id="5-implementation-reference"></a>
 
 This section is a developer reference for implementing the rules in this document.
 
