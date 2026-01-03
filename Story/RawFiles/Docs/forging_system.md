@@ -4,7 +4,7 @@
 
 This system provides a sophisticated and hardcore RPG forging experience. 
 
-The mod aims to increase playability and you can expect a big time investment through a fun, deep forging system. It gives players a true sense of growth with their gear as the game progresses; From common to legendary, every item can be upgraded, improved or used as a fuel resource, no more absolute "junk items". This creates a greater sense of achievement and allows players to forge and customize their dream unique items with both strategies and calculations, or with luck, just YOLO it out.
+The mod aims to increase playability and you can expect a big time investment through a fun, deep forging system. It gives players a true sense of growth with their gear as the game progresses; From common to legendary, every item can be upgraded, improved or used as a fuel resource, no more absolute "junk items". This creates a greater sense of achievement and allows players to forge and customize their dream items with both strategies and calculations, or with luck, just YOLO it out.
 
 ---
 
