@@ -28,7 +28,7 @@ This mod adds a sophisticated forging system that allows players to combine item
 See `Story/RawFiles/Docs/` for detailed system documentation:
 
 - [`rarity_system.md`](Story/RawFiles/Docs/rarity_system.md) – Rarity inheritance and stability system specification
-- [`inheritance_system.md`](Story/RawFiles/Docs/inheritance_system.md) – Inheritance rules (stats + granted skills)
+- [`forging_system.md`](Story/RawFiles/Docs/forging_system.md) – Inheritance rules (stats + granted skills)
 
 ### Functional Summary: Stat Inheritance System (v3.0)
 
@@ -50,7 +50,7 @@ Before stats are calculated, the **[Rarity System](Story/RawFiles/Docs/rarity_sy
 | **Cap** | 1 | 4 | 5 | 6 | 7 | 8 | 10 |
 
 ##### Step 2: Stats Second (The Content)
-The system sorts all stats from the parent items into two buckets: **Shared Stats** (guaranteed) and **Pool Stats** (gambled). For the full rules, see **[Inheritance System](Story/RawFiles/Docs/inheritance_system.md)**.
+The system sorts all stats from the parent items into two buckets: **Shared Stats** (guaranteed) and **Pool Stats** (gambled). For the full rules, see **[Forging System](Story/RawFiles/Docs/forging_system.md)**.
 
 ##### Step 3: Cap Last (The Cleanup)
 If the total number of inherited stats exceeds the **Max Stat Slots** defined in Step 1, the system removes excess stats, strictly prioritising the removal of **Pool Stats** first to protect the **Shared Stats**.

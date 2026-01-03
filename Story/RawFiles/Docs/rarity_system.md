@@ -12,7 +12,7 @@ The system follows three core rules, evaluated in order:
 
 ### 1.0. Ingredient eligibility (hard rule)
 
-Items with **socketed runes** must **not** be accepted as forging ingredients (see [`inheritance_system.md` → Section 1.1](inheritance_system.md#11-ingredient-eligibility) for details).
+Items with **socketed runes** must **not** be accepted as forging ingredients (see [`forging_system.md` → Section 1.1](forging_system.md#11-ingredient-eligibility) for details).
 
 Reject an ingredient if it has:
 

@@ -1,4 +1,4 @@
-# Inheritance System
+# Forging System
 
 ## What this system does
 

@@ -20,7 +20,7 @@ This is the core consistency rule for a robust RPG forging system:
   - The host replicates the **final forged item** (rarity, rolled stats, granted skills) to all clients.
 - **Deterministic RNG on the host**: all randomness is driven by a deterministic PRNG seeded once per forge:
   - rarity selection (sampling from `rarity_system.md` distributions, if you sample at runtime),
-  - shared-stat value merge rolls (Section 3.1 logic in `inheritance_system.md`),
+  - shared-stat value merge rolls (Section 3.1 logic in `forging_system.md`),
   - pool stat selection + trimming under the rarity cap,
   - granted-skill gated fill + trimming under the skill cap.
 
@@ -178,7 +178,7 @@ However, ensure you **exclude any forge metadata/markers** you add for bookkeepi
 - These must not be counted as rollable stats.
 - They must not enter shared/pool/cap calculations.
 
-## Step 6: Compute forged rollable modifiers (your `inheritance_system.md`)
+## Step 6: Compute forged rollable modifiers (your `forging_system.md`)
 Inputs:
 - `parentA_rollable[]`
 - `parentB_rollable[]`
