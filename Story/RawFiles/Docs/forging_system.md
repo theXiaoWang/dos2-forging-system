@@ -4,7 +4,7 @@
 
 This system provides a sophisticated and hardcore RPG forging experience. 
 
-The mod aims to increase playability and you can expect a big time investment through a fun, deep forging system. It gives players a true sense of growth with their gear as the game progresses; From common to legendary, every item can be upgraded, improved or used as a fuel resource, no more absolute "junk items". This creates a greater sense of achievement and allows players to forge and customize their dream items with both strategies and calculations, or with luck, just YOLO it out.
+The mod aims to increase playability and you can expect a big time investment through a fun, deep forging system. It gives players a true sense of growth with their gear as the game progresses; From common to legendary, every item can be upgraded, improved or used as a fuel resource, no more absolute "junk items". This creates a greater sense of achievement and allows players to forge and customize their dream items, which need strategies, calculations, and luck, or just YOLO it.
 
 ---
 You can only forge same kind of items together, e.g. weapon ↔ weapon (can be same type or cross type), shield ↔ shield, armour ↔ armour etc. You cannot forge two different kinds of items together.
@@ -12,10 +12,11 @@ You can only forge same kind of items together, e.g. weapon ↔ weapon (can be s
 When you forge two items, the forged result:
 
 - Always stays the same type of item as the **item you put in the Main Slot** (first slot), both parents will be consumed (e.g. forge a sword (Main Slot) and a staff (Secondary Slot) together, you get a new sword back, but both parents will be consumed).
-- Rolls the forged item's **rarity** first (Common, Rare, Epic, etc.) depends on the parents' rarities, which decides how many Stats Modifiers the result can have (e.g. Blue Stats, Extra Properties, Granted Skills).
+- Rolls the forged item's **rarity** first (Common, Rare, Epic, etc.) depends on the parents' rarities, which decides how many maximum Stats Modifiers the result can have (e.g. Blue Stats, Extra Properties, Granted Skills).
 - Carries over and merges the item's **base values** (the white numbers you see, e.g. damage for weapons, armour for armour pieces), usually favouring the Main Slot ingredient (Note: Only **Same-Type weapon forge WILL** inherit the base damage, **Cross-Type weapon forge WILL NOT** inherit the base damage).
-- For weapons of the same type, forging can also inherit **weapon boosts** (extra damage types or effects, e.g. fire damage, poison damage, piercing damage, etc.) (e.g. 2H Sword with Air damage + 2H Sword with Fire damage, not 2H Sword with X damage + 2H Axe with Y damage).
-- Also for weapons, expect **Same-Type** weapon forge yields better chance to inherit Stats Modifiers than **Cross-Type** weapon forge (e.g. 2H Sword + 2H Sword can sometimes 2X the chance to get a good result than 2H Sword + 2H Axe).
+- For same-type weapon, forging can also inherit **weapon boosts** (extra damage types or effects, e.g. fire damage, poison damage, piercing damage, etc.) (e.g. 2H Sword with Air damage + 2H Sword with Fire damage, not 2H Sword with X damage + 2H Axe with Y damage).
+- Carries over and merges **blue stats and skills** for both same-type and cross-type weapon forging (e.g. +Strength, +Warfare, granted skills like Shout_Whirlwind).
+- Only for weapons, expect **Same-Type weapon forge** yields better chance to inherit Stats Modifiers than **Cross-Type weapon forge** (e.g. 2H Sword + 2H Sword can sometimes **2X the chance** to get a good result than 2H Sword + 2H Axe), but for other item types such as armour, the chance defaults to cross-type.
 - Inherits everything else using a simple rule: **matching lines stay** (e.g. both items have +Strength), and **non-matching lines are a chance-based roll** from everything the two items have between them (e.g. one has +Finesse, the other has +Intelligence — you might get one, both, or neither).
 
 In short:
