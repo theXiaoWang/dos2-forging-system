@@ -93,12 +93,11 @@ In short:
 ---
 
 ## 1. Forge preconditions
-
 <a id="1-forge-preconditions"></a>
 
 ### 1.1. Ingredient eligibility
-
 <a id="11-ingredient-eligibility"></a>
+
 Items with **socketed runes** must **not** be accepted as forging ingredients.
 
 Reject an ingredient if it has:
@@ -139,8 +138,8 @@ The forged output item is always the same **item type/slot** as the ingredient i
 | Dagger                   | One-handed axe                | Dagger      | Cross weapon sub-types are allowed, but the output still follows main slot. |
 
 ### 1.2. Forge flow overview
-
 <a id="12-forge-flow-overview"></a>
+
 This document splits forging into independent “channels”, because vanilla item generation works the same way.
 
 Blue stats, ExtraProperties, and skills share a single **overall rollable slots cap** defined in:
@@ -165,8 +164,8 @@ High-level forge order:
 8. Inherit **rune slots** using **[Section 5](#5-rune-slots-inheritance)**.
 
 ### 1.3. Deterministic randomness (seed + multiplayer)
-
 <a id="13-deterministic-randomness-seed--multiplayer"></a>
+
 All random outcomes in this system (white numbers, blue stats, granted skills) must be driven by a single **forge seed** generated once per forge operation.
 
 - **forgeSeed**: generated once per forge operation, then used to seed a deterministic PRNG.
@@ -178,15 +177,20 @@ _Below is the technical breakdown for players who want the exact maths._
 ---
 
 ## 2. Base values Inheritance
-
 <a id="2-base-values-inheritance"></a>
 
-This section defines how forging merges **raw numeric power** (the **white tooltip** values):
+This section defines how forging merges **raw numeric power** (the **white tooltip** values). **Implementation reference:** see [Section 2.7](#27-implementation-checklist-se-base-values) for a concise checklist of invariants and edge-case guards required for SE implementation.
 
-- **Weapons (Same-Type only, Cross-Type won't inherit base damage)**: base damage (white damage range; merged via a midpoint model).
-- **Shields**: base armour, base magic armour, and base blocking (merged per channel).
-- **Armour pieces** (helmets/chest/gloves/boots/pants/belts): base armour and/or base magic armour (merged per channel).
-- **Jewellery** (rings/amulets): base magic armour (merged per channel).
+### 2.1. Base values (definition)
+<a id="21-base-values-definition"></a>
+
+This base-value model is intentionally generic: it works for any item that has meaningful **base values** (raw template numbers, not blue stats / ExtraProperties / granted skills / runes).
+
+- **Weapons**: base damage range.
+- **Shields**: base armour, base magic armour, and base blocking.
+- **Armour pieces** (helmets/chest/gloves/boots/pants/belts): base armour and/or base magic armour.
+- **Jewellery** (rings/amulets): base magic armour.
+- **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): [Section 2](#2-base-values-inheritance) is a **no-op** for those numeric channels.
 
 Core design goals:
 
@@ -203,19 +207,6 @@ Balance note:
 
 - When the donor is above the player level, the donor's pull is dampened using `t_eff` so higher-level donors still feel better, but do not explode balance for low-level outputs.
 
-**Implementation reference:** see [Section 2.7](#27-implementation-checklist-se-base-values) for a concise checklist of invariants and edge-case guards required for SE implementation.
-
-### 2.1. Base values (definition)
-
-<a id="21-base-values-definition"></a>
-This base-value model is intentionally generic: it works for any item that has meaningful **base values** (raw template numbers, not blue stats / ExtraProperties / granted skills / runes).
-
-- **Weapons**: base damage range.
-- **Shields**: base armour, base magic armour, and base blocking.
-- **Armour pieces** (helmets/chest/gloves/boots/pants/belts): base armour and/or base magic armour.
-- **Jewellery** (rings/amulets): base magic armour.
-- **Slots that have no meaningful base values** (e.g. if both base armour and base magic armour are `0`): [Section 2](#2-base-values-inheritance) is a **no-op** for those numeric channels.
-
 Overview on how the forged item's base values are calculated:
 
 - **Weapons (damage)**: uses a **tooltip-midpoint** model.
@@ -228,13 +219,32 @@ Overview on how the forged item's base values are calculated:
   - An upgrade can “spike” towards the donor using the same `u^2` shape (higher is harder).
 
 ### 2.2. Output rules (level/type/rarity)
-
 <a id="22-output-rules-leveltyperarity"></a>
 
-- **Output level**: always the forger’s level, `Level_out = Level_player`.
+- **Output level**: always the forger's level, `Level_out = Level_player`.
 - **Output type**: always the item in the **main forge slot** (first slot).
 - **Output rarity**: decided by the **[Rarity System](rarity_system.md)**.
 - **Base values (all items)**: upgrades do **not** overcap. They only push the output **towards the donor** for that channel (and cross-type weapon forging does not change weapon damage).
+
+#### Weapon Damage Type inheritance
+
+The forged weapon's `Damage Type` field is inherited from the **main slot (slot 1)** when same-type weapon forging occurs (`TypeMatch = true`):
+
+- `DamageType_out = DamageType(slot1)`
+
+**Notes:**
+
+- This rule applies only to **same-type weapon forging** (`TypeMatch = true`), where both parents share the same `WeaponType` and base damage can be merged.
+- For **cross-type weapon forging** (`TypeMatch = false`), base damage is unchanged and the output type follows slot 1, so the damage type naturally follows from the output item type.
+- This rule is most relevant for weapons that can have different damage types within the same `WeaponType`:
+  - **Staffs**: can be Physical (base), Fire, Water, Poison, Earth, or Air
+  - **Wands**: default to Fire, but can have Fire, Air, Water, or Poison variants
+  - **Unique weapons**: can override their base class damage type (e.g., a unique 2H axe with Fire damage)
+
+**Examples:**
+
+- Fire Staff (slot 1) + Water Staff (slot 2) → Forged: Fire Staff (damage type follows slot 1)
+- 2H Axe (Physical damage, slot 1) + Fire Staff (slot 2) → Forged: 2H Axe (Physical damage, damage type follows slot 1)
 
 #### Hard level gate (UI rule; required)
 
@@ -253,9 +263,7 @@ If an ingredient is underlevelled, the player must normalise it first (see [Sect
 **Rarity note (base values):** `w` (and therefore `t`) is derived from the **two parent rarities**. `Rarity_out` does **not** influence base value inheritance.
 
 ### 2.3. Inputs and tuning parameters
-
 <a id="23-inputs-and-tuning-parameters"></a>
-<a id="23-parameters-tuning-knobs"></a>
 
 This section defines the **inputs**, **notation**, and the **balance knobs** used by the base values merge. The actual algorithms are in [Section 2.5](#25-merge-algorithm-percentiles-to-output-base-values).
 
@@ -306,6 +314,7 @@ These are the **balance knobs** (tuning defaults), used by the tooltip-only base
 
 #### Rarity dominance (Non-Unique): dynamic merge weight `w`
 <a id="23-rarity-dominance"></a>
+
 To make higher rarity ingredients matter more, `w` is not a constant.
 
 Each rarity name map to a **rarity index**:
@@ -343,13 +352,13 @@ Format: `w (donor weight = 1 - w)`
 | Divine (5)    | 0.90 (0.10) | 0.86 (0.14)  | 0.82 (0.18) | 0.78 (0.22) |  0.74 (0.26)  | 0.70 (0.30) |
 
 #### Upgrade quality roll `u`
-
 <a id="23-upgrade-overcap-behaviour"></a>
+
 On an upgrade success, we roll `u ~ U(0,1)` and use `u^2` to push the output towards the donor (higher is harder).
 
 #### Core formulas (shared maths)
-
 <a id="23-core-formulas"></a>
+
 This section defines the shared pieces of maths used by the base-value models:
 
 - **Base pull (`delta`)**: the donor can pull **up or down**:
@@ -368,9 +377,7 @@ This section defines the shared pieces of maths used by the base-value models:
 ---
 
 ### 2.4. Parent measurement (tooltip values)
-
 <a id="24-baseline-budget-cache-and-parent-measurement"></a>
-<a id="24-measuring-base-values-no-runeboost-pollution"></a>
 
 This section defines how to:
 
@@ -483,9 +490,7 @@ Before shipping, validate for each supported weapon identity family that:
 - It does not double-count any `DamageBoost`-style effects that are already reflected in the tooltip (see `_Boost_Weapon_Damage_Bonus` exclusion in [Section 3.1](#31-weapon-boosts-definition)).
 
 ### 2.5. Merge algorithms (all items)
-
 <a id="25-merge-algorithm-percentiles-to-output-base-values"></a>
-<a id="25-cross-type-merging-w--conversionloss"></a>
 
 This section contains two separate models:
 
@@ -519,30 +524,7 @@ Rules:
 
 Finally, round to the displayed integer midpoint and let the engine display min/max using the weapon's `Damage Range` rules.
 
-**Note (tooltip clarity):** if you want to show a “pre-forge preview” at `Level_player`, do not use vanilla template levelling alone. Use the SE normalisation process in [Section 2.4](#24-baseline-budget-cache-and-parent-measurement).
 
-#### Weapon Damage Type inheritance
-
-The forged weapon's `Damage Type` field is inherited from the **main slot (slot 1)** when same-type weapon forging occurs (`TypeMatch = true`):
-
-- `DamageType_out = DamageType(slot1)`
-
-**Notes:**
-
-- This rule applies only to **same-type weapon forging** (`TypeMatch = true`), where both parents share the same `WeaponType` and base damage can be merged.
-- For **cross-type weapon forging** (`TypeMatch = false`), base damage is unchanged and the output type follows slot 1, so the damage type naturally follows from the output item type.
-- This rule is most relevant for weapons that can have different damage types within the same `WeaponType`:
-  - **Staffs**: can be Physical (base), Fire, Water, Poison, Earth, or Air
-  - **Wands**: default to Fire, but can have Fire, Air, Water, or Poison variants
-  - **Unique weapons**: can override their base class damage type (e.g., a unique 2H axe with Fire damage)
-
-**Examples:**
-
-- Fire Staff (slot 1) + Water Staff (slot 2) → Forged: Fire Staff (damage type follows slot 1)
-- Fire Wand (slot 1) + Air Wand (slot 2) → Forged: Fire Wand (damage type follows slot 1)
-- 2H Axe (Physical damage, slot 1) + Fire Staff (slot 2) → Forged: 2H Axe (Physical damage, damage type follows slot 1)
-
-This maintains slot 1 identity consistency with the base damage merge and output type selection rules.
 
 #### Non-weapons (tooltip-only; per channel)
 
@@ -570,7 +552,6 @@ Rules:
 Apply the same steps independently to each channel (physical armour and magic armour).
 
 ### 2.6. Worked examples
-
 <a id="26-worked-examples-base-values"></a>
 
 Examples are organised by category: normalisation (1–2), weapons (3–6), and non-weapons (7–8).
@@ -820,7 +801,6 @@ Interpretation:
 </details>
 
 ### 2.7. Implementation checklist (SE; base values)
-
 <a id="27-implementation-checklist-se-base-values"></a>
 
 This is a short punch-list for implementing [Section 2](#2-base-values-inheritance) without introducing level/tooltip drift bugs:
@@ -833,6 +813,8 @@ This is a short punch-list for implementing [Section 2](#2-base-values-inheritan
 - **Level gate (UI):**
   - forge disabled unless `Level_main >= Level_player` and `Level_donor >= Level_player`.
   - if underlevelled: normalise first using SE ratio-preserving normalisation (not vanilla template levelling alone).
+- **Pre-forge Preview:** 
+  - before actually forging, you want to show a "pre-forge preview" at `Level_player`, do not use vanilla template levelling alone. Use the SE normalisation process in [Section 2.4](#24-baseline-budget-cache-and-parent-measurement).
 - **Baseline identity (`E(identity, Level, channel)`):**
   - `identity` must be a stable template/stat identity (not `WeaponType`/slot alone).
   - Unique items use their own template/stat as identity.
@@ -863,28 +845,26 @@ This is a short punch-list for implementing [Section 2](#2-base-values-inheritan
 ---
 
 ## 3. Weapon Boost Inheritance
-
 <a id="3-weapon-boost-inheritance"></a>
 
 This section defines how **weapon boosts** (elemental damage, armour-piercing, etc.) are inherited when forging **non-unique weapons**.
 
-**Note:** This documentation focuses on **non-unique items**. Unique weapons with special boost types (Vampiric, MagicArmourRefill, Chill) are treated as special cases and documented separately (see [Section 3.1.1](#311-special-boost-types-unique-weapons)).
+**Note:** Unique weapons with special boost types (Vampiric, MagicArmourRefill, Chill) are treated as special cases and documented separately (see [Section 3.1.1](#311-special-boost-types-unique-weapons)).
 
 **Important:** Temporary weapon-enchant effects from skills/consumables (e.g. Venom Coating, Elemental Arrowheads, Fire Brand, etc.) are implemented as **statuses** that grant a conditional `BonusWeapon` while active, not as permanent weapon `Boosts`. These temporary effects must not be present on forging ingredients (see [Section 1.1](#11-ingredient-eligibility)).
 
 ### 3.1. Weapon boosts (definition)
-
 <a id="31-weapon-boosts-definition"></a>
 
 In Divinity: Original Sin 2, weapons can have **additional damage or effects** beyond their base damage. These appear as **weapon boost properties** referenced by the weapon's `Boosts` field.
 
 **How it works in the game:**
 
-- Weapon boosts are **not base values** (they don't appear in the white damage range calculation).
-- Weapon boosts are **not blue stat modifiers** (they're not part of the rollable modifier system).
-- Instead, weapon boosts are **discrete boost entries** that either:
+- Weapon boosts are **discrete boost entries** that either:
   - Add a **second damage line** (e.g., "32–39 Poison" alongside "311–381 Fire"), or
   - Provide **special effects** (e.g., vampiric healing, magic armour refill).
+- Weapon boosts are **not base values** (they don't appear in the white damage range calculation).
+- Weapon boosts are **not blue stat modifiers** (they're not part of the rollable modifier system).
 
 **Crafting note (vanilla):**
 
@@ -898,6 +878,22 @@ In Divinity: Original Sin 2, weapons can have **additional damage or effects** b
 - `_Boost_Weapon_Damage_Bonus` (and its tiered variants) uses the `DamageBoost` field, which **modifies base physical damage** directly.
 - This boost is **already reflected in the white tooltip damage range** used by [Section 2](#2-base-values-inheritance) for base value inheritance.
 - Therefore, `_Boost_Weapon_Damage_Bonus` is **not inherited via this section** ([Section 3](#3-weapon-boost-inheritance)) to avoid double-counting. It is implicitly handled through the base damage merge in [Section 2](#2-base-values-inheritance).
+
+**Tier naming convention:**
+
+- Boost names ending in `_Small` → **Small tier** (if available for that boost kind)
+- Boost names ending in `_Medium` → **Medium tier**
+- Boost names ending in `_Large` → **Large tier**
+- Boost names with **no tier suffix** → **Untiered tier** (a distinct tier, not equivalent to Medium)
+
+**Tier mapping for merging:**
+
+Non-unique weapons:
+- **4-tier boosts** (elemental, ArmourPiercing): Small (tier 0) < Untiered (tier 1) < Medium (tier 2) < Large (tier 3)
+
+Unique weapons:
+- **3-tier boosts** (Vampiric, MagicArmourRefill): Untiered (tier 0) < Medium (tier 1) < Large (tier 2)
+- **1-tier boosts** (Chill): Untiered (tier 0) only
 
 **Boost types in vanilla (non-unique weapons):**
 
@@ -946,31 +942,11 @@ When converting a numeric score back into a concrete tier name, clamp to tiers t
 - **1-tier boosts** (Chill):
   - Valid tier: Untiered only
   - Any non-zero rounded tier clamps to **Untiered**
-
 </details>
 
-**Note:** `_Boost_Weapon_Damage_Bonus` (and its tiered variants) is **excluded** from this inheritance system. It uses the `DamageBoost` field, which modifies base physical damage and is already reflected in the white tooltip damage range. It is handled implicitly through the base damage merge in [Section 2](#2-base-values-inheritance).
-
-**Tier naming convention:**
-
-- Boost names ending in `_Small` → **Small tier** (if available for that boost kind)
-- Boost names ending in `_Medium` → **Medium tier**
-- Boost names ending in `_Large` → **Large tier**
-- Boost names with **no tier suffix** → **Untiered tier** (a distinct tier, not equivalent to Medium)
-
-**Tier mapping for merging:**
-
-Each boost kind has its own tier system with different tier availability:
-
-Non-unique weapons:
-- **4-tier boosts** (elemental, ArmourPiercing): Small (tier 0) < Untiered (tier 1) < Medium (tier 2) < Large (tier 3)
-
-Unique weapons:
-- **3-tier boosts** (Vampiric, MagicArmourRefill): Untiered (tier 0) < Medium (tier 1) < Large (tier 2)
-- **1-tier boosts** (Chill): Untiered (tier 0) only
+---
 
 ### 3.2. Inheritance rules
-
 <a id="32-weapon-boost-inheritance-rules"></a>
 
 Weapon boost inheritance uses a **score-and-select** model with a small number of **boost slots** (vanilla-aligned).
@@ -1097,7 +1073,6 @@ For pseudocode implementation reference, see [forging_system_implementation_blue
 *Note:* If the computed tier name does not exist for that boost kind in vanilla, clamp it to the nearest valid tier for that kind (see [Section 3.1.1](#311-special-boost-types-unique-weapons)).
 
 ### 3.3. Worked examples
-
 <a id="33-weapon-boost-worked-examples"></a>
 
 ##### Example 1: Shared-kind scoring (cap = 2): Fire + Water
@@ -1248,7 +1223,6 @@ Pick top cap=1 kind with score>=1:
 ---
 
 ## 4. Stats Modifier Inheritance
-
 <a id="4-stats-modifiers-inheritance"></a>
 
 This section defines how **stats modifiers** are inherited when you forge.
@@ -1276,7 +1250,6 @@ The level-normalisation step described in [Section 2](#2-base-values-inheritance
 - Other item-levelling mods that re-roll stats modifiers are not compatible with this forging system's guarantees.
 
 ### 4.1. Introduction + design principles
-
 <a id="41-stats-modifiers-definition"></a>
 
 Design principles:
@@ -1291,7 +1264,6 @@ The universal rules are defined next:
 - **Merging rule** ([Section 4.3](#43-merging-rule-how-numbers-are-merged))
 
 ### 4.2. Selection rule (all modifiers)
-
 <a id="42-selection-rule-shared--pool--cap"></a>
 
 This selection rule is **universal** for all three modifier channels:
@@ -1503,7 +1475,6 @@ For a given channel:
 3. This yields the channel's planned result count: `F = S + P`.
 
 #### Step 5: Apply the overall modifier cap (cross-channel)
-
 <a id="45-apply-overall-modifier-cap"></a>
 
 The forged item has a single cap `OverallCap[Rarity_out, ItemType_out]` across:
@@ -1576,7 +1547,6 @@ So you end up with:
 ---
 
 #### 3.2.1. Safe vs YOLO forging
-
 <a id="35-safe-vs-yolo-forging"></a>
 
 These two standalone examples are meant to show the difference between:
@@ -1673,7 +1643,6 @@ This is the perfect example for **YOLO forging**:
 ---
 
 ### 4.3. Merging rule (Blue Stats / ExtraProperties)
-
 <a id="43-merging-rule-how-numbers-are-merged"></a>
 
 Sometimes both parents have the **same stats**, but the **numbers** are different:
@@ -1771,7 +1740,6 @@ Apply the merge formula only when both parameters are below their respective cap
 ---
 
 ### 4.4. Blue Stats
-
 <a id="44-blue-stats-channel"></a>
 
 #### 4.4.1. Blue Stats (definition)
@@ -1788,7 +1756,6 @@ Blue Stats are rollable numeric boosts (blue text stats) that appear on items ba
 **Note:** Blue Stats are treated as discrete modifier lines; they do not automatically "scale up" just because the item level changes during base-value normalisation (see [Section 4](#4-stats-modifiers-inheritance) level normalisation note).
 
 #### 4.4.2. Shared vs pool (Blue Stats)
-
 <a id="442-shared-vs-pool-blue-stats"></a>
 
 - **Shared Blue Stats (Sb)**: blue stats lines on **both** parents (guaranteed).
@@ -1802,7 +1769,6 @@ Key values:
 - `Fb`: forged blue modifiers before overall trimming (`Fb = Sb + Pb`)
 
 #### 4.4.3. Worked examples (Blue Stats)
-
 <a id="443-worked-examples-blue-stats"></a>
 
 **Note:**
@@ -2158,7 +2124,6 @@ Parameters used (Tier 4):
 ---
 
 ### 4.5. ExtraProperties
-
 <a id="45-extraproperties-inheritance"></a>
 
 This section defines how **ExtraProperties** are inherited when you forge.
@@ -2169,7 +2134,6 @@ ExtraProperties is treated as its own channel:
 - The **internal content** (tokens) is merged/selected separately, with an internal cap based on the parents.
 
 #### 4.5.1. ExtraProperties (definition)
-
 <a id="451-extraproperties-definition"></a>
 
 ExtraProperties is a semicolon-separated list of effects stored on the item. These include:
@@ -2182,10 +2146,9 @@ ExtraProperties is a semicolon-separated list of effects stored on the item. The
 Important: the tooltip may show multiple lines, but for the overall cap, ExtraProperties is counted as **one slot**.
 
 #### 4.5.2. Shared vs pool tokens
-
 <a id="452-extraproperties-shared-vs-pool"></a>
 
-Parse each parent’s ExtraProperties string into ordered tokens:
+Parse each parent's ExtraProperties string into ordered tokens:
 
 - Split on `;`
 - Trim whitespace
@@ -2197,7 +2160,6 @@ Then compute:
 - **Pool ExtraProperties size (Pp_size)**: tokens present on only one parent (pool candidates).
 
 #### 4.5.3. Selection + internal cap (max of parent lines, with same-count bonus)
-
 <a id="453-extraproperties-selection--internal-cap"></a>
 
 Let:
@@ -2233,7 +2195,6 @@ Build the output token list:
 4. Clamp the final token list to `InternalCap`.
 
 #### 4.5.4. Slot competition + trimming
-
 <a id="454-extraproperties-slot-competition--trimming"></a>
 
 ExtraProperties occupies one **slot** in the overall rollable cap.
@@ -2244,7 +2205,6 @@ Rule:
 - Otherwise, the ExtraProperties slot is a **pool slot**. If the forge result is over the overall cap, this slot competes under the universal overall-cap trimming rule in [Step 5 of Section 4.2](#45-apply-overall-modifier-cap) (slot-weighted).
 
 #### 4.5.5. Worked examples
-
 <a id="455-worked-examples"></a>
 
 **Example 1: Same count with bonus**
@@ -2283,8 +2243,8 @@ Result: Capped at 2 tokens maximum
 ---
 
 ### 4.6. Skills
-
 <a id="46-skills-inheritance"></a>
+
 This section defines how **granted skills** are inherited when you forge.
 
 - Granted skills are a separate channel from normal **blue stats**.
@@ -2298,7 +2258,6 @@ Here are what you can expect:
 - Even if a skill is gained by the skill rules, it can still be dropped later if the final item is over the **overall rollable-slot cap** and the skill is not protected (no skillbook lock; not shared).
 
 #### 4.6.1. Granted skills (definition)
-
 <a id="461-granted-skills-definition"></a>
 
 - **Granted skill (rollable)**: any rollable boost/stats line that grants entries via a `Skills` field in its boost definition.
@@ -2323,7 +2282,6 @@ Here are what you can expect:
 - If you ever encounter “mixed” skills in runtime data, treat that as invalid input (or ignore the mismatched skill boosts).
 
 #### 4.6.2. Skill cap by rarity
-
 <a id="462-skill-cap-by-rarity"></a>
 
 This is the maximum number of **rollable granted skills** on the forged item.
@@ -2346,10 +2304,9 @@ This cap is **default + learned per save**:
 _Unique is ignored for now (do not consider it in balancing)._
 
 #### 4.6.2.1. Skillbook lock (preserve by exact skill ID)
-
 <a id="421-skillbook-lock"></a>
 
-If the player inserts a skillbook into the dedicated forge UI slot, the forge must validate it against the parent item’s granted skill(s):
+If the player inserts a skillbook into the dedicated forge UI slot, the forge must validate it against the parent item's granted skill(s):
 
 - Match by **exact skill ID** (e.g. `Target_ShockingTouch`, `Shout_Whirlwind`), not by display name.
 - If the skillbook does not match any skill granted by the main-slot item (parent A), block forging with:
@@ -2360,7 +2317,6 @@ If both parents have matching skillbooks:
 - The main-slot item’s (parent A) skill is the guaranteed inherited one.
 
 #### 4.6.3. Shared vs pool skills
-
 <a id="463-shared-vs-pool-skills"></a>
 
 Split granted skills into two lists:
@@ -2373,10 +2329,9 @@ Split granted skills into two lists:
 Use the **skill ID** as the identity key (e.g. `Shout_Whirlwind`, `Projectile_BouncingShield`), not the boost name.
 
 #### 4.6.4. How skills are gained (gated fill)
-
 <a id="464-how-skills-are-gained-gated-fill"></a>
 
-Skills are **more precious than stats**, so the skill channel does **not** use the stat-style “keep half the pool” baseline.
+Skills are **more precious than stats**, so the skill channel does **not** use the stat-style "keep half the pool" baseline.
 
 Instead, skills use a **cap + gated fill** model:
 
@@ -2440,7 +2395,6 @@ So the actual per-attempt gain chances are:
 | Divine        |       2       |              28.0%               |               56.0%                |
 
 #### 4.6.5. Overflow + replace (type-modified)
-
 <a id="465-overflow--replace"></a>
 
 All randomness in this subsection is **host-authoritative** and driven by `forgeSeed` (see [Section 1.3](#13-deterministic-randomness-seed--multiplayer)).
@@ -2481,7 +2435,6 @@ Interpretation:
 - If the gain roll succeeds and there is still another pool skill remaining, the optional replace roll can swap which single skill you end up with.
 
 #### 4.6.6. Scenario tables
-
 <a id="466-scenario-tables"></a>
 
 These tables show the probability of ending with **0 / 1** rollable granted skills under this skill model (default `SkillCap = 1`).
@@ -2508,7 +2461,6 @@ With default `SkillCap = 1`, any shared skill consumes the entire skill cap:
 - Final is always **1 skill** (the shared one), unless later dropped by the **overall rollable-slot cap** (if not protected by the skillbook lock/shared rule).
 
 #### 4.6.7. Worked example (Divine)
-
 <a id="467-worked-example-divine"></a>
 
 This is a **weapon** example (weapon-only skill boosts).
@@ -2560,7 +2512,6 @@ Result:
 ---
 
 ## 5. Rune slots inheritance
-
 <a id="5-rune-slots-inheritance"></a>
 
 This section defines how many **empty rune slots** the forged item ends up with.
@@ -2598,7 +2549,6 @@ Examples (non-Unique):
 ---
 
 ## 6. Implementation reference
-
 <a id="6-implementation-reference"></a>
 
 This section is a developer reference for implementing the rules in this document.
