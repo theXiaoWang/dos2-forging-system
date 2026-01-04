@@ -7,7 +7,7 @@ This system provides a sophisticated and hardcore RPG forging experience.
 The mod aims to increase playability and you can expect a big time investment through a fun, deep forging system. It gives players a true sense of growth with their gear as the game progresses; From common to legendary, every item can be upgraded, improved or used as a fuel resource, no more absolute "junk items". This creates a greater sense of achievement and allows players to forge and customize their dream items, which need strategies, calculations, and luck, or just YOLO it.
 
 ---
-You can only forge same kind of items together, e.g. weapon ↔ weapon (can be same type or cross type), shield ↔ shield, armour ↔ armour etc. You cannot forge two different kinds of items together.
+You can only forge same kind of items together, e.g. weapon ↔ weapon (can be same type or cross type), shield ↔ shield, armour ↔ armour etc. You cannot forge two different kinds of items together. Additionally, the two items must be at least the player's level or above to forge (player is level 10, the items must be >= level 10 to forge), and the result is always the player's level. The forge UI allows player to scale the items to the player's level before forging.
 
 When you forge two items, the forged result:
 
@@ -37,14 +37,13 @@ In short:
 <details>
 <summary><strong><a href="#2-base-values-inheritance">2. Base values Inheritance</a></strong></summary>
 
-- [2.1. What “base values” means (and why levels must be normalised)](#21-base-values-definition)
+- [2.1. What "base values" means (and why levels must be normalised)](#21-base-values-definition)
 - [2.2. Output + eligibility rules (including the level gate)](#22-output-rules-leveltyperarity)
 - [2.3. Inputs, notation, and tuning](#23-inputs-and-tuning-parameters)
 - [2.4. Measuring parents + SE normalisation (ratio-preserving levelling)](#24-baseline-budget-cache-and-parent-measurement)
-- [2.5. Core maths (pull + dampener + upgrade)](#25-normalisation-raw-to-percentile)
-- [2.6. Merge algorithms (weapons and non-weapons)](#26-merge-algorithm-percentiles-to-output-base-values)
-- [2.7. Worked examples (including level normalisation)](#27-worked-examples-base-values)
-- [2.8. Implementation checklist (SE; base values)](#28-implementation-checklist-se-base-values)
+- [2.5. Merge algorithms (weapons and non-weapons)](#25-merge-algorithm-percentiles-to-output-base-values)
+- [2.6. Worked examples (including level normalisation)](#26-worked-examples-base-values)
+- [2.7. Implementation checklist (SE; base values)](#27-implementation-checklist-se-base-values)
 </details>
 
 <details>
@@ -148,9 +147,9 @@ Blue stats, ExtraProperties, and skills share a single **overall rollable slots 
 
 - [`rarity_system.md` → Caps](rarity_system.md#22-caps-vnext-default--learned-per-save)
 
-- **Base values** (base damage / armour / magic armour): determined by **item type + the white tooltip values**.
-- **Blue stats** (stats modifiers): rollable modifiers (e.g. attributes, crit).
-- **ExtraProperties**: rollable bundle (e.g. “chance to set status”, “Poison Immunity”, “Create Ice surface”, etc., counts as **1 slot** if present, regardless of how many internal lines it expands into).
+- **Base values** (Base Damage / Armour / Magic Armour / Block Chance): determined by **item type + the white tooltip values**.
+- **Blue stats** (Attributes / Stats / Combat and Civil Abilities): rollable stats modifiers (e.g. +1 Finesse, +10% Critical Chance, +1 Warfare, +1 Thievery, etc.).
+- **ExtraProperties**: rollable bundle (e.g. “10% chance to set Blinded for 1 turn”, “Poison Immunity”, “Create Ice surface”, etc., counts as **1 slot** if present, regardless of how many internal lines it expands into).
 - **Skills**: rollable granted skills (each skill consumes **1 slot**, unless protected by shared/skillbook rules).
 - **Rune slots**: a separate channel (only when empty; rune effects are forbidden as ingredients).
 
@@ -158,7 +157,7 @@ High-level forge order:
 
 1. Decide the output's **rarity** using the **[Rarity System](rarity_system.md)**.
 2. Enforce eligibility and the **level gate** (forge disabled unless both ingredients are at least the player’s level). If needed, normalise ingredients using the SE ratio-preserving process in **[Section 2.4](#24-baseline-budget-cache-and-parent-measurement)**.
-3. Decide the output's **base values** (damage/armour) using **[Section 2](#2-base-values-inheritance)**.
+3. Decide the output's **base values** (damage/armour, etc.) using **[Section 2](#2-base-values-inheritance)**.
 4. Inherit **weapon boosts** (elemental damage, armour-piercing, vampiric, etc.) using **[Section 3](#3-weapon-boost-inheritance)** (weapons only).
 5. Inherit **blue stats** using **[Section 4.4](#44-blue-stats-channel)**.
 6. Inherit **ExtraProperties** using **[Section 4.5](#45-extraproperties-inheritance)**.
@@ -186,8 +185,8 @@ This section defines how forging merges **raw numeric power** (the **white toolt
 
 - **Weapons (Same-Type only, Cross-Type won't inherit base damage)**: base damage (white damage range; merged via a midpoint model).
 - **Shields**: base armour, base magic armour, and base blocking (merged per channel).
-- **Armour pieces** (helmets/chest/gloves/boots/pants/belts): base armour and base magic armour (merged per channel).
-- **Jewellery** (rings/amulets): typically base magic armour (merged per channel).
+- **Armour pieces** (helmets/chest/gloves/boots/pants/belts): base armour and/or base magic armour (merged per channel).
+- **Jewellery** (rings/amulets): base magic armour (merged per channel).
 
 Core design goals:
 
@@ -204,7 +203,7 @@ Balance note:
 
 - When the donor is above the player level, the donor's pull is dampened using `t_eff` so higher-level donors still feel better, but do not explode balance for low-level outputs.
 
-**Implementation reference:** see [Section 2.8](#28-implementation-checklist-se-base-values) for a concise checklist of invariants and edge-case guards required for SE implementation.
+**Implementation reference:** see [Section 2.7](#27-implementation-checklist-se-base-values) for a concise checklist of invariants and edge-case guards required for SE implementation.
 
 ### 2.1. Base values (definition)
 
@@ -258,7 +257,7 @@ If an ingredient is underlevelled, the player must normalise it first (see [Sect
 <a id="23-inputs-and-tuning-parameters"></a>
 <a id="23-parameters-tuning-knobs"></a>
 
-This section defines the **inputs**, **notation**, and the **balance knobs** used by the base values merge. The actual algorithms are in [Section 2.6](#26-merge-algorithm-percentiles-to-output-base-values).
+This section defines the **inputs**, **notation**, and the **balance knobs** used by the base values merge. The actual algorithms are in [Section 2.5](#25-merge-algorithm-percentiles-to-output-base-values).
 
 #### Inputs (per forge)
 
@@ -273,7 +272,7 @@ This section defines the **inputs**, **notation**, and the **balance knobs** use
 - **Numeric channels (what “base values” means)**:
   - **Weapons**: one channel (white damage average).
   - **Shields**: three channels (physical armour, magic armour, and blocking).
-  - **Armour pieces**: two channels (physical armour and magic armour).
+  - **Armour pieces**: two channels (physical armour and/or magic armour).
   - **Jewellery**: typically one channel (magic armour).
 - **No-op rule**: if an item has no meaningful base value for a channel (e.g. the tooltip value is `0`), do **not** apply the merge to that channel.
 
@@ -290,8 +289,7 @@ Both buttons must produce the same result for the same item (single-item normali
 
 #### Balance knobs (tuning table)
 
-These are the **balance knobs** (tuning defaults). The symbol dictionary used by the algorithm is in [Section 2.5](#25-normalisation-raw-to-percentile).
-These are used by the tooltip-only base-value models in [Section 2](#2-base-values-inheritance).
+These are the **balance knobs** (tuning defaults), used by the tooltip-only base-value models in [Section 2](#2-base-values-inheritance).
 | Parameter | Meaning | Default | Notes |
 | :--- | :--- | :---: | :--- |
 | `w` | Slot 1 dominance weight | Derived | Computed from the parents’ rarities (rarity dominance rule below). Slot 1 always remains the main parent. Used by non-weapons and by weapons when `WeaponType` matches. |
@@ -304,7 +302,7 @@ These are used by the tooltip-only base-value models in [Section 2](#2-base-valu
 | Rounding policy | How to convert the final float into the displayed integer | Nearest (half-up) | Optional "player-favour" bias is to always round up. |
 | `t_eff` | Level-gap dampener (effective donor pull) | Derived | `t = (1 - w)`. If `Level_donor > Level_player`: `t_eff = t × (Level_player / Level_donor)`, otherwise `t_eff = t`. Dampens donor pull when donor level exceeds player level. |
 
-**Rarity note (base values):** `w` (and therefore `t`) is derived from the **two parent rarities**. `Rarity_out` does **not** influence base value inheritance.
+**Rarity note (base values):** `w` is derived from the **two parent rarities**. `Rarity_out` does **not** influence base value inheritance.
 
 #### Rarity dominance (Non-Unique): dynamic merge weight `w`
 <a id="23-rarity-dominance"></a>
@@ -327,7 +325,7 @@ Then:
 
 **Note:**
 Weapon damage (same `WeaponType`) uses rarity dominance too. When `WeaponType` matches, weapons use the same donor pull strength: `t = (1 - w)` (computed from parent rarities).
-When `WeaponType` does not match, weapon base damage does not change ([Section 2.6](#26-merge-algorithm-percentiles-to-output-base-values)).
+When `WeaponType` does not match, weapon base damage does not change ([Section 2.5](#25-merge-algorithm-percentiles-to-output-base-values)).
 
 #### Weight table (main rarity vs donor rarity)
 
@@ -348,6 +346,24 @@ Format: `w (donor weight = 1 - w)`
 
 <a id="23-upgrade-overcap-behaviour"></a>
 On an upgrade success, we roll `u ~ U(0,1)` and use `u^2` to push the output towards the donor (higher is harder).
+
+#### Core formulas (shared maths)
+
+<a id="23-core-formulas"></a>
+This section defines the shared pieces of maths used by the base-value models:
+
+- **Base pull (`delta`)**: the donor can pull **up or down**:
+  - `delta = (B - A)`
+- **Rarity dominance (`w`)**: computes slot 1 dominance and donor influence:
+  - donor pull strength is `t = (1 - w)`
+- **Level-gap dampener (`t_eff`)** (donor above player only):
+  - If `Level_donor > Level_player`: `t_eff = t × (Level_player / Level_donor)`
+  - Otherwise: `t_eff = t`
+- **Upgrade chance (donor better only):**
+  - `gain = max(0, delta / max(A, 1))` (relative improvement available; 0 if donor is not better)
+  - `P(upgrade) = clamp(upgradeCap × gain^k, 0, upgradeCap)`
+- **Upgrade quality (if upgrade succeeds):**
+  - roll `u ~ U(0,1)` and use `u^2` to push towards the donor (higher is harder)
 
 ---
 
@@ -377,12 +393,12 @@ Weapons (single channel; uses these directly):
 Shields (three channels):
 
 - Read `Armour`, `MagicArmour`, and `Blocking` from the item tooltip.
-- Treat each channel independently throughout Sections 2.5–2.6.
+- Treat each channel independently throughout Sections 2.4–2.5.
 
 Armour pieces (two channels):
 
 - Read `Armour` and `MagicArmour` from the item tooltip.
-- Treat each channel independently throughout Sections 2.5–2.6.
+- Treat each channel independently throughout Sections 2.4–2.5.
 
 ---
 
@@ -466,30 +482,10 @@ Before shipping, validate for each supported weapon identity family that:
 - The change corresponds to the intended midpoint delta (within rounding),
 - It does not double-count any `DamageBoost`-style effects that are already reflected in the tooltip (see `_Boost_Weapon_Damage_Bonus` exclusion in [Section 3.1](#31-weapon-boosts-definition)).
 
-### 2.5. Core formulas (gain + upgrade + rarity dominance)
+### 2.5. Merge algorithms (weapons and non-weapons)
 
-<a id="25-normalisation-raw-to-percentile"></a>
-This section defines the shared pieces of maths used by the base-value models:
-
-- **Base pull (`delta`)**: the donor can pull **up or down**:
-  - `delta = (B - A)`
-- **Rarity dominance (`w`)**: computes slot 1 dominance and donor influence:
-  - donor pull strength is `t = (1 - w)`
-- **Level-gap dampener (`t_eff`)** (donor above player only):
-  - If `Level_donor > Level_player`: `t_eff = t × (Level_player / Level_donor)`
-  - Otherwise: `t_eff = t`
-- **Upgrade chance (donor better only):**
-  - `gain = max(0, delta / max(A, 1))` (relative improvement available; 0 if donor is not better)
-  - `P(upgrade) = clamp(upgradeCap × gain^k, 0, upgradeCap)`
-- **Upgrade quality (if upgrade succeeds):**
-  - roll `u ~ U(0,1)` and use `u^2` to push towards the donor (higher is harder)
-
----
-
-### 2.6. Merge algorithms (weapons and non-weapons)
-
-<a id="26-merge-algorithm-percentiles-to-output-base-values"></a>
-<a id="26-cross-type-merging-w--conversionloss"></a>
+<a id="25-merge-algorithm-percentiles-to-output-base-values"></a>
+<a id="25-cross-type-merging-w--conversionloss"></a>
 
 This section contains two separate models:
 
@@ -573,9 +569,9 @@ Rules:
 
 Apply the same steps independently to each channel (physical armour and magic armour).
 
-### 2.7. Worked examples
+### 2.6. Worked examples
 
-<a id="27-worked-examples-base-values"></a>
+<a id="26-worked-examples-base-values"></a>
 
 Examples are organised by category: normalisation (1–2), weapons (3–6), and non-weapons (7–8).
 
@@ -821,9 +817,9 @@ Interpretation:
 
 </details>
 
-### 2.8. Implementation checklist (SE; base values)
+### 2.7. Implementation checklist (SE; base values)
 
-<a id="28-implementation-checklist-se-base-values"></a>
+<a id="27-implementation-checklist-se-base-values"></a>
 
 This is a short punch-list for implementing [Section 2](#2-base-values-inheritance) without introducing level/tooltip drift bugs:
 
