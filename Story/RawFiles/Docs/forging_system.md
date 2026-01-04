@@ -482,7 +482,7 @@ Before shipping, validate for each supported weapon identity family that:
 - The change corresponds to the intended midpoint delta (within rounding),
 - It does not double-count any `DamageBoost`-style effects that are already reflected in the tooltip (see `_Boost_Weapon_Damage_Bonus` exclusion in [Section 3.1](#31-weapon-boosts-definition)).
 
-### 2.5. Merge algorithms (weapons and non-weapons)
+### 2.5. Merge algorithms (all items)
 
 <a id="25-merge-algorithm-percentiles-to-output-base-values"></a>
 <a id="25-cross-type-merging-w--conversionloss"></a>
@@ -582,6 +582,8 @@ Examples are organised by category: normalisation (1–2), weapons (3–6), and 
 Player level: `Level_player = 15`.
 
 If a player tries to use a level 10 ingredient, forging is disabled until the item is normalised to at least level 15.
+
+Reason: this makes the process **visually and conceptually straightforward** — the white tooltip numbers are compared on the same level baseline, so “high should give high, low should give low” without the player having to mentally adjust for level differences.
 
 The normalisation is ratio-preserving: if the level 10 item is "very strong for level 10", it should still look "very strong" when brought up to level 15.
 
