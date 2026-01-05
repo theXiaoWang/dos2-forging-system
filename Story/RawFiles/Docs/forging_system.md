@@ -88,6 +88,21 @@ In short:
 <summary><strong><a href="#6-implementation-reference">6. Implementation reference</a></strong></summary>
 </details>
 
+<details>
+<summary><strong><a href="#7-unique-forging-temporary">7. Unique forging (temporary)</a></strong></summary>
+
+- [7.1. Unique preconditions (fuel-only)](#71-unique-preconditions-fuel-only)
+- [7.2. Output identity + slot priority (Unique dominance)](#72-unique-output-identity-and-slot-priority)
+- [7.3. Channel rules (base values + weapon boosts are Unique-locked)](#73-unique-channel-rules-base-and-boosts-locked)
+- [7.4. Snapshot model (base template + innate modifiers)](#74-unique-snapshot-model)
+- [7.5. Unique max-slot growth (cap expansion via fuel)](#75-unique-max-slot-growth)
+- [7.6. Innate modifiers: always kept, merged but never below snapshot](#76-unique-innate-modifiers-floor)
+- [7.7. Non-innate modifiers: acquisition + instability rules](#77-unique-non-innate-modifiers)
+- [7.8. Extract (rollback) + extracted-item generation](#78-unique-extract-rollback)
+- [7.9. Extracted item rarity and “instance-only overcap Divine”](#79-extracted-item-rarity-overcap-divine)
+- [7.10. Ascendancy Points (AP): capacity + upgrades](#710-unique-ascendancy-points)
+</details>
+
 </details>
 
 ---
@@ -1251,7 +1266,7 @@ This section defines how **stats modifiers** are inherited when you forge.
 Stats modifiers are split into three dedicated channels, each with its own unshared pool:
 
 - **Blue Stats (BS)**: numeric "blue text" boosts like Strength, crit, resistances, etc.
-- **ExtraProperties (EP)**: semicolon-separated tokens like proc chances, statuses, immunities, surfaces (counts as **1 slot** overall if present)
+- **ExtraProperties (EP)**: semicolon-separated tokens like proc chances, statuses, immunities, surfaces, etc. (counts as **1 slot** overall if present)
 - **Skills (Sk)**: rollable granted skills like Shout_Whirlwind, Projectile_BouncingShield, Target_Restoration (each counts as **1 slot** overall)
 
 The forged item applies one shared cap across these channels:
@@ -1920,6 +1935,8 @@ Blue Stats are rollable numeric boosts (blue text stats) that appear on items ba
 - Other numeric modifiers (Critical Chance, Accuracy, Initiative, Movement, etc.)
 
 **Note:** Blue Stats are treated as discrete modifier lines; they do not automatically "scale up" just because the item level changes during base-value normalisation (see [Section 4](#4-stats-modifiers-inheritance) level normalisation note).
+
+**Clarification (base weapon traits vs rollable Blue Stats):** some item behaviours and penalties are part of the item’s **base template / weapon type**, not rollable modifiers. For example, crossbows have a built-in movement penalty, and daggers can backstab because of weapon type rules. These base traits are **not** treated as Blue Stats and must not enter `sharedBlueStats` / `poolBlueStats`. Only actual rollable modifier lines (stats modifiers) participate in Section 4’s shared/pool logic.
 
 #### 4.4.2. Shared vs pool
 <a id="442-shared-vs-pool-blue-stats"></a>
@@ -2867,3 +2884,343 @@ Examples (non-Unique):
 This section is a developer reference for implementing the rules in this document.
 
 [forging_system_implementation_blueprint_se.md → Appendix: Pseudocode reference](forging_system_implementation_blueprint_se.md#appendix-pseudocode-reference)
+
+---
+
+## 7. Unique forging (temporary)
+<a id="7-unique-forging-temporary"></a>
+
+This section defines a temporary, all-in-one rule set for **Unique** items. The intention is to split these rules into dedicated “Unique” parts under Sections 1–6 later.
+
+**Scope note:** Unless stated otherwise, all **non-Unique** forging rules in this document still apply. Unique forging adds an additional “fuel-only” override and Unique-specific behaviour for stats modifiers.
+
+### 7.1. Unique preconditions (fuel-only)
+<a id="71-unique-preconditions-fuel-only"></a>
+
+Unique forging follows all non-Unique ingredient eligibility rules, including:
+
+- No socketed runes (and no rune-origin stats/skills), and
+- Unequipped items only, and
+- Type compatibility rules (weapon↔weapon, armour slot↔same slot, ring↔ring, etc.).
+
+Additional Unique-only rules:
+
+- **Unique cannot forge with Unique:** if both forge slots contain Unique items, forging is blocked.
+- **Unique can only be fuelled by non-Unique:** the “fuel” ingredient must not be Unique.
+- **Level gate bypass (Unique fuelling only):** when exactly one ingredient is Unique, the forge does not enforce the hard level gate for that operation. Output level is still the player’s level (`Level_out = Level_player`).
+
+### 7.2. Output identity + slot priority (Unique dominance)
+<a id="72-unique-output-identity-and-slot-priority"></a>
+
+If exactly one ingredient is Unique, the forge uses **Unique dominance** (also described as “fuel-only”):
+
+- The output item is always the **same Unique item identity** (100%).
+- Slot priority does not matter for deciding the output. In implementation terms, treat the Unique ingredient as the “main/base” item and the non-Unique ingredient as the “fuel” item, regardless of which UI slot they occupy.
+
+UI note:
+
+- The forge UI remains the same as non-Unique forging.
+- If both slots are Unique, the UI must prevent forging (and show a clear error).
+
+### 7.3. Channel rules (base values + weapon boosts are Unique-locked)
+<a id="73-unique-channel-rules-base-and-boosts-locked"></a>
+
+When using Unique dominance (Unique + non-Unique fuel):
+
+- **Base values are Unique-locked:** the Unique’s base values are not merged with, or influenced by, the fuel. (The output’s base values are those of the Unique at `Level_out`.)
+- **Weapon boosts are Unique-locked:** the Unique’s weapon boosts are not merged with, or influenced by, the fuel.
+- **Stats Modifiers are fuel-influenced:** Blue Stats, ExtraProperties, and Skills can change according to the Unique-specific rules below (still constrained by caps, trimming, and per-channel rules).
+
+### 7.4. Snapshot model (base template + innate modifiers)
+<a id="74-unique-snapshot-model"></a>
+
+When a Unique item is first acquired by the player, it becomes a “base” item:
+
+- Store a snapshot of the Unique’s **original template identity** (“born template”).
+- Store a snapshot of the Unique’s original Stats Modifiers as **innate modifiers**:
+  - Blue Stats (BS)
+  - ExtraProperties (EP)
+  - Granted Skills (Sk)
+
+This snapshot is the reference point for all future Unique fuelling and for extraction/rollback.
+
+### 7.5. Unique max-slot growth (cap expansion via fuel)
+<a id="75-unique-max-slot-growth"></a>
+
+Unique dominance introduces a per-instance cap for how many rollable modifier slots the Unique is allowed to carry.
+
+On each Unique+fuel forge:
+
+- Update the Unique’s per-instance maximum:
+  - `UniqueMaxSlots = max(UniqueMaxSlots, slots(fuelItem))`
+- Slot counting uses the same definition as the global cap system:
+  - `slots(item) = blueStatLineCount + rollableSkillCount + (hasExtraProperties ? 1 : 0)`
+
+Design intent:
+
+- A Unique must expand its `UniqueMaxSlots` before it can meaningfully take on non-innate modifiers.
+- `UniqueMaxSlots` is **per Unique instance** and does not change any global `OverallCap[r, t]` values in [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap).
+
+### 7.6. Innate modifiers: always kept, merged but never below snapshot
+<a id="76-unique-innate-modifiers-floor"></a>
+
+Innate modifiers are protected and always kept on the Unique during Unique+fuel forging.
+
+Rules:
+
+- **Innate retention:** every innate modifier from the snapshot must be present on the forged Unique.
+- **Innate modifiers are “always shared” (with a floor):** treat innate modifiers as if they always participate in the “shared merge” step:
+  - If the fuel has the same modifier by identity key, merge **Unique current** vs **fuel** using the existing merge rules (Blue Stats and numeric EP parameter merging per [Section 4.3](#43-merging-rule-how-numbers-are-merged)).
+  - If the fuel does **not** have that modifier, merge **Unique current** vs the **snapshot value** for that innate modifier.
+  - After merging, clamp the result so it is **never below the snapshot value** for that innate modifier.
+
+Example (floor behaviour):
+
+- Unique dagger snapshot: `+3 Finesse` (innate)
+- Fuel A: `+5 Finesse` ⇒ shared merge can raise the value (e.g. to `+4` or `+5`)
+- Fuel B: `+1 Finesse` ⇒ shared merge may reduce the value, but it must not go below `+3` (snapshot floor). It can still end at `+4` if the current state was above the floor.
+- Fuel C: no Finesse modifier ⇒ treat as if the fuel had `+3 Finesse` (snapshot) for merging, so the value can drift down towards `+3`, but never below it.
+
+Worked intuition example (Band of Braccus):
+
+- Snapshot (innate): `+2 Intelligence`, `+2 Constitution`
+- Current (after prior fuels): `+4 Intelligence`, `+4 Constitution`
+- Fuel ring: `+5 Intelligence` (no Constitution)
+  - Intelligence merges as shared: midpoint `m = (4 + 5) / 2 = 4.5` (then roll/clamp per [Section 4.3](#43-merging-rule-how-numbers-are-merged))
+  - Constitution merges against snapshot: midpoint `m = (4 + 2) / 2 = 3` (then roll/clamp), and is floored at `+2`
+
+### 7.7. Non-innate modifiers: acquisition + instability rules
+<a id="77-unique-non-innate-modifiers"></a>
+
+Any modifier on the Unique that is not part of the snapshot is a **non-innate modifier**.
+
+Rules:
+
+- **Capacity gate:** non-innate modifiers can only be kept up to the Unique’s current `UniqueMaxSlots` (see [Section 7.5](#75-unique-max-slot-growth)).
+- **Instability:** non-innate modifiers are not fully stable. When fuelling with items that do not share those modifiers, they can be lost through the usual pool selection and overall-cap trimming behaviour described in [Section 4.2](#42-selection-rule-shared--pool--cap) and [Section 4.2 Step 5](#45-apply-overall-modifier-cap).
+- **Protection priority:** innate modifiers are protected first; trimming/slot competition should drop non-innate modifiers before it ever removes an innate modifier.
+
+### 7.8. Extract (rollback) + extracted-item generation
+<a id="78-unique-extract-rollback"></a>
+
+Unique forging includes an Extract action so the player can “roll back” a Unique to its snapshot and optionally receive a separate item containing the net gains.
+
+Definitions:
+
+- `SnapshotMods`: the innate modifiers stored at acquisition (BS/EP/Sk).
+- `CurrentMods`: the Unique’s current modifiers (BS/EP/Sk).
+- `ExportMods`: the modifiers that will be placed onto the extracted item.
+
+ExportMods rule:
+
+- Compare `CurrentMods` to `SnapshotMods` by identity key (Blue Stats key, canonicalised EP token key, or exact skill ID).
+- For each modifier key:
+  - If the modifier exists in `CurrentMods` but not in `SnapshotMods`: export it at its **current value**.
+  - If the modifier exists in both and the current value is **strictly better** than the snapshot value: export it at its **current value** .
+  - Otherwise (equal to snapshot, or worse): do not export it.
+
+Extract procedure (player-facing):
+
+1. Compute `ExportMods` from the Unique by comparing `CurrentMods` to `SnapshotMods` using the rule above.
+2. Optionally generate an extracted item at `Level_player` of the same item type/slot as the Unique (ring→ring, staff→staff, boots→boots, etc.) whose rollable modifiers are `ExportMods`.
+3. Restore the Unique back to its snapshot state (born template identity + innate modifiers).
+4. Reset `UniqueMaxSlots` back to the snapshot baseline (the Unique does not retain expanded capacity after extraction).
+
+Worked example (Unique mace):
+
+- Snapshot (innate):
+  - `+4 Strength`
+  - `+3 Memory`
+  - `CHILLED,10,2` (10% chance to set Chilled for 2 turns)
+  - `BLEEDING,15,1` (15% chance to set Bleeding for 1 turn)
+- Current (after fuelling):
+  - `+4 Strength` (unchanged)
+  - `+5 Memory` (improved)
+  - `CHILLED,10,3` (improved turns)
+  - `BLEEDING,15,1` (unchanged)
+  - Granted skill: `Rain` (new)
+
+Then `ExportMods` is:
+
+- `+5 Memory`
+- `CHILLED,10,3`
+- Granted skill: `Rain`
+
+### 7.9. Extracted item rarity and “instance-only overcap Divine”
+<a id="79-extracted-item-rarity-overcap-divine"></a>
+
+The extracted item’s rarity is determined in two steps:
+
+- A **slot-count floor** (guaranteed minimum rarity by rollable slot count), and
+- A **level-based bonus roll** (so late-game extractions can still roll high rarity even with low slot counts).
+
+Final rule:
+
+- `Rarity_extracted = max(Rarity_floor(slots), Rarity_bonus(Level_player))`
+
+#### Slot-count floor (guaranteed minimum rarity)
+
+- `0` slots → Common
+- `1` slot → Uncommon
+- `2` slots → Rare
+- `3` slots → Epic
+- `4` slots → Legendary
+- `5+` slots → Divine
+
+#### Level-based bonus roll (can raise rarity; generous)
+
+This roll exists to preserve a “vanilla-like” progression feel at high level: even if the extracted item only contains a small number of modifiers, the late-game economy can still surface Legendary/Divine items.
+
+Roll `Rarity_bonus(Level_player)` host-authoritatively (deterministic; driven by `forgeSeed`).
+
+- Level `1–3`:
+  - Common **50%**
+  - Uncommon **50%**
+- Level `4–8`:
+  - Uncommon **30%**
+  - Rare **40%**
+  - Epic **30%**
+- Level `9–12`:
+  - Rare **30%**
+  - Epic **40%**
+  - Legendary **30%**
+- Level `12–15`:
+  - Rare **30%**
+  - Epic **40%**
+  - Legendary **30%**
+- Level `16-18`:
+  - Legendary **50%**
+  - Divine **50%**
+- Level `19+`:
+  - Divine **100%**
+
+Special case: “instance-only overcap Divine”
+
+- An extracted item can be Divine with more than 5 rollable slots (e.g. 7).
+- This is an **instance-only** exception: it does not increase learned caps and does not change the global default Divine cap.
+- Forging behaviour with overcap items:
+  - If an overcap item forges with a normal (non-overcap) item whose applicable cap is lower, the result is still trimmed to the normal cap.
+  - Overcap slots are only preserved when forging with another compatible overcap item (so the forge can legitimately keep those extra slots without trimming).
+
+### 7.10. Ascendancy Points (AP): capacity + upgrades
+<a id="710-unique-ascendancy-points"></a>
+
+Unique items can earn **Ascendancy Points (AP)**, which are an allocatable **capacity** (respeccable outside combat) used to apply upgrades to the Unique’s modifiers.
+
+#### AP capacity (`AP_max`)
+
+Compute the Unique’s maximum Ascendancy Points from its current rollable slot count:
+
+- `AP_max = floor(slots(Unique) / 5)`
+
+Where `slots(item)` uses the same definition as the cap system:
+
+- `slots(item) = blueStatLineCount + rollableSkillCount + (hasExtraProperties ? 1 : 0)`
+
+Re-evaluate `AP_max`:
+
+- After each Unique forge operation (after the final modifier set is decided, including overall-cap trimming), and
+- After Extract rollback (because slot count can change).
+
+#### Allocation + respec rules
+
+- `AP_spent` is the number of **currently active upgraded modifiers** on the Unique.
+- The player can respec outside combat at any time, reassigning upgrades to different modifiers and/or changing upgrade types.
+- Each modifier can have **at most 1 active upgrade**.
+- Multiple upgrades can be active at the same time, as long as `AP_spent ≤ AP_max`.
+
+#### What happens when `AP_max` drops
+
+If the Unique loses modifier slots (e.g. due to forging outcomes, trimming, or Extract rollback), `AP_max` can drop. If `AP_spent > AP_max`, upgrades are removed until within capacity:
+
+- Remove upgrades **newest-first** (most recently applied upgrade is removed first) until `AP_spent ≤ AP_max`.
+- The upgrade-removal order must be deterministic (store an incrementing `upgradeIndex` on the Unique and sort descending).
+
+If a removed upgrade was a Replace-on-innate (see below), the suppressed innate modifier returns automatically.
+
+#### Upgrade application timing (avoid ordering bugs)
+
+To avoid interactions with pooling/trimming, apply Ascendancy upgrades **after**:
+
+- the forge has determined the final modifiers list for the Unique (including overall-cap trimming), and
+- `AP_max` has been recomputed.
+
+This ensures upgrades never affect slot count and do not change trimming outcomes.
+
+---
+
+### Upgrade actions (cost: 1 AP each)
+
+Each upgrade below costs **1 AP** and targets exactly one modifier (BS line, EP token, or a granted skill entry).
+
+##### 1) Amplify (+30% effect)
+
+Amplify increases the effect of one chosen modifier by **+30%**:
+
+- **Blue Stats (BS)**: multiply the numeric value by `1.30` and then apply the stat’s normal rounding rules ([Section 4.3](#43-merging-rule-how-numbers-are-merged)).
+- **ExtraProperties (EP; numeric parameters)**: for tokens with numeric parameters (chance/turns/etc.), multiply supported numeric parameters by `1.30`, then:
+  - clamp chance to `≤ 100%`,
+  - preserve `turns = -1` sentinel values unchanged (infinite/always) where they appear in vanilla-style tokens.
+
+Notes:
+
+- Amplify does not create new modifiers; it only scales an existing one.
+- If the upgrade is removed (respec or `AP_max` drop), the modifier returns to its non-amplified value.
+
+##### 2) Replace (swap a modifier using the current fuel)
+
+Replace lets the player choose a modifier on the Unique and replace it with a modifier from the **current fuel** item used in that forge.
+
+Hard rules:
+
+- The replacement must be sourced from the current fuel item (no “banked library” of choices).
+- Replace does not change the total slot count; it is a swap within the same slot budget.
+- The replacement never becomes innate, and the snapshot is never modified.
+
+Replacement identity safety (avoid duplicates):
+
+- Do not allow Replace to create two modifiers with the same identity key on the Unique.
+  - (Allowed exception: replacing a modifier with the same identity key but a different value is permitted, because the target is removed.)
+
+Replace-on-innate: **suppress + overlay** (anti-abuse; bug-proof):
+
+- Snapshot is immutable: the original innate set never changes.
+- If the player targets an **innate** modifier key for Replace:
+  - The innate modifier is **suppressed** while the Replace upgrade is active.
+  - The chosen replacement modifier from the fuel is added as an **overlay** (non-innate).
+  - The replacement is **never promoted to innate**.
+- If the Replace upgrade is removed/disabled (respec, `AP_max` drop, or Extract rollback):
+  - the overlay is removed, and the suppressed innate modifier **returns**,
+  - the returning innate uses the Unique’s normal innate rules (including snapshot floors and “always shared” behaviour in [Section 7.6](#76-unique-innate-modifiers-floor)).
+
+This prevents “washing off” innate modifiers permanently while still allowing full customisation while the upgrade is active.
+
+##### 3) Reversal (flip to the opposite; 2×)
+
+Reversal is a powerful conversion upgrade for a narrow, explicitly supported set of modifiers.
+
+Numeric reversal (Blue Stats; allowlist):
+
+- Only allow reversal for numeric stats where “opposite” makes sense (e.g. Attributes like Strength; action-point recovery; movement/initiative-style stats), and only when the stat is present as a rollable modifier line.
+- Reversal flips the sign and doubles the magnitude:
+  - `x → -2x`
+  - Example: `-1 Strength` becomes `+2 Strength`; `+1 Strength` becomes `-2 Strength`.
+
+Status reversal (ExtraProperties; allowlist):
+
+- Only allow reversal for explicitly paired tokens, for example:
+  - `CURSED` ↔ `BLESSED`
+- If the token carries numeric parameters (chance/turns), apply the 2× rule to supported parameters and then apply normal caps (chance ≤ 100%, etc.).
+
+Implementation note: do not attempt to reverse arbitrary tokens. Use a hard allowlist to avoid nonsensical or broken results.
+
+##### 4) Arcana (skill clone; per-combat single use)
+
+Arcana upgrades one granted skill modifier on the Unique:
+
+- If the Unique grants a skill, Arcana creates a **single-use clone** of that exact skill:
+  - does not consume a memory slot,
+  - has AP and SP costs reduced by **1** each (floored at 0),
+  - can be used **once per combat**; after use it becomes unavailable (greyed out) until the next combat begins.
+
+If the upgrade is removed (respec or `AP_max` drop), the clone is no longer available.

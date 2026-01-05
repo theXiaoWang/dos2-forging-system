@@ -99,6 +99,7 @@ This is the baseline used when the save has not learned a higher cap yet:
 | **3**        | Epic      |        **3**        |
 | **4**        | Legendary |        **4**        |
 | **5**        | Divine    |        **5**        |
+| **6**        | Unique    |        **X**        |
 
 #### Learned overall cap by rarity and item type (per save)
 
