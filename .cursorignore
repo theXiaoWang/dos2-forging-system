@@ -1,0 +1,14 @@
+# Cursor IDE ignore patterns
+# Files and folders matching these patterns will be excluded from indexing and search
+
+# Ignore mods
+**/AbilityDraft_*
+**/Mega_Boss_*
+**/MegaBoss_*
+**/OK_*
+**/Test_Project_*
+**/The_Clans_*
+**/TotemRise_*
+**/TotemsRise_*
+**/Ability_Draft_*
+

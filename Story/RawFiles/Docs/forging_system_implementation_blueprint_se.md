@@ -240,6 +240,31 @@ Cons:
 Recommendation:
 - Start with Strategy A; fall back to B only if the API surface blocks you.
 
+### SE API references + exact call paths (forged items)
+
+**Inspecting item instance stats (read):**
+
+- Lua: `local item = Ext.GetItem(itemGuid)` then read `item.Stats` / `item.Stats.DynamicStats`.
+- API reference: `LuaAPIDocs.md` → `Item Stats` (`<a id="item-stats"></a>`) and `Item Dynamic Stats` (`<a id="item-dynamic-stats"></a>`).
+
+**Applying numeric “free values” to a specific item instance (write):**
+
+- Use Osiris Extender permanent boosts (instance-local, supports arbitrary values):
+  - `NRD_ItemSetPermanentBoostInt(_Item, _Stat, _Value)` / `NRD_ItemSetPermanentBoostReal(...)` / `NRD_ItemSetPermanentBoostString(...)`
+  - API reference: `OsiAPIDocs.md` → `ItemSetPermanentBoost` + *Limitations* (boost visibility/sync rules).
+  - Practical rule from the API docs:
+    - For a **new** forged item: apply permanent boosts in the **same tick** as item creation.
+    - For an **existing** item: apply boosts, then **clone and replace** the original (boosts are visible on the clone).
+
+**Applying a dynamically created boost/stat entry to a specific item instance:**
+
+- Lua: create and sync a new stats entry (e.g. a `Weapon` boost entry templated from an existing `_Boost_*`), then reference that boost by name when applying it to the forged item.
+- Recommended application path (Osiris Extender cloning API):
+  - `NRD_ItemCloneBegin(_Item)`
+  - `NRD_ItemCloneAddBoost("Generation", _BoostName)` and/or `NRD_ItemCloneAddBoost("DeltaMod", _DeltaModName)`
+  - `NRD_ItemClone(_NewItem)` then replace the old item with `_NewItem`
+  - API reference: `OsiAPIDocs.md` → `NRD_ItemClone*` (“Cloning items”) and `NRD_ItemCloneAddBoost` boost types.
+
 ## Step 9: Consume parents and deliver result
 Decide explicitly whether you mutate-in-place or replace.
 
