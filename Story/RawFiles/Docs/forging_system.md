@@ -159,7 +159,7 @@ This document splits forging into independent “channels”, because vanilla it
 
 Blue stats, ExtraProperties, and skills share a single **overall rollable slots cap** defined in:
 
-- [`rarity_system.md` → Caps](rarity_system.md#22-caps-vnext-default--learned-per-save)
+- [`rarity_system.md` → Caps](rarity_system.md#32-caps-default-by-rarity)
 
 - **Base values** (Base Damage / Armour / Magic Armour / Block Chance): determined by **item type + the white tooltip values**.
 - **Blue stats** (Attributes / Stats / Combat and Civil Abilities): rollable stats modifiers (e.g. +1 Finesse, +10% Critical Chance, +1 Warfare, +1 Thievery, etc.).
@@ -1271,7 +1271,8 @@ Stats modifiers are split into three dedicated channels, each with its own unsha
 
 The forged item applies one shared cap across these channels:
 
-- `OverallCap[Rarity_out, ItemType_out]` (default+learned per save, tracked per (rarity, item type) pair; see [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap))
+- `OverallCap[Rarity_out]` (determined by output rarity; see [`rarity_system.md`](rarity_system.md#321-overall-rollable-slots-cap))
+  - For mutant items, special rules apply (see [`rarity_system.md`](rarity_system.md#23-mutant-items) and [`rarity_system.md`](rarity_system.md#3212-mutant-item-exception))
 
 #### Level normalisation note (Stats Modifiers)
 
@@ -1308,7 +1309,8 @@ This selection rule is **universal** for all three modifier channels:
 - **ExtraProperties** ([Section 4.5](#45-extraproperties-inheritance))
 - **Skills** ([Section 4.6](#46-skills-inheritance))
 
-Each channel has its own **unshared pool candidates list** and is selected independently, then everything competes under the single **overall rollable slots cap** (`OverallCap[Rarity_out, ItemType_out]`, default+learned per save, tracked per (rarity, item type) pair).
+Each channel has its own **unshared pool candidates list** and is selected independently, then everything competes under the single **overall rollable slots cap** (`OverallCap[Rarity_out]`, determined by output rarity).
+  - For mutant items, special rules apply (see [`rarity_system.md`](rarity_system.md#23-mutant-items) and [`rarity_system.md`](rarity_system.md#3212-mutant-item-exception))
 
 #### Universal notation (used across all channels)
 
@@ -1495,7 +1497,7 @@ Then:
 
 **Cap bucket (why it exists and how tables show it):**
 
-The cap bucket represents cases where `A` would theoretically go beyond `±N_*`, but is clamped. This is particularly relevant because the final forged item is limited by `OverallCap[Rarity_out, ItemType_out]` (see [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap)). Even if `A` could add more pool stats, the final forged item is limited by the cap for that specific (rarity, item type) pair, so higher `A` values that would result in more than the cap total forged stats are impractical.
+The cap bucket represents cases where `A` would theoretically go beyond `±N_*`, but is clamped. This is particularly relevant because the final forged item is limited by `OverallCap` (see [`rarity_system.md`](rarity_system.md#321-overall-rollable-slots-cap) for normal cases, and [`rarity_system.md`](rarity_system.md#3212-mutant-item-exception) for mutant exceptions). Even if `A` could add more pool stats, the final forged item is limited by the cap (which may be determined by rarity or by parent slot counts for mutant+mutant forging), so higher `A` values that would result in more than the cap total forged stats are impractical.
 
 Some worked-example tables expand the cap bucket into:
 
@@ -1515,11 +1517,20 @@ For a given channel:
 #### Step 5: Apply the overall modifier cap (cross-channel)
 <a id="45-apply-overall-modifier-cap"></a>
 
-The forged item has a single cap `OverallCap[Rarity_out, ItemType_out]` across:
+The forged item has a single cap `OverallCap` across:
 
 - Blue stats
 - ExtraProperties (slot)
 - Skills
+
+**Overall cap calculation:**
+
+The `OverallCap` value depends on whether the forging ingredients are mutant items:
+
+- **Mutant + Mutant:** `OverallCap = max(slots(parentA), slots(parentB))` (bypasses the rarity table; see [`rarity_system.md`](rarity_system.md#3212-mutant-item-exception) for details)
+- **Mutant + Regular (Vanilla) or Regular + Regular:** `OverallCap = DefaultOverallCap[Rarity_out]` (determined by output rarity; see [`rarity_system.md`](rarity_system.md#321-overall-rollable-slots-cap))
+
+Where `slots(item) = blueStatLineCount + rollableSkillCount + (hasExtraProperties ? 1 : 0)`.
 
 This section defines how we trim when `F_total > OverallCap`.
 
@@ -1634,7 +1645,7 @@ Now calculate how many pool stats you keep:
 
 Finally apply the overall rollable-slot cap:
 
-- Assume the rarity system gives the new item **Legendary Boots** → `OverallCap[Legendary, Boots] = 4` (default, or learned if higher)
+- Assume the rarity system gives the new item **Legendary Boots** → `OverallCap[Legendary] = 4`
 - Final (blue only, no other channels in this example): `Final = min(F_bs, OverallCap) = min(5, 4) = 4`
 
 So you end up with:
@@ -1655,7 +1666,7 @@ These two standalone examples are meant to show the difference between:
 #### Safe forging (realistic cap: `OverallCap ≤ 5`, with skills/ExtraProperties competing)
 
 ```
-Output rarity: Divine ⇒ `OverallCap[Divine, Warhammer] = 5` (default)
+Output rarity: Divine ⇒ `OverallCap[Divine] = 5`
 
 Parent A: Divine Warhammer
  - +3 Strength          (shared)
@@ -1682,7 +1693,7 @@ Pool Modifiers:
 
 Inputs for this example:
 
-- `OverallCap[Divine, Warhammer] = 5` (default, or learned if higher)
+- `OverallCap[Divine] = 5`
 - Shared totals (protected): `S_total = S_bs + S_sk + S_ep = 3 + 0 + 0 = 3`
 
 This is the perfect example for **Safe Forging**:
@@ -1707,7 +1718,7 @@ Concrete outcome intuition:
 #### YOLO forging (realistic cap: `OverallCap ≤ 5`, everything competes)
 
 ```
-Output rarity: Divine ⇒ `OverallCap[Divine, Warhammer] = 5` (default)
+Output rarity: Divine ⇒ `OverallCap[Divine] = 5`
 
 Parent A: Divine Warhammer
  - +3 Strength          (pool)
@@ -1959,7 +1970,7 @@ Key values:
 - The probability tables below (tiers, `p_bad/p_neutral/p_good`, chain `d/u`) come from the **universal selection rule** in [Section 4.2](#42-selection-rule-shared--pool--cap) and can be applied to any modifier channel that uses that rule. We show them using **Blue Stats** (can be ExtraProperties or Skills) only because it is the most direct/visible channel for worked maths.
 - The worked examples below focus on the **blue-stats selection step** (blue stats channel only).
 - To keep the tables readable and consistent, we assume:
-  - Output rarity is **Divine**, so `OverallCap[Divine, ItemType] = 5` (default, or learned if higher).
+  - Output rarity is **Divine**, so `OverallCap[Divine] = 5`.
   - Other channels (Skills / ExtraProperties) do not occupy slots in these tables.
 - Therefore, any outcomes where the blue-stats result would reach or exceed 5 are bucketed into **`5+`** (meaning "≥5, at or above the overall cap").
 
@@ -2363,29 +2374,26 @@ Vanilla token families (rule table):
 | Conditional / “script-like” directives | `IF(Self&...):...`, `TARGET:IF(...):...`, `SELF:OnHit:IF(...):...` | Entire directive string (opaque) | **Best design: treat as opaque EP tokens**. Do not attempt to canonicalise or merge unless you explicitly support the grammar; only exact-match sharing is safe. (These appear in editor/ability data; treat them as edge-case inputs for forging unless you want full support.) |
 | Indirection / references | `_Vitality_ShieldBoost` | Full token string | **Custom policy choice**: either (a) treat as opaque EP token (shared only on exact match), or (b) resolve the reference into its expanded tokens first, then apply the normal EP rules. Option (b) is more faithful but requires a resolver. |
 
-#### 4.5.3. Selection + internal cap (max of parent lines, with same-count bonus)
+#### 4.5.3. Selection + internal cap (max of parent lines, capped by rarity)
 <a id="453-extraproperties-selection--internal-cap"></a>
 
 Let:
 
 - `A = tokenCount(parentA)`
 - `B = tokenCount(parentB)`
-- `InternalCap = max(A, B)` (base cap)
 
-**Same-count bonus rule:**
+**Internal cap calculation:**
 
-If both parents have the same number of EP tokens (`A == B`) AND the forged item inherits the ExtraProperties slot (either through shared EP `S_ep ≥ 1` or through pool selection), the internal cap gets a **+1 bonus**:
+- **Mutant + Mutant:** `InternalCap = max(A, B)` (no upper limit; the rarity-based cap is bypassed; this exception always applies, even if a rarity break occurs during forging; see [`rarity_system.md`](rarity_system.md#23-mutant-items) for details)
+- **Mutant + Regular (Vanilla) or Regular + Regular:** `InternalCap = min(max(A, B), DefaultOverallCap[Rarity_out])` (capped by output rarity; see [`rarity_system.md`](rarity_system.md#3211-overall-cap-by-rarity) for the rarity cap table)
 
-- `InternalCap = A + 1` (allows inheriting all unique tokens from both parents)
+For normal forging, the internal cap is determined by the maximum token count from either parent, but is never allowed to exceed the output rarity's cap (0-5 based on rarity: Common=0, Uncommon=1, Rare=2, Epic=3, Legendary=4, Divine=5).
 
-**When the bonus applies:**
-
-- Both parents have the same token count (`A == B`)
-- The forged item inherits the ExtraProperties slot (protected by `S_ep ≥ 1`, or selected from pool)
-
-For example (same-count bonus):
+For example (Rare rarity, cap = 2):
 
 ```
+Output rarity: Rare ⇒ `DefaultOverallCap[Rare] = 2`
+
 Parent A ExtraProperties (A = 2 tokens):
  - Poison Immunity
  - Set Chilled for 1 turn 15% chance
@@ -2396,22 +2404,18 @@ Parent B ExtraProperties (B = 2 tokens):
 ─────────────────────────────────────────
 Shared tokens: Poison Immunity → `S_ep = 1` (slot inherited and protected)
 Pool tokens: Chilled (15%, 1), Silenced (20%, 2) → `P_ep_size = 2`
-Because `A == B == 2` and the EP slot is inherited → `InternalCap = A + 1 = 3`
+`InternalCap = min(max(A, B), DefaultOverallCap[Rare]) = min(2, 2) = 2` (limited by rarity cap)
 
-So the forged item can have up to 3 tokens:
-- Poison Immunity
-- Set Chilled for 1 turn 15% chance
-- Set Silenced for 2 turns 20% chance
+So the forged item can have up to 2 tokens:
+- Poison Immunity (shared, guaranteed)
+- One of: Set Chilled for 1 turn 15% chance, or Set Silenced for 2 turns 20% chance (from pool)
 ```
 
-**When the bonus does NOT apply:**
-
-- Parents have different token counts (`A != B`) → use `InternalCap = max(A, B)`
-- The forged item does not inherit the ExtraProperties slot
-
-For example (different-count, no bonus):
+For example (Epic rarity, cap = 3):
 
 ```
+Output rarity: Epic ⇒ `DefaultOverallCap[Epic] = 3`
+
 Parent A ExtraProperties (A = 3 tokens):
  - Poison Immunity
  - Set Chilled for 1 turn 15% chance
@@ -2423,20 +2427,82 @@ Parent B ExtraProperties (B = 2 tokens):
 ─────────────────────────────────────────
 Shared tokens: Poison Immunity, Chilled (15%, 1) → `S_ep = 2` (slot inherited and protected)
 Pool tokens: Silenced (20%, 2) → `P_ep_size = 1`
-Because `A != B` (3 vs 2) → `InternalCap = max(A, B) = 3` (no `+1` bonus)
+`InternalCap = min(max(A, B), DefaultOverallCap[Epic]) = min(3, 3) = 3` (limited by rarity cap)
 
 So the forged item can have up to 3 tokens (can be any combination of the tokens):
 - Poison Immunity
-- Set Silenced for 2 turns 20% chance
-- Creates a 4m Ice surface when targeting terrain
+- Set Chilled for 1 turn 15% chance
+- One of: Set Silenced for 2 turns 20% chance, or Creates a 4m Ice surface when targeting terrain
+```
+
+For example (Divine rarity, cap = 5):
+
+```
+Output rarity: Divine ⇒ `DefaultOverallCap[Divine] = 5`
+
+Parent A ExtraProperties (A = 7 tokens):
+ - Poison Immunity
+ - Fire Immunity
+ - Set Chilled for 1 turn 15% chance
+ - Set Silenced for 2 turns 20% chance
+ - Set Blinded for 1 turn 10% chance
+ - Set Muted for 1 turn 5% chance
+ - Creates a 4m Ice surface when targeting terrain
+
+Parent B ExtraProperties (B = 6 tokens):
+ - Poison Immunity
+ - Fire Immunity
+ - Set Chilled for 1 turn 15% chance
+ - Set Silenced for 2 turns 20% chance
+ - Set Blinded for 1 turn 10% chance
+ - Creates a 4m Blood surface when targeting terrain
+─────────────────────────────────────────
+Shared tokens: Poison Immunity, Fire Immunity, Chilled (15%, 1), Silenced (20%, 2), Blinded (10%, 1) → `S_ep = 5`
+Pool tokens: Muted (5%, 1), Ice surface, Blood surface → `P_ep_size = 3`
+`InternalCap = min(max(A, B), DefaultOverallCap[Divine]) = min(7, 5) = 5` (limited by rarity cap; max(A, B) = 7 exceeds the cap)
+
+So the forged item can have up to 5 tokens (clamped to the Divine rarity cap):
+- The 5 shared tokens (guaranteed)
+- Additional pool tokens are not added because the cap is already reached
+```
+
+For example (Mutant + Mutant, bypasses rarity cap):
+
+```
+Both parents are mutant items (regardless of output rarity)
+
+Parent A ExtraProperties (A = 7 tokens):
+ - Poison Immunity
+ - Fire Immunity
+ - Set Chilled for 1 turn 15% chance
+ - Set Silenced for 2 turns 20% chance
+ - Set Blinded for 1 turn 10% chance
+ - Set Muted for 1 turn 5% chance
+ - Creates a 4m Ice surface when targeting terrain
+
+Parent B ExtraProperties (B = 6 tokens):
+ - Poison Immunity
+ - Fire Immunity
+ - Set Chilled for 1 turn 15% chance
+ - Set Silenced for 2 turns 20% chance
+ - Set Blinded for 1 turn 10% chance
+ - Creates a 4m Blood surface when targeting terrain
+─────────────────────────────────────────
+Shared tokens: Poison Immunity, Fire Immunity, Chilled (15%, 1), Silenced (20%, 2), Blinded (10%, 1) → `S_ep = 5`
+Pool tokens: Muted (5%, 1), Ice surface, Blood surface → `P_ep_size = 3`
+`InternalCap = max(A, B) = max(7, 6) = 7` (no rarity cap limit; mutant+mutant bypasses the rarity table)
+
+So the forged item can have up to 7 tokens (determined by max(A, B), not limited by rarity):
+- The 5 shared tokens (guaranteed)
+- Up to 2 additional tokens from the pool (Muted, Ice surface, or Blood surface)
 ```
 
 Build the output token list:
 
 1. Keep all shared tokens (merge parameters if the same token differs in numbers, using the same "merge then clamp" philosophy as blue stats).
 2. Determine `InternalCap`:
-   - If `A == B` and EP slot is inherited: `InternalCap = A + 1`
-   - Otherwise: `InternalCap = max(A, B)`
+   - If both parents are mutant items: `InternalCap = max(A, B)` (no upper limit; this exception always applies, even if a rarity break occurs during forging)
+   - Otherwise: `InternalCap = min(max(A, B), DefaultOverallCap[Rarity_out])` (capped by output rarity: 0-5 based on rarity; see [`rarity_system.md`](rarity_system.md#3211-overall-cap-by-rarity) for the cap table)
 3. Roll additional tokens from the pool using the selection rule in [Section 4.2](#42-selection-rule-shared--pool--cap):
    - `P_size = P_ep_size`, `P = P_ep`
 4. Clamp the final token list to `InternalCap`.
@@ -2497,7 +2563,7 @@ Planned total (before overall-cap trimming):
  - `F_total = S_bs + P_bs + EPslot = 2 + 3 + 1 = 6` ⇒ over cap by 1 ⇒ drop 1 pool blue stat
 
 EP internal cap (Section 4.5.3):
- - `A == B == 2` and EP slot is inherited ⇒ `InternalCap = A + 1 = 3`
+ - `InternalCap = min(max(A, B), DefaultOverallCap[Divine]) = min(2, 5) = 2` (limited by max(A, B); rarity cap is 5 but max(A, B) = 2 is lower)
  - Token list starts with shared Poison Immunity (`S_ep = 1`), then roll up to `P_ep` tokens from the EP pool and clamp to `InternalCap`.
 ```
 
@@ -2565,7 +2631,7 @@ Pool tokens:
  - Poison Immunity, Fire Immunity → `P_ep_size = 2`
 ─────────────────────────────────────────
 InternalCap (Section 4.5.3):
- - `A == B == 2` and the EP slot is inherited ⇒ `InternalCap = A + 1 = 3`
+ - `InternalCap = min(max(A, B), DefaultOverallCap[Rarity_out])` (whichever is smaller; if output is Divine and max(A, B) = 2, then `min(2, 5) = 2`, limited by max(A, B))
 
 Merged BLIND parameters (Section 4.3):
  - Chance: merge `10%` and `15%` (then clamp to 100% if needed)
@@ -2588,11 +2654,12 @@ This section defines how **granted skills** are inherited when you forge.
 - Granted skills are a separate channel from normal **blue stats**.
 - Each rollable granted skill consumes **1** overall rollable slot (shared cap with blue stats + ExtraProperties).
 - Skills are rollable; unless preserved by the **skillbook lock** or shared between both parents, they can be lost when applying the overall cap (equal drop chance among pool slots).
-- Skills also have a per-save learned **skill count cap** (`SkillCap[r]`) defined in [`rarity_system.md`](rarity_system.md#222-skill-cap-vnext).
+- Skills also have a per-save learned **skill count cap** (`SkillCap[r]`) defined in [`rarity_system.md`](rarity_system.md#322-skill-cap-vnext).
+- **Mutant + Mutant exception:** When both parents are mutant items, the skill cap is bypassed. All skills from both parents can enter the pool and be selected (see [`rarity_system.md`](rarity_system.md#23-mutant-items) for details).
 
 Here are what you can expect:
 
-- You can sometimes carry a skill across, or gain one from the ingredient pool, but you will always be limited by the rarity’s **skill cap** (default is 1 for all non-Unique rarities).
+- You can sometimes carry a skill across, or gain one from the ingredient pool, but you will always be limited by the rarity's **skill cap** (default is 1 for all non-Unique rarities), unless both parents are mutant items.
 - Even if a skill is gained by the skill rules, it can still be dropped later if the final item is over the **overall rollable-slot cap** and the skill is not protected (no skillbook lock; not shared).
 
 #### 4.6.1. Granted skills (definition)
@@ -2637,7 +2704,11 @@ This cap is **default + learned per save**:
 
 - Default values are listed below.
 - The save can learn higher values if the player ever obtains an item of that rarity with more rollable granted skills.
-- See: [`rarity_system.md` → Skill count cap](rarity_system.md#222-skill-cap-vnext)
+- See: [`rarity_system.md` → Skill count cap](rarity_system.md#322-skill-cap-vnext)
+
+**Mutant + Mutant exception:**
+
+- When both parents are mutant items, the skill cap is bypassed. All skills from both parents can enter the pool and be selected without limit. This exception always applies, even if a rarity break occurs during forging (see [`rarity_system.md`](rarity_system.md#23-mutant-items) for details).
 
 | Rarity index | Name      | Granted skill cap |
 | :----------- | :-------- | :---------------: |
@@ -2647,8 +2718,7 @@ This cap is **default + learned per save**:
 | **3**        | Epic      |       **1**       |
 | **4**        | Legendary |       **1**       |
 | **5**        | Divine    |       **1**       |
-
-_Unique is ignored for now (do not consider it in balancing)._
+| **6**        | Unique    |       **X**       |
 
 #### 4.6.2.1. Skillbook lock (preserve by exact skill ID)
 <a id="4621-skillbook-lock"></a>
@@ -2683,8 +2753,12 @@ Skills are **more precious than stats**, so the skill channel does **not** use t
 Instead, skills use a **cap + gated fill** model:
 
 - **Shared skills are protected** (kept first).
-- You only try to gain skills for **free skill slots** (up to the rarity skill cap).
+- You only try to gain skills for **free skill slots** (up to the rarity skill cap), unless both parents are mutant items (see Mutant + Mutant exception below).
 - The chance to gain a skill **increases with pool size** (`P_remaining`).
+
+**Mutant + Mutant exception:**
+
+- When both parents are mutant items, the skill cap is bypassed. All skills from both parents enter the pool, and the system attempts to gain all pool skills (no cap limit). This exception always applies, even if a rarity break occurs during forging.
 
 #### Key values (skills)
 
@@ -2744,14 +2818,17 @@ So the actual per-attempt gain chances are:
 Procedure summary (host-authoritative; driven by `forgeSeed`):
 
 1. Build `sharedSkills` (deduped) and `poolSkills` (deduped).
-2. Keep shared first: `finalSkills = sharedSkills` (trim down to `SkillCap` only if shared exceeds cap).
-3. Compute `freeSlots = SkillCap - len(finalSkills)`.
-4. Fill free slots with gated gain rolls:
-   - For each free slot (at most `freeSlots` attempts):
-     - Let `P_remaining = len(poolSkills)`
-     - Roll a random number; success chance is `p_attempt` (above).
-     - If success: pick 1 random skill from `poolSkills`, add to `finalSkills`, remove it from `poolSkills`, and decrement `freeSlots`.
-     - If failure: do nothing for that slot (skills are precious; you do not retry the same slot).
+2. Check if both parents are mutant items:
+   - **If Mutant + Mutant:** Keep all shared skills, then attempt to gain all pool skills (no cap limit). For each skill in `poolSkills`, roll using `p_attempt` (above) to determine if it is gained. This exception always applies, even if a rarity break occurs during forging.
+   - **Otherwise (normal forging):**
+     - Keep shared first: `finalSkills = sharedSkills` (trim down to `SkillCap` only if shared exceeds cap).
+     - Compute `freeSlots = SkillCap - len(finalSkills)`.
+     - Fill free slots with gated gain rolls:
+       - For each free slot (at most `freeSlots` attempts):
+         - Let `P_remaining = len(poolSkills)`
+         - Roll a random number; success chance is `p_attempt` (above).
+         - If success: pick 1 random skill from `poolSkills`, add to `finalSkills`, remove it from `poolSkills`, and decrement `freeSlots`.
+         - If failure: do nothing for that slot (skills are precious; you do not retry the same slot).
 
 #### 4.6.5. Scenario tables
 <a id="465-scenario-tables"></a>
@@ -2823,8 +2900,8 @@ Apply `SkillCap = 1`:
 
 Result:
 
-- The forged item can roll up to `OverallCap[Divine, ItemType]` **overall rollable slots** (blue stats + ExtraProperties + skills), where `OverallCap` is default+learned per save, tracked per (rarity, item type) pair.
-- It will have at most `SkillCap[Divine]` rollable granted skills (default+learned per save).
+- The forged item can roll up to `OverallCap` **overall rollable slots** (blue stats + ExtraProperties + skills), where `OverallCap` is determined by the output rarity (or by parent slot counts for mutant+mutant forging; see [`rarity_system.md`](rarity_system.md#3212-mutant-item-exception)).
+- It will have at most `SkillCap[Divine]` rollable granted skills (default+learned per save), unless both parents are mutant items (in which case all skills from both parents can be selected without cap limit).
 
 ---
 
@@ -2959,7 +3036,7 @@ On each Unique+fuel forge:
 Design intent:
 
 - A Unique must expand its `UniqueMaxSlots` before it can meaningfully take on non-innate modifiers.
-- `UniqueMaxSlots` is **per Unique instance** and does not change any global `OverallCap[r, t]` values in [`rarity_system.md`](rarity_system.md#221-overall-rollable-slots-cap).
+- `UniqueMaxSlots` is **per Unique instance** and does not change any global `OverallCap[r]` values in [`rarity_system.md`](rarity_system.md#321-overall-rollable-slots-cap).
 
 ### 7.6. Innate modifiers: always kept, merged but never below snapshot
 <a id="76-unique-innate-modifiers-floor"></a>
@@ -3097,7 +3174,7 @@ Roll `Rarity_bonus(Level_player)` host-authoritatively (deterministic; driven by
 Special case: “instance-only overcap Divine”
 
 - An extracted item can be Divine with more than 5 rollable slots (e.g. 7).
-- This is an **instance-only** exception: it does not increase learned caps and does not change the global default Divine cap.
+- This is an **instance-only** exception: it does not change the global default Divine cap.
 - Forging behaviour with overcap items:
   - If an overcap item forges with a normal (non-overcap) item whose applicable cap is lower, the result is still trimmed to the normal cap.
   - Overcap slots are only preserved when forging with another compatible overcap item (so the forge can legitimately keep those extra slots without trimming).
@@ -3127,7 +3204,8 @@ Re-evaluate `AP_max`:
 - `AP_spent` is the number of **currently active upgraded modifiers** on the Unique.
 - The player can respec outside combat at any time, reassigning upgrades to different modifiers and/or changing upgrade types.
 - Each modifier can have **at most 1 active upgrade**.
-- Multiple upgrades can be active at the same time, as long as `AP_spent ≤ AP_max`.
+- Multiple upgrades can be active at the same time, as long as `AP_spent ≤ AP_max`, with one additional constraint:
+  - Each upgrade type can only be active **once** at a time (i.e. at most one Amplify target, one Reversal target, and one Arcana target).
 
 #### What happens when `AP_max` drops
 
@@ -3135,8 +3213,6 @@ If the Unique loses modifier slots (e.g. due to forging outcomes, trimming, or E
 
 - Remove upgrades **newest-first** (most recently applied upgrade is removed first) until `AP_spent ≤ AP_max`.
 - The upgrade-removal order must be deterministic (store an incrementing `upgradeIndex` on the Unique and sort descending).
-
-If a removed upgrade was a Replace-on-innate (see below), the suppressed innate modifier returns automatically.
 
 #### Upgrade application timing (avoid ordering bugs)
 
@@ -3151,7 +3227,7 @@ This ensures upgrades never affect slot count and do not change trimming outcome
 
 ### Upgrade actions (cost: 1 AP each)
 
-Each upgrade below costs **1 AP** and targets exactly one modifier (BS line, EP token, or a granted skill entry).
+Each upgrade below costs **1 AP** and targets exactly one modifier (BS line, EP token, or a granted skill entry). Because each upgrade type can only be active once, each upgrade type can only have one active target at a time.
 
 ##### 1) Amplify (+30% effect)
 
@@ -3167,35 +3243,7 @@ Notes:
 - Amplify does not create new modifiers; it only scales an existing one.
 - If the upgrade is removed (respec or `AP_max` drop), the modifier returns to its non-amplified value.
 
-##### 2) Replace (swap a modifier using the current fuel)
-
-Replace lets the player choose a modifier on the Unique and replace it with a modifier from the **current fuel** item used in that forge.
-
-Hard rules:
-
-- The replacement must be sourced from the current fuel item (no “banked library” of choices).
-- Replace does not change the total slot count; it is a swap within the same slot budget.
-- The replacement never becomes innate, and the snapshot is never modified.
-
-Replacement identity safety (avoid duplicates):
-
-- Do not allow Replace to create two modifiers with the same identity key on the Unique.
-  - (Allowed exception: replacing a modifier with the same identity key but a different value is permitted, because the target is removed.)
-
-Replace-on-innate: **suppress + overlay** (anti-abuse; bug-proof):
-
-- Snapshot is immutable: the original innate set never changes.
-- If the player targets an **innate** modifier key for Replace:
-  - The innate modifier is **suppressed** while the Replace upgrade is active.
-  - The chosen replacement modifier from the fuel is added as an **overlay** (non-innate).
-  - The replacement is **never promoted to innate**.
-- If the Replace upgrade is removed/disabled (respec, `AP_max` drop, or Extract rollback):
-  - the overlay is removed, and the suppressed innate modifier **returns**,
-  - the returning innate uses the Unique’s normal innate rules (including snapshot floors and “always shared” behaviour in [Section 7.6](#76-unique-innate-modifiers-floor)).
-
-This prevents “washing off” innate modifiers permanently while still allowing full customisation while the upgrade is active.
-
-##### 3) Reversal (flip to the opposite; 2×)
+##### 2) Reversal (flip to the opposite; 2×)
 
 Reversal is a powerful conversion upgrade for a narrow, explicitly supported set of modifiers.
 
@@ -3214,13 +3262,15 @@ Status reversal (ExtraProperties; allowlist):
 
 Implementation note: do not attempt to reverse arbitrary tokens. Use a hard allowlist to avoid nonsensical or broken results.
 
-##### 4) Arcana (skill clone; per-combat single use)
+##### 3) Arcana (skill enhancement)
 
-Arcana upgrades one granted skill modifier on the Unique:
+Arcana upgrades one granted skill modifier on the Unique.
 
-- If the Unique grants a skill, Arcana creates a **single-use clone** of that exact skill:
-  - does not consume a memory slot,
-  - has AP and SP costs reduced by **1** each (floored at 0),
-  - can be used **once per combat**; after use it becomes unavailable (greyed out) until the next combat begins.
+If the Unique grants a skill, Arcana enhances that exact skill while the upgrade is active:
 
-If the upgrade is removed (respec or `AP_max` drop), the clone is no longer available.
+- **AP cost**: `AP = AP - 1` (floored at 0)
+- **Cast distance**: `Distance = Distance × 1.30`
+- **Radius** (if the skill uses a radius): `Radius = Radius × 1.30`, rounded to the nearest `0.5` (round half up)
+- **Cooldown**: `Cooldown = Cooldown - 1`, clamped to a minimum of `1`
+
+If the upgrade is removed (respec or `AP_max` drop), the skill returns to its original (non-Arcana) behaviour.
