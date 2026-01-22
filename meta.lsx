@@ -21,6 +21,13 @@
                             <attribute id="UUID" value="00550ab2-ac92-410c-8d94-742f7629de0e" type="22" />
                             <attribute id="Version" value="271587865" type="4" />
                         </node>
+                        <node id="ModuleShortDesc">
+                            <attribute id="Folder" value="EpipEncounters_7d32cb52-1cfd-4526-9b84-db4867bf9356" type="30" />
+                            <attribute id="MD5" value="" type="23" />
+                            <attribute id="Name" value="EpipEncounters" type="22" />
+                            <attribute id="UUID" value="7d32cb52-1cfd-4526-9b84-db4867bf9356" type="22" />
+                            <attribute id="Version" value="0" type="4" />
+                        </node>
                     </children>
                 </node>
                 <node id="ModuleInfo">

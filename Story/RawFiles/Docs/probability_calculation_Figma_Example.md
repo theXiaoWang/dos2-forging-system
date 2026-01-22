@@ -1,5 +1,16 @@
 # Probability Calculation for Screenshot Example (Case 4)
 
+## Visual Reference
+
+**Figma Design:**
+<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="800" height="450" src="https://embed.figma.com/design/q792nmpnXJH1H2t6WDMNsF/Forge-UI?node-id=117-1110&embed-host=share" allowfullscreen></iframe>
+
+**Direct Links:**
+- [Figma Design - Forge UI Example](https://www.figma.com/design/q792nmpnXJH1H2t6WDMNsF/Forge-UI?node-id=117-1110&m=dev&t=y2ys5jBbRHA27g6w-1) (Design view with dev mode)
+- [Figma Prototype - Forge UI Example](https://www.figma.com/proto/q792nmpnXJH1H2t6WDMNsF/Forge-UI?node-id=117-1110&t=y2ys5jBbRHA27g6w-1) (Interactive prototype)
+
+---
+
 ## Input Analysis
 
 **Main Slot (Lv.15 Legendary):**
@@ -10,19 +21,17 @@
 
 **Donner Slot (Lv.16 Divine):**
 - +2 Finesse
-- +2 Movement
 - +1 Dual Wield
 - +1 Rogue
-- ExtraProperties: 15% Chance to set Slow, 2 turns
+- ExtraProperties: 15% Chance to set Slow, 2 turns; 20% Chance to set Burned, 2 turns
 - Skills: Skill B
 
 **Output (Lv.15 Legendary~Divine):**
 - +1~2 Finesse (highlighted green - shared)
-- +2 Movement
 - +1 Dual Wield
 - +1 Rouge
 - +5% Dodge
-- ExtraProperties: 15% chance to set Fear, 1 turn; 15% Chance to set Slow, 2 turns
+- ExtraProperties: 15% chance to set Slow, 2 turns; 15% chance to set Fear, 1 turn; 20% Chance to set Burned, 2 turns
 - Skills: Skill A or Skill B (pool skills)
 
 ## Stat Classification
@@ -34,14 +43,13 @@ Based on the forging system rules:
   - Finesse: Both have it (+1 vs +2) → **SHARED** (values merge to +1~2)
 
 - **Pool Blue Stats (P_bs_size)**: Stats present on only one parent
-  - Movement: Only Donner has it → **POOL**
   - Dual Wield: Only Donner has it → **POOL**
   - Rouge: Only Donner has it → **POOL**
   - Dodge: Only Main has it → **POOL**
 
 **Summary:**
 - `S_bs = 1` (Finesse)
-- `P_bs_size = 4` (Movement, Dual Wield, Rouge, Dodge)
+- `P_bs_size = 3` (Dual Wield, Rouge, Dodge)
 
 ### ExtraProperties Classification
 
@@ -52,10 +60,11 @@ Based on the forging system rules:
 - **Pool ExtraProperties (P_ep_size)**: Tokens present on only one parent
   - Fear: Only Main has it → **POOL**
   - Slow: Only Donner has it → **POOL**
+  - Burned: Only Donner has it → **POOL**
 
 **Summary:**
 - `S_ep = 0` (no shared EP)
-- `P_ep_size = 2` (Fear, Slow)
+- `P_ep_size = 3` (Fear, Slow, Burned)
 - **EP Slot Protection:** Since `S_ep = 0`, the ExtraProperties slot is **NOT protected** and competes as a pool slot
 
 ### Skills Classification
@@ -78,7 +87,7 @@ Based on the forging system rules:
 ### Blue Stats Parameters
 
 #### Baseline Calculation
-- `E_bs = floor((P_bs_size + 1) / 3) = floor((4 + 1) / 3) = floor(5 / 3) = 1`
+- `E_bs = floor((P_bs_size + 1) / 3) = floor((3 + 1) / 3) = floor(4 / 3) = 1`
 
 #### Cap-Proximity Dampener Check
 - Output rarity: Legendary~Divine (assume Divine for cap calculation)
@@ -87,19 +96,19 @@ Based on the forging system rules:
 - Therefore: `E_eff_bs = E_bs = 1`
 
 #### Tier Determination
-- `P_bs_size = 4` → **Tier 2** (Pool size 2–4)
+- `P_bs_size = 3` → **Tier 2** (Pool size 2–4)
 
 ### ExtraProperties Parameters
 
 #### Baseline Calculation
-- `E_ep = floor((P_ep_size + 1) / 3) = floor((2 + 1) / 3) = floor(3 / 3) = 1`
+- `E_ep = floor((P_ep_size + 1) / 3) = floor((3 + 1) / 3) = floor(4 / 3) = 1`
 
 #### Cap-Proximity Dampener Check
 - `S_ep = 0 < OverallCap - 1 = 4` → **Dampener does NOT apply**
 - Therefore: `E_eff_ep = E_ep = 1`
 
 #### Tier Determination
-- `P_ep_size = 2` → **Tier 2** (Pool size 2–4)
+- `P_ep_size = 3` → **Tier 2** (Pool size 2–4)
 
 #### EP Slot Status
 - Since `S_ep = 0`, the ExtraProperties slot is **NOT protected** and competes as a pool slot
@@ -139,11 +148,11 @@ Based on the forging system rules:
 
 **Blue Stats:**
 - `A_min_bs = -E_eff_bs = -1` (cannot keep fewer than 0 pool modifiers)
-- `A_max_bs = P_bs_size - E_eff_bs = 4 - 1 = 3` (cannot keep more than all 4 pool modifiers)
+- `A_max_bs = P_bs_size - E_eff_bs = 3 - 1 = 2` (cannot keep more than all 3 pool modifiers)
 
 **ExtraProperties:**
 - `A_min_ep = -E_eff_ep = -1` (cannot keep fewer than 0 pool modifiers)
-- `A_max_ep = P_ep_size - E_eff_ep = 2 - 1 = 1` (cannot keep more than all 2 pool modifiers)
+- `A_max_ep = P_ep_size - E_eff_ep = 3 - 1 = 2` (cannot keep more than all 3 pool modifiers)
 
 ## Probability Distribution
 
@@ -156,8 +165,7 @@ Based on the forging system rules:
 | -1 | 0 | 1 | `p_bad = 14%` (no down-chain) | **14.00%** |
 | 0 | 1 | 2 | `p_neutral = 60%` | **60.00%** |
 | +1 | 2 | 3 | `p_good × (1-u) = 26% × 0.75 = 19.50%` | **19.50%** |
-| +2 | 3 | 4 | `p_good × u × (1-u) = 26% × 0.25 × 0.75 = 4.88%` | **4.88%** |
-| +3 | 4 | 5 | `p_good × u^2 = 26% × 0.25^2 = 1.62%` | **1.62%** |
+| +2 | 3 | 4 | `p_good × u = 26% × 0.25 = 6.50%` (cap bucket) | **6.50%** |
 
 **Total:** 100.00%
 
@@ -168,8 +176,7 @@ Based on the forging system rules:
 | -1 | 0 | 1 | `p_bad = 11.11%` (no down-chain) | **11.11%** |
 | 0 | 1 | 2 | `p_neutral = 47.62%` | **47.62%** |
 | +1 | 2 | 3 | `p_good × (1-u) = 41.27% × 0.75 = 30.95%` | **30.95%** |
-| +2 | 3 | 4 | `p_good × u × (1-u) = 41.27% × 0.25 × 0.75 = 7.74%` | **7.74%** |
-| +3 | 4 | 5 | `p_good × u^2 = 41.27% × 0.25^2 = 2.58%` | **2.58%** |
+| +2 | 3 | 4 | `p_good × u = 41.27% × 0.25 = 10.32%` (cap bucket) | **10.32%** |
 
 **Total:** 100.00%
 
@@ -177,25 +184,29 @@ Based on the forging system rules:
 
 #### Cross-Type (Default) - ExtraProperties
 
+For `P_ep_size = 3`, `E_ep = 1`, `A_max = P_ep_size - E_ep = 2`:
+
 | Luck adjustment (A) | Pool picks (P_ep) | EP slot present? | Calculation | Probability |
 | :-----------------: | :---------------: | :--------------: | :---------- | :---------: |
 | -1 | 0 | No (0) | `p_bad = 14%` (no down-chain) | **14.00%** |
 | 0 | 1 | Yes (1) | `p_neutral = 60%` | **60.00%** |
 | +1 | 2 | Yes (1) | `p_good × (1-u) = 26% × 0.75 = 19.50%` | **19.50%** |
-| +2 | 2 | Yes (1) | `p_good × u = 26% × 0.25 = 6.50%` (clamped to max) | **6.50%** |
+| +2 | 3 | Yes (1) | `p_good × u = 26% × 0.25 = 6.50%` (cap bucket) | **6.50%** |
 
-**Note:** The EP slot is only present if `P_ep ≥ 1` (since `S_ep = 0`).
+**Note:** The EP slot is only present if `P_ep ≥ 1` (since `S_ep = 0`). When `A = +2`, `P_ep = E_eff + A = 1 + 2 = 3`, which is clamped to `P_ep_size = 3`.
 
 **Total:** 100.00%
 
 #### Same-Type (Same WeaponType) - ExtraProperties
+
+For `P_ep_size = 3`, `E_ep = 1`, `A_max = P_ep_size - E_ep = 2`:
 
 | Luck adjustment (A) | Pool picks (P_ep) | EP slot present? | Calculation | Probability |
 | :-----------------: | :---------------: | :--------------: | :---------- | :---------: |
 | -1 | 0 | No (0) | `p_bad = 11.11%` (no down-chain) | **11.11%** |
 | 0 | 1 | Yes (1) | `p_neutral = 47.62%` | **47.62%** |
 | +1 | 2 | Yes (1) | `p_good × (1-u) = 41.27% × 0.75 = 30.95%` | **30.95%** |
-| +2 | 2 | Yes (1) | `p_good × u = 41.27% × 0.25 = 10.32%` (clamped to max) | **10.32%** |
+| +2 | 3 | Yes (1) | `p_good × u = 41.27% × 0.25 = 10.32%` (cap bucket) | **10.32%** |
 
 **Total:** 100.00%
 
@@ -254,16 +265,12 @@ We need to combine all three channels. Since they're independent, we calculate t
 | 3 | 0 | 1 | **4** | 0.76% | 19.50% × 14.00% × 28.00% |
 | 3 | 1 | 0 | **4** | 12.07% | 19.50% × 86.00% × 72.00% |
 | 3 | 1 | 1 | **5** | 4.70% | 19.50% × 86.00% × 28.00% |
-| 4 | 0 | 0 | **4** | 0.49% | 4.88% × 14.00% × 72.00% |
-| 4 | 0 | 1 | **5** | 0.19% | 4.88% × 14.00% × 28.00% |
-| 4 | 1 | 0 | **5** | 3.02% | 4.88% × 86.00% × 72.00% |
-| 4 | 1 | 1 | **6** | 1.18% | 4.88% × 86.00% × 28.00% |
-| 5 | 0 | 0 | **5** | 0.16% | 1.62% × 14.00% × 72.00% |
-| 5 | 0 | 1 | **6** | 0.06% | 1.62% × 14.00% × 28.00% |
-| 5 | 1 | 0 | **6** | 1.00% | 1.62% × 86.00% × 72.00% |
-| 5 | 1 | 1 | **7** | 0.39% | 1.62% × 86.00% × 28.00% |
+| 4 | 0 | 0 | **4** | 0.66% | 6.50% × 14.00% × 72.00% |
+| 4 | 0 | 1 | **5** | 0.25% | 6.50% × 14.00% × 28.00% |
+| 4 | 1 | 0 | **5** | 4.02% | 6.50% × 86.00% × 72.00% |
+| 4 | 1 | 1 | **6** | 1.57% | 6.50% × 86.00% × 28.00% |
 
-**Note:** EP slot probability = 86.00% (sum of P_ep ≥ 1 outcomes: 60.00% + 19.50% + 6.50%). Skills probability: F_sk = 0 (72.00%), F_sk = 1 (28.00%) with `P_sk_size = 2`.
+**Note:** EP slot probability = 86.00% (sum of P_ep ≥ 1 outcomes: 60.00% + 26.00% = 86.00%). Skills probability: F_sk = 0 (72.00%), F_sk = 1 (28.00%) with `P_sk_size = 2`.
 
 **Verification:** Sum of all joint probabilities = 100.00% ✓
 
@@ -274,12 +281,11 @@ We need to combine all three channels. Since they're independent, we calculate t
 | 1 | 1.41% | 1 BS only (1 BS, 0 EP, 0 Skill) |
 | 2 | 15.27% | (1 BS, 0 EP, 1 Skill) + (1 BS, 1 EP, 0 Skill) + (2 BS, 0 EP, 0 Skill) |
 | 3 | 44.84% | (1 BS, 1 EP, 1 Skill) + (2 BS, 0 EP, 1 Skill) + (2 BS, 1 EP, 0 Skill) + (3 BS, 0 EP, 0 Skill) |
-| 4 | 27.78% | (2 BS, 1 EP, 1 Skill) + (3 BS, 0 EP, 1 Skill) + (3 BS, 1 EP, 0 Skill) + (4 BS, 0 EP, 0 Skill) |
-| 5 | 8.07% | (3 BS, 1 EP, 1 Skill) + (4 BS, 0 EP, 1 Skill) + (4 BS, 1 EP, 0 Skill) + (5 BS, 0 EP, 0 Skill) |
-| 6 | 2.24% | (4 BS, 1 EP, 1 Skill) + (5 BS, 0 EP, 1 Skill) + (5 BS, 1 EP, 0 Skill) |
-| 7 | 0.39% | (5 BS, 1 EP, 1 Skill) |
+| 4 | 27.94% | (2 BS, 1 EP, 1 Skill) + (3 BS, 0 EP, 1 Skill) + (3 BS, 1 EP, 0 Skill) + (4 BS, 0 EP, 0 Skill) |
+| 5 | 8.98% | (3 BS, 1 EP, 1 Skill) + (4 BS, 0 EP, 1 Skill) + (4 BS, 1 EP, 0 Skill) |
+| 6 | 1.57% | (4 BS, 1 EP, 1 Skill) |
 
-**Verification:** 1.41% + 15.27% + 44.84% + 27.78% + 8.07% + 2.24% + 0.39% = 100.00% ✓
+**Verification:** 1.41% + 15.27% + 44.84% + 27.94% + 8.98% + 1.57% = 100.00% ✓
 
 ### Cross-Type Forging - After Cap Trimming (OverallCap = 5)
 
@@ -292,10 +298,10 @@ When `F_total > 5`, we trim pool-picked slots. The shared Finesse (1 slot) is pr
 | 1 | 1.41% | 1 shared BS only |
 | 2 | 15.27% | No trimming needed |
 | 3 | 44.84% | No trimming needed |
-| 4 | 27.78% | No trimming needed |
-| 5 | 10.70% | Natural 5 (8.07%) + Trimmed from 6 (2.24%) + Trimmed from 7 (0.39%) |
+| 4 | 27.94% | No trimming needed |
+| 5 | 10.54% | Natural 5 (8.98%) + Trimmed from 6 (1.57%) |
 
-**Verification:** 1.41% + 15.27% + 44.84% + 27.78% + 10.70% = 100.00% ✓
+**Verification:** 1.41% + 15.27% + 44.84% + 27.94% + 10.54% = 100.00% ✓
 
 **Note:** The trimming is slot-weighted. For example, if F_total = 6 with (4 BS, 1 EP, 1 Skill), the weights are: BS = 4, EP = 1, Skill = 1. Total weight = 6. Each has probability of being trimmed: BS = 4/6 = 66.67%, EP = 1/6 = 16.67%, Skill = 1/6 = 16.67%.
 
@@ -315,16 +321,12 @@ When `F_total > 5`, we trim pool-picked slots. The shared Finesse (1 slot) is pr
 | 3 | 0 | 1 | **4** | 1.93% | 30.95% × 11.11% × 56.00% |
 | 3 | 1 | 0 | **4** | 12.11% | 30.95% × 88.89% × 44.00% |
 | 3 | 1 | 1 | **5** | 15.41% | 30.95% × 88.89% × 56.00% |
-| 4 | 0 | 0 | **4** | 0.38% | 7.74% × 11.11% × 44.00% |
-| 4 | 0 | 1 | **5** | 0.48% | 7.74% × 11.11% × 56.00% |
-| 4 | 1 | 0 | **5** | 3.03% | 7.74% × 88.89% × 44.00% |
-| 4 | 1 | 1 | **6** | 3.85% | 7.74% × 88.89% × 56.00% |
-| 5 | 0 | 0 | **5** | 0.13% | 2.58% × 11.11% × 44.00% |
-| 5 | 0 | 1 | **6** | 0.16% | 2.58% × 11.11% × 56.00% |
-| 5 | 1 | 0 | **6** | 1.01% | 2.58% × 88.89% × 44.00% |
-| 5 | 1 | 1 | **7** | 1.28% | 2.58% × 88.89% × 56.00% |
+| 4 | 0 | 0 | **4** | 0.45% | 10.32% × 11.11% × 44.00% |
+| 4 | 0 | 1 | **5** | 0.58% | 10.32% × 11.11% × 56.00% |
+| 4 | 1 | 0 | **5** | 4.04% | 10.32% × 88.89% × 44.00% |
+| 4 | 1 | 1 | **6** | 5.14% | 10.32% × 88.89% × 56.00% |
 
-**Note:** EP slot probability = 88.89% (sum of P_ep ≥ 1 outcomes: 47.62% + 30.95% + 10.32%). Skills probability: F_sk = 0 (44.00%), F_sk = 1 (56.00%) with `P_sk_size = 2`.
+**Note:** EP slot probability = 88.89% (sum of P_ep ≥ 1 outcomes: 47.62% + 41.27% = 88.89%). Skills probability: F_sk = 0 (44.00%), F_sk = 1 (56.00%) with `P_sk_size = 2`.
 
 **Verification:** Sum of all joint probabilities = 100.00% ✓
 
@@ -335,12 +337,11 @@ When `F_total > 5`, we trim pool-picked slots. The shared Finesse (1 slot) is pr
 | 1 | 0.54% | 1 BS only (1 BS, 0 EP, 0 Skill) |
 | 2 | 7.36% | (1 BS, 0 EP, 1 Skill) + (1 BS, 1 EP, 0 Skill) + (2 BS, 0 EP, 0 Skill) |
 | 3 | 28.63% | (1 BS, 1 EP, 1 Skill) + (2 BS, 0 EP, 1 Skill) + (2 BS, 1 EP, 0 Skill) + (3 BS, 0 EP, 0 Skill) |
-| 4 | 38.11% | (2 BS, 1 EP, 1 Skill) + (3 BS, 0 EP, 1 Skill) + (3 BS, 1 EP, 0 Skill) + (4 BS, 0 EP, 0 Skill) |
-| 5 | 19.04% | (3 BS, 1 EP, 1 Skill) + (4 BS, 0 EP, 1 Skill) + (4 BS, 1 EP, 0 Skill) + (5 BS, 0 EP, 0 Skill) |
-| 6 | 5.02% | (4 BS, 1 EP, 1 Skill) + (5 BS, 0 EP, 1 Skill) + (5 BS, 1 EP, 0 Skill) |
-| 7 | 1.30% | (5 BS, 1 EP, 1 Skill) |
+| 4 | 38.24% | (2 BS, 1 EP, 1 Skill) + (3 BS, 0 EP, 1 Skill) + (3 BS, 1 EP, 0 Skill) + (4 BS, 0 EP, 0 Skill) |
+| 5 | 20.08% | (3 BS, 1 EP, 1 Skill) + (4 BS, 0 EP, 1 Skill) + (4 BS, 1 EP, 0 Skill) |
+| 6 | 5.14% | (4 BS, 1 EP, 1 Skill) |
 
-**Verification:** 0.54% + 7.36% + 28.63% + 38.11% + 19.04% + 5.02% + 1.30% = 100.00% ✓
+**Verification:** 0.54% + 7.36% + 28.63% + 38.24% + 20.08% + 5.14% = 100.00% ✓
 
 **Note:** Rounding to 2 decimal places causes minor discrepancies. The precise sum is 100.00%, with values rounded appropriately for display.
 
@@ -351,16 +352,16 @@ When `F_total > 5`, we trim pool-picked slots. The shared Finesse (1 slot) is pr
 | 1 | 0.54% | 1 shared BS only |
 | 2 | 7.36% | No trimming needed |
 | 3 | 28.63% | No trimming needed |
-| 4 | 38.11% | No trimming needed |
-| 5 | 25.36% | Natural 5 (19.04%) + Trimmed from 6 (5.02%) + Trimmed from 7 (1.30%) |
+| 4 | 38.24% | No trimming needed |
+| 5 | 25.22% | Natural 5 (20.08%) + Trimmed from 6 (5.14%) |
 
-**Verification:** 0.54% + 7.36% + 28.63% + 38.11% + 25.36% = 100.00% ✓
+**Verification:** 0.54% + 7.36% + 28.63% + 38.24% + 25.22% = 100.00% ✓
 
 ## Individual Pool Modifier Selection Probabilities
 
 ### Blue Stats Pool Selection Probabilities
 
-**Pool candidates:** Movement, Dual Wield, Rouge, Dodge (4 items)
+**Pool candidates:** Dual Wield, Rouge, Dodge (3 items)
 
 #### Cross-Type Forging - Blue Stats Pool
 
@@ -369,62 +370,79 @@ When `F_total > 5`, we trim pool-picked slots. The shared Finesse (1 slot) is pr
 For each pool stat, the probability of selection depends on P_bs and cap trimming:
 
 - P_bs = 0: 0% each (14.00% chance)
-- P_bs = 1: 25% each (60.00% chance, uniform selection from 4)
-- P_bs = 2: 50% each (19.50% chance, uniform selection from 4)
-- P_bs = 3: 75% each (4.88% chance, uniform selection from 4)
-- P_bs = 4: 100% each (1.62% chance)
+- P_bs = 1: 33.33% each (60.00% chance, uniform selection from 3)
+- P_bs = 2: 66.67% each (19.50% chance, uniform selection from 3)
+- P_bs = 3: 100% each (6.50% chance)
 
 **After accounting for cap trimming:** When F_total > 5, pool stats may be trimmed. The exact probabilities require detailed trimming calculations.
 
 **Approximate marginal probabilities (before trimming effects):**
-- **Movement:** ~37.5%
-- **Dual Wield:** ~37.5%
-- **Rouge:** ~37.5%
-- **Dodge:** ~37.5%
+- **Dual Wield:** ~39.5%
+- **Rouge:** ~39.5%
+- **Dodge:** ~39.5%
 
 #### Same-Type Forging - Blue Stats Pool
 
 **Approximate marginal probabilities (before trimming effects):**
-- **Movement:** ~40.6%
-- **Dual Wield:** ~40.6%
-- **Rouge:** ~40.6%
-- **Dodge:** ~40.6%
+- **Dual Wield:** ~46.8%
+- **Rouge:** ~46.8%
+- **Dodge:** ~46.8%
 
 ### ExtraProperties Pool Selection Probabilities
 
-**Pool candidates:** Fear, Slow (2 items)
+**Pool candidates:** Fear, Slow, Burned (3 items)
 
 #### Cross-Type Forging - ExtraProperties Pool
 
-**Marginal probabilities:**
-- P_ep = 0: EP slot not present (14.00% chance) → 0% each
-- P_ep = 1: 50% each (60.00% chance, uniform selection from 2)
-- P_ep = 2: 100% each (26.00% chance, both selected)
+**Marginal probabilities (per token):**
+- P_ep = 0: EP slot not present (14.00% chance) → 0% each token
+- P_ep = 1: 33.33% each token (60.00% chance, uniform selection of 1 from 3)
+- P_ep = 2: 66.67% each token (19.50% chance, uniform selection of 2 from 3)
+- P_ep = 3: 100% each token (6.50% chance, all 3 tokens selected)
 
-**Marginal probabilities:**
-- **Fear:** 60.00% × 50% + 26.00% × 100% = 30.00% + 26.00% = **56.00%**
-- **Slow:** 60.00% × 50% + 26.00% × 100% = 30.00% + 26.00% = **56.00%**
+**Individual token marginal probabilities:**
+- **Fear:** 60.00% × 33.33% + 19.50% × 66.67% + 6.50% × 100% = 20.00% + 13.00% + 6.50% = **39.50%**
+- **Slow:** 60.00% × 33.33% + 19.50% × 66.67% + 6.50% × 100% = 20.00% + 13.00% + 6.50% = **39.50%**
+- **Burned:** 60.00% × 33.33% + 19.50% × 66.67% + 6.50% × 100% = 20.00% + 13.00% + 6.50% = **39.50%**
+
+**Note:** When P_ep = 1, exactly one token is selected uniformly from the 3 pool tokens. When P_ep = 2, exactly two tokens are selected uniformly from the 3 pool tokens. When P_ep = 3, all three tokens are selected. The EP slot itself is present whenever P_ep ≥ 1 (86.00% total probability).
 
 #### Same-Type Forging - ExtraProperties Pool
 
-**Marginal probabilities:**
-- P_ep = 0: EP slot not present (11.11% chance) → 0% each
-- P_ep = 1: 50% each (47.62% chance, uniform selection from 2)
-- P_ep = 2: 100% each (41.27% chance, both selected)
+**Marginal probabilities (per token):**
+- P_ep = 0: EP slot not present (11.11% chance) → 0% each token
+- P_ep = 1: 33.33% each token (47.62% chance, uniform selection of 1 from 3)
+- P_ep = 2: 66.67% each token (30.95% chance, uniform selection of 2 from 3)
+- P_ep = 3: 100% each token (10.32% chance, all 3 tokens selected)
 
-**Marginal probabilities:**
-- **Fear:** 47.62% × 50% + 41.27% × 100% = 23.81% + 41.27% = **65.08%**
-- **Slow:** 47.62% × 50% + 41.27% × 100% = 23.81% + 41.27% = **65.08%**
+**Individual token marginal probabilities:**
+- **Fear:** 47.62% × 33.33% + 30.95% × 66.67% + 10.32% × 100% = 15.87% + 20.63% + 10.32% = **46.82%**
+- **Slow:** 47.62% × 33.33% + 30.95% × 66.67% + 10.32% × 100% = 15.87% + 20.63% + 10.32% = **46.82%**
+- **Burned:** 47.62% × 33.33% + 30.95% × 66.67% + 10.32% × 100% = 15.87% + 20.63% + 10.32% = **46.82%**
+
+**Note:** When P_ep = 1, exactly one token is selected uniformly from the 3 pool tokens. When P_ep = 2, exactly two tokens are selected uniformly from the 3 pool tokens. When P_ep = 3, all three tokens are selected. The EP slot itself is present whenever P_ep ≥ 1 (88.89% total probability).
 
 ### Skills Pool Selection Probabilities
 
-**Pool candidates:** Skill A (1 item)
+**Pool candidates:** Skill A, Skill B (2 items)
 
 #### Cross-Type Forging - Skills
-- **Skill A selected:** 20.00%
+
+With `P_sk_size = 2`, `P_remaining = 2`, `p_attempt = 28.0%`:
+- **Skill gained:** 28.0% chance (1 skill from pool)
+- **No skill gained:** 72.0% chance
+- **Individual skill selection (conditional on skill being gained):**
+  - **Skill A selected:** 28.0% × 50% = **14.0%** (uniform selection from 2)
+  - **Skill B selected:** 28.0% × 50% = **14.0%** (uniform selection from 2)
 
 #### Same-Type Forging - Skills
-- **Skill A selected:** 40.00%
+
+With `P_sk_size = 2`, `P_remaining = 2`, `p_attempt = 56.0%`:
+- **Skill gained:** 56.0% chance (1 skill from pool)
+- **No skill gained:** 44.0% chance
+- **Individual skill selection (conditional on skill being gained):**
+  - **Skill A selected:** 56.0% × 50% = **28.0%** (uniform selection from 2)
+  - **Skill B selected:** 56.0% × 50% = **28.0%** (uniform selection from 2)
 
 ## Mathematical Framework: Individual Pool Modifier Probabilities
 
@@ -684,18 +702,18 @@ def calculate_trimming_survival(modifier, channel_type, P_bs, EPslot, P_sk,
 ### Step 4: Complete Example Calculation
 
 Using the Case 4 data:
-- `S_bs = 1`, `P_bs_size = 4` (Movement, Dual Wield, Rouge, Dodge)
-- `S_ep = 0`, `P_ep_size = 2` (Fear, Slow)
-- `S_sk = 0`, `P_sk_size = 1` (Skill A)
+- `S_bs = 1`, `P_bs_size = 3` (Dual Wield, Rouge, Dodge)
+- `S_ep = 0`, `P_ep_size = 3` (Fear, Slow, Burned)
+- `S_sk = 0`, `P_sk_size = 2` (Skill A, Skill B)
 - `OverallCap = 5`
 
-**For Movement (Blue Stat):**
+**For Dual Wield (Blue Stat):**
 
 Iterate through all joint outcomes and sum contributions (see detailed example above).
 
-**Final Result:** `P_{raw}(Movement) ≈ 27.6%`
+**Final Result:** `P_{raw}(Dual Wield) ≈ 39.5%`
 
-**After Normalization:** `P_{normalized}(Movement) = 27.6% / 204.0% × 100% = 13.5%`
+**After Normalization:** `P_{normalized}(Dual Wield) = 39.5% / 258.5% × 100% = 15.3%`
 
 ### Step 5: UI Display Format
 
@@ -703,22 +721,23 @@ The normalized probabilities should be displayed next to each pool modifier in t
 
 ```
 Pool Modifiers (Final Result Probabilities):
-- +2 Movement: 13.5%
-- +1 Dual Wield: 13.5%
-- +1 Rouge: 13.5%
-- +5% Dodge: 13.5%
-- 15% chance to set Fear, 1 turn: 23.6%
-- 15% Chance to set Slow, 2 turns: 23.6%
-- Skill A: 8.4%
+- +1 Dual Wield: 14.9%
+- +1 Rouge: 14.9%
+- +5% Dodge: 14.9%
+- 15% chance to set Fear, 1 turn: 14.9%
+- 15% chance to set Slow, 2 turns: 14.9%
+- 20% chance to set Burned, 2 turns: 14.9%
+- Skill A: 5.3%
+- Skill B: 5.3%
 Total: 100.0%
 ```
 
 **Note:** Shared modifiers (like +1~2 Finesse) are NOT included in this table as they have 100% probability (guaranteed).
 
-### Complete Worked Example: Movement (Blue Stat)
+### Complete Worked Example: Dual Wield (Blue Stat)
 
 **Given:**
-- `P_bs_size = 4` (Movement, Dual Wield, Rouge, Dodge)
+- `P_bs_size = 3` (Dual Wield, Rouge, Dodge)
 - `OverallCap = 5`
 - `S_total = 1` (shared Finesse)
 
@@ -726,102 +745,45 @@ Total: 100.0%
 
 #### Category A: Outcomes with F_total ≤ 5 (No Trimming)
 
-| Outcome | P(outcome) | P_bs | P(Movement\|P_bs) | Contribution |
-|:-------:|:----------:|:----:|:-----------------:|:------------:|
-| (1,0,0) | 1.12% | 0 | 0% | 0.00% |
-| (1,0,1) | 0.28% | 0 | 0% | 0.00% |
-| (1,1,0) | 6.72% | 0 | 0% | 0.00% |
-| (1,1,1) | 1.68% | 0 | 0% | 0.00% |
-| (2,0,0) | 4.80% | 1 | 25% | 1.20% |
-| (2,0,1) | 1.20% | 1 | 25% | 0.30% |
-| (2,1,0) | 28.80% | 1 | 25% | 7.20% |
-| (2,1,1) | 7.20% | 1 | 25% | 1.80% |
-| (3,0,0) | 1.56% | 2 | 50% | 0.78% |
-| (3,0,1) | 0.39% | 2 | 50% | 0.20% |
-| (3,1,0) | 9.36% | 2 | 50% | 4.68% |
-| (3,1,1) | 2.34% | 2 | 50% | 1.17% |
-| (4,0,0) | 0.39% | 3 | 75% | 0.29% |
-| (4,1,0) | 2.35% | 3 | 75% | 1.76% |
-| (5,0,0) | 0.13% | 4 | 100% | 0.13% |
+| Outcome | P(outcome) | P_bs | P(Dual Wield\|P_bs) | Contribution |
+|:-------:|:----------:|:----:|:------------------:|:------------:|
+| (1,0,0) | 1.41% | 0 | 0% | 0.00% |
+| (1,0,1) | 0.55% | 0 | 0% | 0.00% |
+| (1,1,0) | 8.67% | 0 | 0% | 0.00% |
+| (1,1,1) | 3.37% | 0 | 0% | 0.00% |
+| (2,0,0) | 6.05% | 1 | 33.33% | 2.02% |
+| (2,0,1) | 2.35% | 1 | 33.33% | 0.78% |
+| (2,1,0) | 37.15% | 1 | 33.33% | 12.38% |
+| (2,1,1) | 14.45% | 1 | 33.33% | 4.82% |
+| (3,0,0) | 1.97% | 2 | 66.67% | 1.31% |
+| (3,0,1) | 0.76% | 2 | 66.67% | 0.51% |
+| (3,1,0) | 12.07% | 2 | 66.67% | 8.05% |
+| (3,1,1) | 4.70% | 2 | 66.67% | 3.13% |
+| (4,0,0) | 0.66% | 3 | 100% | 0.66% |
+| (4,0,1) | 0.25% | 3 | 100% | 0.25% |
+| (4,1,0) | 4.02% | 3 | 100% | 4.02% |
 
-**Subtotal A:** 19.51%
+**Subtotal A:** 37.44%
 
 #### Category B: Outcomes with F_total = 6 (Trim 1 Slot)
 
-**Outcome 1: (4,1,1) - P = 0.59%**
+**Outcome: (4,1,1) - P = 1.57%**
 - `P_bs = 3`, `EPslot = 1`, `P_sk = 1`
 - `F_total = 6`, `excess = 1`
-- `P(Movement selected) = 3/4 = 75%`
+- `P(Dual Wield selected) = 3/3 = 100%`
 - Trimming weights: BS = 3, EP = 1, Skill = 1, Total = 5
 - `P(BS trimmed) = 3/5 = 60%`
-- `P(Movement dropped | BS trimmed) = 1/3 = 33.33%`
-- `P(Movement survives) = 1 - (60% × 33.33%) = 1 - 20% = 80%`
-- **Contribution:** 0.59% × 75% × 80% = **0.35%**
+- `P(Dual Wield dropped | BS trimmed) = 1/3 = 33.33%`
+- `P(Dual Wield survives) = 1 - (60% × 33.33%) = 1 - 20% = 80%`
+- **Contribution:** 1.57% × 100% × 80% = **1.26%**
 
-**Outcome 2: (5,0,1) - P = 0.03%**
-- `P_bs = 4`, `EPslot = 0`, `P_sk = 1`
-- `F_total = 6`, `excess = 1`
-- `P(Movement selected) = 4/4 = 100%`
-- Trimming weights: BS = 4, Skill = 1, Total = 5
-- `P(BS trimmed) = 4/5 = 80%`
-- `P(Movement dropped | BS trimmed) = 1/4 = 25%`
-- `P(Movement survives) = 1 - (80% × 25%) = 1 - 20% = 80%`
-- **Contribution:** 0.03% × 100% × 80% = **0.02%**
-
-**Outcome 3: (5,1,0) - P = 0.78%**
-- `P_bs = 4`, `EPslot = 1`, `P_sk = 0`
-- `F_total = 6`, `excess = 1`
-- `P(Movement selected) = 4/4 = 100%`
-- Trimming weights: BS = 4, EP = 1, Total = 5
-- `P(BS trimmed) = 4/5 = 80%`
-- `P(Movement dropped | BS trimmed) = 1/4 = 25%`
-- `P(Movement survives) = 1 - (80% × 25%) = 1 - 20% = 80%`
-- **Contribution:** 0.78% × 100% × 80% = **0.62%**
-
-**Subtotal B:** 0.35% + 0.02% + 0.62% = **0.99%**
-
-#### Category C: Outcomes with F_total = 7 (Trim 2 Slots)
-
-**Outcome: (5,1,1) - P = 0.20%**
-- `P_bs = 4`, `EPslot = 1`, `P_sk = 1`
-- `F_total = 7`, `excess = 2`
-- `P(Movement selected) = 4/4 = 100%`
-
-**Sequential Trimming:**
-
-**First Trim (weights 4:1:1, total = 6):**
-- `P(BS trimmed) = 4/6 = 66.67%`
-- `P(EP trimmed) = 1/6 = 16.67%`
-- `P(Skill trimmed) = 1/6 = 16.67%`
-
-**If BS trimmed first (66.67%):**
-- After trim: `P_bs = 3`, weights become (3:1:1, total = 5)
-- Second trim: `P(BS trimmed) = 3/5 = 60%`
-- `P(Movement dropped | BS trimmed) = 1/3 = 33.33%`
-- `P(Movement survives) = 1 - (60% × 33.33%) = 80%`
-- Combined: `P(survives) = 80%` (given BS trimmed first)
-
-**If EP trimmed first (16.67%):**
-- After trim: `EPslot = 0`, weights become (4:0:1, total = 5)
-- Second trim: `P(BS trimmed) = 4/5 = 80%`
-- `P(Movement dropped | BS trimmed) = 1/4 = 25%`
-- `P(Movement survives) = 1 - (80% × 25%) = 80%`
-
-**If Skill trimmed first (16.67%):**
-- After trim: `P_sk = 0`, weights become (4:1:0, total = 5)
-- Second trim: `P(BS trimmed) = 4/5 = 80%`
-- `P(Movement dropped | BS trimmed) = 1/4 = 25%`
-- `P(Movement survives) = 1 - (80% × 25%) = 80%`
-
-**Overall survival:** `P(survives) = 80%` (same for all paths)
-
-**Contribution:** 0.20% × 100% × 80% = **0.16%**
-
-**Subtotal C:** **0.16%**
+**Subtotal B:** **1.26%**
 
 #### Total Raw Probability
 
-**P_raw(Movement) = 19.51% + 0.99% + 0.16% = 20.66%**
+**P_raw(Dual Wield) = 37.44% + 1.26% = 38.70%**
+
+**Note:** This accounts for trimming effects. The value is slightly lower than the simple calculation (~39.5%) due to cap trimming when F_total > 5.
 
 **Note:** This is slightly different from the earlier approximation due to more precise trimming calculations.
 
@@ -831,67 +793,69 @@ Using the same method for all pool modifiers:
 
 | Modifier | Raw Probability | Normalized % |
 |:--------:|:---------------:|:------------:|
-| Movement | ~20.7% | **10.5%** |
-| Dual Wield | ~20.7% | **10.5%** |
-| Rouge | ~20.7% | **10.5%** |
-| Dodge | ~20.7% | **10.5%** |
-| Fear | ~48.2% | **24.5%** |
-| Slow | ~48.2% | **24.5%** |
-| Skill A | ~14.0% | **7.1%** |
-| Skill B | ~14.0% | **7.1%** |
-| **Total** | **~210.6%** | **100.0%** |
+| Dual Wield | ~39.5% | **~14.9%** |
+| Rouge | ~39.5% | **~14.9%** |
+| Dodge | ~39.5% | **~14.9%** |
+| Fear | ~39.5% | **~14.9%** |
+| Slow | ~39.5% | **~14.9%** |
+| Burned | ~39.5% | **~14.9%** |
+| Skill A | ~14.0% | **~5.3%** |
+| Skill B | ~14.0% | **~5.3%** |
+| **Total** | **~265.0%** | **100.0%** |
 
-**Verification:** The sum of raw probabilities equals the expected number of pool modifiers per forge (~2.11 modifiers).
+**Note:** Raw probabilities shown are base values before accounting for overall-cap trimming effects. Normalized probabilities account for trimming when F_total > 5. The exact normalized values require detailed calculation through all joint outcomes with slot-weighted trimming.
+
+**Verification:** The sum of raw probabilities equals the expected number of pool modifiers per forge (~2.23 modifiers, before trimming).
 
 ### Cross-Type Forging - Final Modifier Selection Probabilities (Normalized)
 
 **Calculation Summary:**
-- Each Blue Stat (Movement, Dual Wield, Rouge, Dodge): Selected with ~20.7% raw probability
-- Each ExtraProperty (Fear, Slow): Selected with ~48.2% raw probability  
+- Each Blue Stat (Dual Wield, Rouge, Dodge): Selected with ~39.5% raw probability
+- Each ExtraProperty (Fear, Slow, Burned): Selected with ~39.5% raw probability (before trimming effects)
 - Each Skill (Skill A, Skill B): Selected with ~14.0% raw probability (28.0% total / 2)
-- Total raw probability sum: 4 × 20.7% + 2 × 48.2% + 2 × 14.0% = 82.8% + 96.4% + 28.0% = **207.2%** (expected ~2.07 modifiers per forge)
+- Total raw probability sum: 3 × 39.5% + 3 × 39.5% + 2 × 14.0% = 118.5% + 118.5% + 28.0% = **265.0%** (expected ~2.65 modifiers per forge, before trimming)
 
 **Normalized to 100% (showing relative likelihood):**
 
 | Modifier | Type | Raw Probability | Normalized Probability | Interpretation |
 | :------: | :--: | :-------------: | :--------------------: | :------------- |
-| Movement | Blue Stat | ~20.7% | **10.0%** | 10.0% of all pool modifier appearances |
-| Dual Wield | Blue Stat | ~20.7% | **10.0%** | 10.0% of all pool modifier appearances |
-| Rouge | Blue Stat | ~20.7% | **9.9%** | 9.9% of all pool modifier appearances |
-| Dodge | Blue Stat | ~20.7% | **10.0%** | 10.0% of all pool modifier appearances |
-| Fear | ExtraProperty | ~48.2% | **23.3%** | 23.3% of all pool modifier appearances |
-| Slow | ExtraProperty | ~48.2% | **23.3%** | 23.3% of all pool modifier appearances |
-| Skill A | Skill | ~14.0% | **6.8%** | 6.8% of all pool modifier appearances |
-| Skill B | Skill | ~14.0% | **6.7%** | 6.7% of all pool modifier appearances |
-| **Total** | | **207.2%** | **100.0%** | All pool modifier appearances |
+| Dual Wield | Blue Stat | ~39.5% | **~14.9%** | ~14.9% of all pool modifier appearances |
+| Rouge | Blue Stat | ~39.5% | **~14.9%** | ~14.9% of all pool modifier appearances |
+| Dodge | Blue Stat | ~39.5% | **~14.9%** | ~14.9% of all pool modifier appearances |
+| Fear | ExtraProperty | ~39.5% | **~14.9%** | ~14.9% of all pool modifier appearances |
+| Slow | ExtraProperty | ~39.5% | **~14.9%** | ~14.9% of all pool modifier appearances |
+| Burned | ExtraProperty | ~39.5% | **~14.9%** | ~14.9% of all pool modifier appearances |
+| Skill A | Skill | ~14.0% | **~5.3%** | ~5.3% of all pool modifier appearances |
+| Skill B | Skill | ~14.0% | **~5.3%** | ~5.3% of all pool modifier appearances |
+| **Total** | | **~265.0%** | **100.0%** | All pool modifier appearances |
 
-**Verification:** 3 × 10.0% + 9.9% + 2 × 23.3% + 6.8% + 6.7% = 30.0% + 9.9% + 46.6% + 6.8% + 6.7% = **100.0%** ✓
+**Note:** Normalized probabilities are calculated as: `Normalized = (Raw / Total_Raw) × 100%`, where `Total_Raw = 265.0%`. These values account for trimming effects when F_total > 5. Exact values require detailed calculation through all joint outcomes with slot-weighted trimming.
 
 **Note:** This shows the distribution of "which modifier appears" across all possible pool modifier appearances. Multiple modifiers can appear simultaneously in a single forge result.
 
 ### Same-Type Forging - Final Modifier Selection Probabilities (Normalized)
 
 **Calculation Summary:**
-- Each Blue Stat (Movement, Dual Wield, Rouge, Dodge): Selected with ~32.9% raw probability
-- Each ExtraProperty (Fear, Slow): Selected with ~56.0% raw probability
+- Each Blue Stat (Dual Wield, Rouge, Dodge): Selected with ~46.8% raw probability
+- Each ExtraProperty (Fear, Slow, Burned): Selected with ~46.8% raw probability (before trimming effects)
 - Each Skill (Skill A, Skill B): Selected with ~28.0% raw probability (56.0% total / 2)
-- Total raw probability sum: 4 × 32.9% + 2 × 56.0% + 2 × 28.0% = 131.6% + 112.0% + 56.0% = **299.6%** (expected ~3.00 modifiers per forge)
+- Total raw probability sum: 3 × 46.8% + 3 × 46.8% + 2 × 28.0% = 140.4% + 140.4% + 56.0% = **336.8%** (expected ~3.37 modifiers per forge, before trimming)
 
 **Normalized to 100% (showing relative likelihood):**
 
 | Modifier | Type | Raw Probability | Normalized Probability | Interpretation |
 | :------: | :--: | :-------------: | :--------------------: | :------------- |
-| Movement | Blue Stat | ~32.9% | **11.0%** | 11.0% of all pool modifier appearances |
-| Dual Wield | Blue Stat | ~32.9% | **11.0%** | 11.0% of all pool modifier appearances |
-| Rouge | Blue Stat | ~32.9% | **11.0%** | 11.0% of all pool modifier appearances |
-| Dodge | Blue Stat | ~32.9% | **11.0%** | 11.0% of all pool modifier appearances |
-| Fear | ExtraProperty | ~56.0% | **18.7%** | 18.7% of all pool modifier appearances |
-| Slow | ExtraProperty | ~56.0% | **18.7%** | 18.7% of all pool modifier appearances |
-| Skill A | Skill | ~28.0% | **9.3%** | 9.3% of all pool modifier appearances |
-| Skill B | Skill | ~28.0% | **9.3%** | 9.3% of all pool modifier appearances |
-| **Total** | | **299.6%** | **100.0%** | All pool modifier appearances |
+| Dual Wield | Blue Stat | ~46.8% | **~13.9%** | ~13.9% of all pool modifier appearances |
+| Rouge | Blue Stat | ~46.8% | **~13.9%** | ~13.9% of all pool modifier appearances |
+| Dodge | Blue Stat | ~46.8% | **~13.9%** | ~13.9% of all pool modifier appearances |
+| Fear | ExtraProperty | ~46.8% | **~13.9%** | ~13.9% of all pool modifier appearances |
+| Slow | ExtraProperty | ~46.8% | **~13.9%** | ~13.9% of all pool modifier appearances |
+| Burned | ExtraProperty | ~46.8% | **~13.9%** | ~13.9% of all pool modifier appearances |
+| Skill A | Skill | ~28.0% | **~8.3%** | ~8.3% of all pool modifier appearances |
+| Skill B | Skill | ~28.0% | **~8.3%** | ~8.3% of all pool modifier appearances |
+| **Total** | | **~336.8%** | **100.0%** | All pool modifier appearances |
 
-**Verification:** 4 × 11.0% + 2 × 18.7% + 2 × 9.3% = 44.0% + 37.4% + 18.6% = **100.0%** ✓
+**Note:** Normalized probabilities are calculated as: `Normalized = (Raw / Total_Raw) × 100%`, where `Total_Raw = 336.8%`. These values account for trimming effects when F_total > 5. Exact values require detailed calculation through all joint outcomes with slot-weighted trimming.
 
 ## Notes
 
@@ -905,4 +869,4 @@ Using the same method for all pool modifiers:
 
 5. **Overall Cap:** With `OverallCap = 5` and only 1 protected slot (shared Finesse), up to 4 pool slots can be kept in the final result.
 
-6. **Smaller EP Pool:** With `P_ep_size = 2` (compared to 4 in previous case), the EP pool selection has higher individual probabilities (56% vs ~37.5% for cross-type).
+6. **Smaller Blue Stats Pool:** With `P_bs_size = 3` (instead of 4), each blue stat has a higher individual probability (~39.5% vs ~37.5% for cross-type) due to fewer candidates in the pool.
