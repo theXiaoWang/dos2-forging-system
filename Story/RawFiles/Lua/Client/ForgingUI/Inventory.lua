@@ -5,6 +5,48 @@ local ForgingUI = Client.ForgingUI
 local Inventory = {}
 Inventory.DEBUG = true
 
+local function SafeStatsField(stats, field)
+    if not stats then
+        return nil
+    end
+    local ok, value = pcall(function ()
+        return stats[field]
+    end)
+    if ok then
+        return value
+    end
+    return nil
+end
+
+local function SafeTemplateField(template, field)
+    if not template then
+        return nil
+    end
+    local ok, value = pcall(function ()
+        return template[field]
+    end)
+    if ok then
+        return value
+    end
+    return nil
+end
+
+local function IsEquipmentStatsId(statsId)
+    if not statsId then
+        return false
+    end
+    local key = string.upper(tostring(statsId))
+    return key:find("^WPN_") ~= nil
+        or key:find("^ARM_") ~= nil
+        or key:find("^ARMOR_") ~= nil
+        or key:find("^SHD_") ~= nil
+        or key:find("^SHIELD_") ~= nil
+        or key:find("^EQP_") ~= nil
+        or key:find("^RING_") ~= nil
+        or key:find("^AMULET_") ~= nil
+        or key:find("^BELT_") ~= nil
+end
+
 local function GetLocalCharacter()
     if Client and Client.GetCharacter then
         return Client.GetCharacter()
@@ -20,17 +62,45 @@ function Inventory.IsEquipmentItem(item)
         return false
     end
     local entity = item.Entity or item
-    if entity and entity.Stats then
-        return entity.Stats.ItemType == "Armor"
-            or entity.Stats.ItemType == "Weapon"
-            or entity.Stats.ItemType == "Shield"
-    end
-    local eclItem = item.Item or item.Entity or item
-    if Item and Item.IsEquipment then
-        local ok, result = pcall(Item.IsEquipment, eclItem)
-        if ok then
-            return result == true
+    local stats = entity and entity.Stats or nil
+    if stats and type(stats) == "string" and Ext and Ext.Stats and Ext.Stats.Get then
+        local ok, statsObj = pcall(Ext.Stats.Get, stats)
+        if ok and statsObj then
+            stats = statsObj
         end
+    end
+    if (not stats or not stats.ModifierListIndex) and entity and (entity.StatsId or entity.StatsID) and Ext and Ext.Stats and Ext.Stats.Get then
+        local ok, statsObj = pcall(Ext.Stats.Get, entity.StatsId or entity.StatsID)
+        if ok and statsObj then
+            stats = statsObj
+        end
+    end
+    if stats and Stats and Stats.GetType then
+        local ok, statsType = pcall(Stats.GetType, stats)
+        if ok and statsType then
+            local normalized = string.lower(tostring(statsType))
+            if normalized == "armor" or normalized == "weapon" or normalized == "shield" or normalized == "equipment" then
+                return true
+            end
+        end
+    end
+    local statsId = entity and (entity.StatsId or entity.StatsID) or SafeStatsField(stats, "Name")
+    if IsEquipmentStatsId(statsId) then
+        return true
+    end
+    local template = entity and entity.RootTemplate or nil
+    local templateType = SafeTemplateField(template, "ItemType")
+    if templateType then
+        local normalized = string.lower(tostring(templateType))
+        if normalized == "armor" or normalized == "weapon" or normalized == "shield" or normalized == "equipment" then
+            return true
+        end
+    end
+    local slot = SafeTemplateField(template, "ItemSlot")
+        or SafeTemplateField(template, "Slot")
+        or SafeTemplateField(template, "EquipmentSlot")
+    if slot and slot ~= "" then
+        return true
     end
     return false
 end
@@ -40,16 +110,31 @@ function Inventory.IsMagicalItem(item)
         return false
     end
     local entity = item.Entity or item
-    if entity and entity.Stats and entity.Stats.ItemType == "SkillBook" then
-        return true
-    end
     local template = entity and entity.RootTemplate or nil
-    local actions = template and template.OnUsePeaceActions or nil
+    local actions = SafeTemplateField(template, "OnUsePeaceActions")
     if actions then
         for _, action in ipairs(actions) do
             if action.Type == "SkillBook" then
                 return true
             end
+        end
+    end
+    if not actions then
+        actions = SafeTemplateField(template, "OnUseActions")
+        if actions then
+            for _, action in ipairs(actions) do
+                if action.Type == "SkillBook" then
+                    return true
+                end
+            end
+        end
+    end
+    local stats = entity and entity.Stats or nil
+    local statsName = stats and (stats.Name or stats.StatsId or stats.StatsID) or (entity.StatsId or entity.StatsID)
+    if statsName then
+        local key = string.lower(tostring(statsName))
+        if key:find("skillbook", 1, true) then
+            return true
         end
     end
     return false

@@ -3,6 +3,22 @@
 -- Utility library for working with colors.
 ---------------------------------------------
 
+local function Clamp(value, min, max)
+    if math.clamp then
+        return math.clamp(value, min, max)
+    end
+    if Ext and Ext.Math and Ext.Math.Clamp then
+        return Ext.Math.Clamp(value, min, max)
+    end
+    if value < min then
+        return min
+    end
+    if value > max then
+        return max
+    end
+    return value
+end
+
 ---@class ColorLib
 Color = {
     RGBColor = nil,
@@ -258,10 +274,10 @@ end
 ---@param a integer? Defaults to 255.
 ---@return RGBColor
 function RGBColor.Create(r, g, b, a)
-    r = math.clamp(r or 0, 0, 255)
-    g = math.clamp(g or 0, 0, 255)
-    b = math.clamp(b or 0, 0, 255)
-    a = math.clamp(a or 255, 0, 255)
+    r = Clamp(r or 0, 0, 255)
+    g = Clamp(g or 0, 0, 255)
+    b = Clamp(b or 0, 0, 255)
+    a = Clamp(a or 255, 0, 255)
     r, g, b, a = math.floor(r), math.floor(g), math.floor(b), math.floor(a)
 
     local color = {Red = r, Green = g, Blue = b, Alpha = a}

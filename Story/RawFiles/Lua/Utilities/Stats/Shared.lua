@@ -256,10 +256,21 @@ function Stats.MeetsRequirements(char, statID, isItem, itemSource)
     local isEquipment = false
 
     if isItem and itemSource then
-        if not itemSource.Stats then
-            return true
-        else
-            isEquipment = itemSource.Stats.ItemType ~= ""
+        local itemStats = itemSource.Stats
+        if not itemStats then
+            local statsId = itemSource.StatsId or itemSource.StatsID
+            if statsId then
+                itemStats = Ext.Stats.Get(statsId)
+            end
+        end
+        if itemStats and Stats.GetType then
+            local ok, statsType = pcall(Stats.GetType, itemStats)
+            if ok and statsType then
+                local normalized = string.lower(tostring(statsType))
+                if normalized == "weapon" or normalized == "armor" or normalized == "shield" or normalized == "equipment" then
+                    isEquipment = true
+                end
+            end
         end
     end
 

@@ -538,7 +538,9 @@ function Layout.EnsureToggleButton()
         if ctx.Ext and ctx.Ext.UI and ctx.Ext.UI.GetByName and ctx.Ext.UI.GetByName(ctx.TOGGLE_UI_ID) then
             pcall(ctx.Ext.UI.Destroy, ctx.TOGGLE_UI_ID)
         end
-        uiState.ToggleUIInstance = ctx.genericUI.Create(ctx.TOGGLE_UI_ID, {Layer = 100, Visible = false})
+        local baseLayer = ctx.genericUI.DEFAULT_LAYER or 15
+        local uiLayer = math.max(1, baseLayer - 8)
+        uiState.ToggleUIInstance = ctx.genericUI.Create(ctx.TOGGLE_UI_ID, {Layer = uiLayer + 1, Visible = false})
         existing = uiState.ToggleUIInstance
     end
 
@@ -876,6 +878,30 @@ function Layout.BuildUI()
 
     local contentTop = margin + topBarHeight + gap
     local contentHeight = canvasHeight - margin - contentTop
+    local warningHeight = Layout.Clamp(Layout.ScaleY(24), 20, 28)
+    local warningY = contentTop - warningHeight - Layout.ScaleY(4)
+    if warningY < (margin + topBarHeight) then
+        warningY = margin + topBarHeight + Layout.ScaleY(2)
+    end
+    local warningX = margin
+    local warningWidth = canvasWidth - margin * 2
+    local warningBG = canvas:AddChild("ForgeWarning_BG", "GenericUI_Element_Color")
+    warningBG:SetPosition(warningX, warningY)
+    warningBG:SetSize(warningWidth, warningHeight)
+    warningBG:SetColor(Color.CreateFromHex("2E1D12"))
+    warningBG:SetAlpha(0.75)
+    if warningBG.SetVisible then
+        warningBG:SetVisible(false)
+    end
+    local warningLabel = CreateTextElement(canvas, "ForgeWarning_Label", "", warningX + 8, warningY + 2, warningWidth - 16, warningHeight, "Left", false, {Size = 14, Color = "FFD27F", FontType = Text.FONTS.BOLD})
+    if warningLabel and warningLabel.SetVisible then
+        warningLabel:SetVisible(false)
+    end
+    local uiState = GetUIState()
+    if uiState then
+        uiState.WarningLabel = warningLabel
+        uiState.WarningBackground = warningBG
+    end
     local contentInsetX = Layout.Scale(ctx.UI_CONTENT_INSET_X or 0)
     local rightXPos = canvasWidth - margin - rightWidth - contentInsetX
     local leftX = margin

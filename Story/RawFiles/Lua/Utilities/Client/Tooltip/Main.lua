@@ -3,6 +3,24 @@ local TooltipUI = Client.UI.Tooltip
 local TextDisplay = Client.UI.TextDisplay
 local Examine = Client.UI.Examine
 
+local function RefreshUIHandles()
+    if Client and Client.UI then
+        TooltipUI = TooltipUI or Client.UI.Tooltip
+        TextDisplay = TextDisplay or Client.UI.TextDisplay
+        Examine = Examine or Client.UI.Examine
+    end
+end
+
+local function GetTooltipUI()
+    RefreshUIHandles()
+    return TooltipUI
+end
+
+local function GetTextDisplay()
+    RefreshUIHandles()
+    return TextDisplay
+end
+
 ---@class TooltipLib : Library
 local Tooltip = {
     nextTooltipData = nil, ---@type TooltipLib_TooltipSourceData?
@@ -356,7 +374,10 @@ end
 ---Does not fire events.
 ---@param data TooltipLib_SimpleTooltip
 function Tooltip.ShowSimpleTooltip(data)
-    local ui = TooltipUI
+    local ui = GetTooltipUI()
+    if not ui then
+        return
+    end
     local root = ui:GetRoot()
     local useCursorPosition = data.Position == nil
     local position = data.Position or Vector.Create(Client.GetMousePosition())
@@ -389,6 +410,10 @@ end
 ---@param text string
 ---@param offset Vector2D?
 function Tooltip.ShowMouseTextTooltip(text, offset)
+    local display = GetTextDisplay()
+    if not display then
+        return
+    end
     local mousePos = Vector.Create(Client.GetMousePosition())
     local position = mousePos
 
@@ -396,7 +421,7 @@ function Tooltip.ShowMouseTextTooltip(text, offset)
         position = position + offset
     end
 
-    TextDisplay.ShowText(text, position)
+    display.ShowText(text, position)
 end
 
 ---Returns the source data of the currently visible **formatted** tooltip.
@@ -406,7 +431,11 @@ function Tooltip.GetCurrentTooltipSourceData()
 end
 
 function Tooltip.HideMouseTextTooltip()
-    local root = TextDisplay:GetRoot()
+    local display = GetTextDisplay()
+    if not display then
+        return
+    end
+    local root = display:GetRoot()
 
     root.removeText()
 end
@@ -414,6 +443,9 @@ end
 ---@param tooltip TooltipLib_CustomFormattedTooltip
 function Tooltip.ShowCustomFormattedTooltip(tooltip)
     local ui = Tooltip._GetDefaultCustomTooltipUI()
+    if not ui then
+        return
+    end
     local characterHandle = Ext.UI.HandleToDouble(Client.GetCharacter().Handle)
     local mouseX, mouseY = Client.GetMousePosition()
 
@@ -429,7 +461,7 @@ function Tooltip.ShowCustomFormattedTooltip(tooltip)
         IsFromGame = false,
     })
 
-    ui:ExternalInterfaceCall("showSkillTooltip", characterHandle, "Teleportation_FreeFall", mouseX, mouseY, 100, 100, "left")
+    pcall(ui.ExternalInterfaceCall, ui, "showSkillTooltip", characterHandle, "Teleportation_FreeFall", mouseX, mouseY, 100, 100, "left")
 end
 
 ---@param char EclCharacter
@@ -437,6 +469,9 @@ end
 ---@param position Vector2D? Defaults to mouse position.
 function Tooltip.ShowSkillTooltip(char, skillID, position)
     local ui = Tooltip._GetDefaultCustomTooltipUI()
+    if not ui then
+        return
+    end
     local mouseX, mouseY = Client.GetMousePosition()
 
     Tooltip._nextSkillTooltip = {
@@ -445,7 +480,7 @@ function Tooltip.ShowSkillTooltip(char, skillID, position)
         Position = position or Vector.Create(mouseX, mouseY)
     }
 
-    ui:ExternalInterfaceCall("showSkillTooltip", Ext.UI.HandleToDouble(char.Handle), skillID, mouseX, mouseY, 20, 0, "left")
+    pcall(ui.ExternalInterfaceCall, ui, "showSkillTooltip", Ext.UI.HandleToDouble(char.Handle), skillID, mouseX, mouseY, 20, 0, "left")
 end
 
 ---Renders an item tooltip.
@@ -453,6 +488,9 @@ end
 ---@param position Vector2D? Defaults to mouse position.
 function Tooltip.ShowItemTooltip(item, position)
     local ui = Tooltip._GetDefaultCustomTooltipUI()
+    if not ui then
+        return
+    end
     local mouseX, mouseY = Client.GetMousePosition()
 
     Tooltip._nextItemTooltip = {
@@ -460,15 +498,21 @@ function Tooltip.ShowItemTooltip(item, position)
         Position = position or Vector.Create(mouseX, mouseY)
     }
 
-    ui:ExternalInterfaceCall("showItemTooltip", Ext.UI.HandleToDouble(item.Handle), mouseX, mouseY, 100, 100, -1, "left") -- TODO customize align
+    pcall(ui.ExternalInterfaceCall, ui, "showItemTooltip", Ext.UI.HandleToDouble(item.Handle), mouseX, mouseY, 100, 100, -1, "left") -- TODO customize align
 end
 
 function Tooltip.HideTooltip()
     local ui = Tooltip._GetDefaultCustomTooltipUI()
+    if not ui then
+        return
+    end
 
     ui:ExternalInterfaceCall("hideTooltip")
 
-    TooltipUI:GetRoot().removeTooltip()
+    local tooltipUI = GetTooltipUI()
+    if tooltipUI and tooltipUI.GetRoot then
+        tooltipUI:GetRoot().removeTooltip()
+    end
 
     Tooltip._currentTooltipData = nil
 end
@@ -476,7 +520,14 @@ end
 ---Returns the default UI to be used for displaying custom tooltips.
 ---@return UIObject
 function Tooltip._GetDefaultCustomTooltipUI()
-    return Ext.UI.GetByType(Ext.UI.TypeID.containerInventory.Pickpocket) -- Exists for both input methods. The default containerInventory's item tooltips use the owner character of items to show compare tooltips, instead of the client character.
+    local ui = Ext.UI.GetByType(Ext.UI.TypeID.containerInventory.Pickpocket)
+    if not ui then
+        ui = Ext.UI.GetByType(Ext.UI.TypeID.containerInventory.Default)
+    end
+    if not ui then
+        ui = GetTooltipUI()
+    end
+    return ui -- The default containerInventory's item tooltips use the owner character of items to show compare tooltips, instead of the client character.
 end
 
 ---@param ui UIObject
@@ -625,36 +676,259 @@ Ext.Events.UICall:Subscribe(function(ev)
     end
 end)
 
--- Listen for formatted tooltip invokes on the main tooltip UI.
-TooltipUI:RegisterInvokeListener("addFormattedTooltip", function(ev, _, _, _)
-    Tooltip._HandleFormattedTooltip(ev, "tooltip_array", Tooltip.nextTooltipData, nil)
-end)
+local isCharTooltip = false
+local isExpTooltip = false
 
--- Listen for status tooltip invokes on the main tooltip UI.
-TooltipUI:RegisterInvokeListener("addStatusTooltip", function (ev)
-    Tooltip._HandleFormattedTooltip(ev, "tooltip_array", Tooltip.nextTooltipData)
-end)
-
--- Listen for custom formatted tooltip render requests.
-TooltipUI:RegisterInvokeListener("addFormattedTooltip", function(ev, _, _, _)
-    if Tooltip._nextCustomTooltip then
-        local tooltipData = Tooltip._nextCustomTooltip
-
-        -- Clear the previous tooltip data
-        TooltipUI:GetRoot().tooltip_array.length = 0
-
-        local mouseX, mouseY = Client.GetMousePosition()
-        Tooltip._SetNextTooltipSource({
-            UIType = Ext.UI.TypeID.containerInventory.Default,
-            Type = "Custom",
-            UICall = "showSkillTooltip",
-            FlashParams = {Ext.UI.HandleToDouble(Client.GetCharacter().Handle), "Teleportation_FreeFall", mouseX, mouseY, 100, 100, "Left"},
-            CustomTooltipID = tooltipData.ID,
-            IsFromGame = false,
-        })
-        Tooltip._HandleFormattedTooltip(ev, "tooltip_array", Tooltip._currentTooltipData, tooltipData.Elements)
+local function RegisterTooltipUIListeners()
+    local ui = GetTooltipUI()
+    if not ui or Tooltip._TooltipUIListenersRegistered then
+        return ui ~= nil
     end
-end)
+    Tooltip._TooltipUIListenersRegistered = true
+
+    -- Listen for formatted tooltip invokes on the main tooltip UI.
+    ui:RegisterInvokeListener("addFormattedTooltip", function(ev, _, _, _)
+        Tooltip._HandleFormattedTooltip(ev, "tooltip_array", Tooltip.nextTooltipData, nil)
+    end)
+
+    -- Listen for status tooltip invokes on the main tooltip UI.
+    ui:RegisterInvokeListener("addStatusTooltip", function (ev)
+        Tooltip._HandleFormattedTooltip(ev, "tooltip_array", Tooltip.nextTooltipData)
+    end)
+
+    -- Listen for custom formatted tooltip render requests.
+    ui:RegisterInvokeListener("addFormattedTooltip", function(ev, _, _, _)
+        if Tooltip._nextCustomTooltip then
+            local tooltipData = Tooltip._nextCustomTooltip
+
+            -- Clear the previous tooltip data
+            ui:GetRoot().tooltip_array.length = 0
+
+            local mouseX, mouseY = Client.GetMousePosition()
+            Tooltip._SetNextTooltipSource({
+                UIType = Ext.UI.TypeID.containerInventory.Default,
+                Type = "Custom",
+                UICall = "showSkillTooltip",
+                FlashParams = {Ext.UI.HandleToDouble(Client.GetCharacter().Handle), "Teleportation_FreeFall", mouseX, mouseY, 100, 100, "Left"},
+                CustomTooltipID = tooltipData.ID,
+                IsFromGame = false,
+            })
+            Tooltip._HandleFormattedTooltip(ev, "tooltip_array", Tooltip._currentTooltipData, tooltipData.Elements)
+        end
+    end)
+
+    -- Listen for simple tooltips.
+    ui:RegisterInvokeListener("addTooltip", function (ev, text, x, y, allowDelay, stickToMouseMode, tooltipStyle)
+        -- Default values from flash method.
+        x = x or 0
+        y = y or 18
+        stickToMouseMode = stickToMouseMode or 0
+        if allowDelay == nil then allowDelay = true end
+        if tooltipStyle == nil then tooltipStyle = 0 end
+
+        local event = Tooltip.Hooks.RenderSimpleTooltip:Throw({
+            Tooltip = {
+                Label = text,
+                Position = Vector.Create(x, y),
+                UseDelay = allowDelay,
+                MouseStickMode = table.reverseLookup(Tooltip.SIMPLE_TOOLTIP_MOUSE_STICK_MODE, stickToMouseMode),
+                TooltipStyle = table.reverseLookup(Tooltip.SIMPLE_TOOLTIP_STYLES, tooltipStyle),
+                IsCharacterTooltip = isCharTooltip,
+                IsExperienceTooltip = isExpTooltip,
+            }
+        })
+
+        -- Clear custom tooltip tracking
+        -- so as to prevent it from showing up again when re-rendering.
+        Tooltip._LastCustomTooltipSource = nil
+        Tooltip._LastCustomTooltipEntry = nil
+
+        if not event.Prevented then
+            local tooltipData = event.Tooltip
+            ev.UI:GetRoot().addTooltip(tooltipData.Label, tooltipData.Position[1], tooltipData.Position[2], tooltipData.UseDelay, Tooltip.SIMPLE_TOOLTIP_MOUSE_STICK_MODE[tooltipData.MouseStickMode], Tooltip.SIMPLE_TOOLTIP_STYLES[tooltipData.TooltipStyle])
+        end
+
+        isCharTooltip = false
+        isExpTooltip = false
+
+        ev:PreventAction()
+    end, "Before")
+
+    return true
+end
+
+local function RegisterTextDisplayListeners()
+    local display = GetTextDisplay()
+    if not display or Tooltip._TextDisplayListenersRegistered then
+        return display ~= nil
+    end
+    Tooltip._TextDisplayListenersRegistered = true
+
+    -- Listen for surface tooltips from TextDisplay.
+    display:RegisterInvokeListener("displaySurfaceText", function(ev, _, _)
+        local ui = ev.UI
+        local arrayFieldName = "tooltipArray"
+
+        Tooltip._SetNextTooltipSource({
+            UIType = ev.UI:GetTypeId(),
+            Type = "Surface",
+            IsFromGame = true,
+        })
+
+        local tbl = Tooltip._ParseTooltipArray(Game.Tooltip.TableFromFlash(ui, arrayFieldName))
+
+        local hook = Tooltip._SendFormattedTooltipHook(ui, "Surface", tbl, Tooltip.nextTooltipData)
+
+        if not hook.Prevented then
+            local newTable = Game.Tooltip.EncodeTooltipArray(hook.Tooltip.Elements)
+
+            Game.Tooltip.ReplaceTooltipArray(ui, arrayFieldName, newTable, tbl)
+        else
+            ev:PreventAction()
+        end
+    end)
+
+    -- Listen for mouse text tooltips.
+    display.Hooks.GetText:Subscribe(function (ev)
+        local hook = {Text = ev.Label} ---@type TooltipLib_Hook_RenderMouseTextTooltip
+
+        Tooltip.Hooks.RenderMouseTextTooltip:Throw(hook)
+
+        if hook.Prevented then
+            ev:Prevent()
+        else
+            ev.Label = hook.Text
+        end
+    end)
+
+    display.Events.FormattedTooltipRemoved:Subscribe(function (_) -- In TextDisplay this is being done via an engine invoke, not a UI call.
+        Tooltip._currentTooltipData = nil
+
+        Tooltip.Events.TooltipHidden:Throw()
+    end)
+
+    return true
+end
+
+local function RegisterExamineListeners()
+    RefreshUIHandles()
+    if not Examine or Tooltip._ExamineListenersRegistered then
+        return Examine ~= nil
+    end
+    Tooltip._ExamineListenersRegistered = true
+
+    -- Hide custom tooltips from the Examine UI,
+    -- as the game does not appear to do this properly when hovering out of stats with custom IDs.
+    Examine:RegisterCallListener("hideTooltip", function (_)
+        local ui = Tooltip._GetDefaultCustomTooltipUI()
+        if ui then
+            ui:ExternalInterfaceCall("hideTooltip")
+        end
+    end, "After")
+
+    return true
+end
+
+local function TryRegisterUIListeners()
+    local tooltipReady = RegisterTooltipUIListeners()
+    local textReady = RegisterTextDisplayListeners()
+    RegisterExamineListeners()
+    return tooltipReady and textReady
+end
+
+local function EnsureUIListeners()
+    if TryRegisterUIListeners() then
+        return
+    end
+    if Tooltip._UIListenerBootstrap then
+        return
+    end
+    Tooltip._UIListenerBootstrap = true
+    local subscriberID = "TooltipLib_UIListenerBootstrap"
+    local function TryAgain()
+        if TryRegisterUIListeners() then
+            if GameState and GameState.Events and GameState.Events.RunningTick then
+                GameState.Events.RunningTick:Unsubscribe(subscriberID)
+            elseif Ext and Ext.Events and Ext.Events.Tick then
+                Ext.Events.Tick:Unsubscribe(subscriberID)
+            end
+        end
+    end
+    if GameState and GameState.Events and GameState.Events.RunningTick then
+        GameState.Events.RunningTick:Subscribe(function (_)
+            TryAgain()
+        end, {StringID = subscriberID})
+    elseif Ext and Ext.Events and Ext.Events.Tick then
+        Ext.Events.Tick:Subscribe(function (_)
+            TryAgain()
+        end, {StringID = subscriberID})
+    else
+        Ext.OnNextTick(TryAgain)
+    end
+end
+
+EnsureUIListeners()
+
+local function RegisterInputListeners()
+    if Tooltip._InputListenersRegistered then
+        return Client and Client.Input and Client.Input.Events and Client.Input.Events.KeyStateChanged ~= nil
+    end
+    if not Client or not Client.Input or not Client.Input.Events or not Client.Input.Events.KeyStateChanged then
+        return false
+    end
+    Tooltip._InputListenersRegistered = true
+    Client.Input.Events.KeyStateChanged:Subscribe(function (ev)
+        if ev.InputID == "lshift" then
+            local currentTooltip = Tooltip._currentTooltipData
+            if Tooltip._LastCustomTooltipSource then
+                Tooltip.HideTooltip()
+                Tooltip.ShowCustomFormattedTooltip(Tooltip._LastCustomTooltipEntry)
+            elseif currentTooltip and currentTooltip.UICall then
+                Ext.OnNextTick(function()
+                    local ui = Ext.UI.GetByType(currentTooltip.UIType)
+                    if ui then
+                        ui:ExternalInterfaceCall("hideTooltip")
+                        ui:ExternalInterfaceCall(currentTooltip.UICall, unpack(currentTooltip.FlashParams))
+                    end
+                end)
+            end
+        end
+    end)
+    return true
+end
+
+local function EnsureInputListeners()
+    if RegisterInputListeners() then
+        return
+    end
+    if Tooltip._InputListenerBootstrap then
+        return
+    end
+    Tooltip._InputListenerBootstrap = true
+    local subscriberID = "TooltipLib_InputListenerBootstrap"
+    local function TryAgain()
+        if RegisterInputListeners() then
+            if GameState and GameState.Events and GameState.Events.RunningTick then
+                GameState.Events.RunningTick:Unsubscribe(subscriberID)
+            elseif Ext and Ext.Events and Ext.Events.Tick then
+                Ext.Events.Tick:Unsubscribe(subscriberID)
+            end
+        end
+    end
+    if GameState and GameState.Events and GameState.Events.RunningTick then
+        GameState.Events.RunningTick:Subscribe(function (_)
+            TryAgain()
+        end, {StringID = subscriberID})
+    elseif Ext and Ext.Events and Ext.Events.Tick then
+        Ext.Events.Tick:Subscribe(function (_)
+            TryAgain()
+        end, {StringID = subscriberID})
+    else
+        Ext.OnNextTick(TryAgain)
+    end
+end
+
+EnsureInputListeners()
 
 -- Position custom formatted tooltips after rendering.
 Ext.RegisterUINameInvokeListener("showFormattedTooltipAfterPos", function(ui)
@@ -688,46 +962,7 @@ Ext.RegisterUINameInvokeListener("showFormattedTooltipAfterPos", function(_)
     Tooltip.Events.TooltipPositioned:Throw()
 end, "After")
 
--- Listen for surface tooltips from TextDisplay.
-TextDisplay:RegisterInvokeListener("displaySurfaceText", function(ev, _, _)
-    local ui = ev.UI
-    local arrayFieldName = "tooltipArray"
-
-    Tooltip._SetNextTooltipSource({
-        UIType = ev.UI:GetTypeId(),
-        Type = "Surface",
-        IsFromGame = true,
-    })
-
-    local tbl = Tooltip._ParseTooltipArray(Game.Tooltip.TableFromFlash(ui, arrayFieldName))
-
-    local hook = Tooltip._SendFormattedTooltipHook(ui, "Surface", tbl, Tooltip.nextTooltipData)
-
-    if not hook.Prevented then
-        local newTable = Game.Tooltip.EncodeTooltipArray(hook.Tooltip.Elements)
-
-        Game.Tooltip.ReplaceTooltipArray(ui, arrayFieldName, newTable, tbl)
-    else
-        ev:PreventAction()
-    end
-end)
-
--- Listen for mouse text tooltips.
-TextDisplay.Hooks.GetText:Subscribe(function (ev)
-    local hook = {Text = ev.Label} ---@type TooltipLib_Hook_RenderMouseTextTooltip
-
-    Tooltip.Hooks.RenderMouseTextTooltip:Throw(hook)
-
-    if hook.Prevented then
-        ev:Prevent()
-    else
-        ev.Label = hook.Text
-    end
-end)
-
 -- Listen for simple tooltips.
-local isCharTooltip = false
-local isExpTooltip = false
 Ext.Events.UICall:Subscribe(function(ev)
     ev = ev ---@type EclLuaUICallEvent
 
@@ -739,77 +974,9 @@ Ext.Events.UICall:Subscribe(function(ev)
         end
     end
 end)
-TooltipUI:RegisterInvokeListener("addTooltip", function (ev, text, x, y, allowDelay, stickToMouseMode, tooltipStyle)
-    -- Default values from flash method.
-    x = x or 0
-    y = y or 18
-    stickToMouseMode = stickToMouseMode or 0
-    if allowDelay == nil then allowDelay = true end
-    if tooltipStyle == nil then tooltipStyle = 0 end
-
-    local event = Tooltip.Hooks.RenderSimpleTooltip:Throw({
-        Tooltip = {
-            Label = text,
-            Position = Vector.Create(x, y),
-            UseDelay = allowDelay,
-            MouseStickMode = table.reverseLookup(Tooltip.SIMPLE_TOOLTIP_MOUSE_STICK_MODE, stickToMouseMode),
-            TooltipStyle = table.reverseLookup(Tooltip.SIMPLE_TOOLTIP_STYLES, tooltipStyle),
-            IsCharacterTooltip = isCharTooltip,
-            IsExperienceTooltip = isExpTooltip,
-        }
-    })
-
-    -- Clear custom tooltip tracking
-    -- so as to prevent it from showing up again when re-rendering.
-    Tooltip._LastCustomTooltipSource = nil
-    Tooltip._LastCustomTooltipEntry = nil
-
-    if not event.Prevented then
-        local tooltipData = event.Tooltip
-        ev.UI:GetRoot().addTooltip(tooltipData.Label, tooltipData.Position[1], tooltipData.Position[2], tooltipData.UseDelay, Tooltip.SIMPLE_TOOLTIP_MOUSE_STICK_MODE[tooltipData.MouseStickMode], Tooltip.SIMPLE_TOOLTIP_STYLES[tooltipData.TooltipStyle])
-    end
-
-    isCharTooltip = false
-    isExpTooltip = false
-
-    ev:PreventAction()
-end, "Before")
-
--- Re-render the current tooltip when shift is pressed/released
--- Used for conditional rendering based on the shift key being pressed.
--- Currently only supported for skill and item tooltips.
-Client.Input.Events.KeyStateChanged:Subscribe(function (ev)
-    if ev.InputID == "lshift" then
-        local currentTooltip = Tooltip._currentTooltipData
-        if Tooltip._LastCustomTooltipSource then
-            Tooltip.HideTooltip()
-            Tooltip.ShowCustomFormattedTooltip(Tooltip._LastCustomTooltipEntry)
-        elseif currentTooltip and currentTooltip.UICall then
-            Ext.OnNextTick(function()
-                local ui = Ext.UI.GetByType(currentTooltip.UIType)
-
-                ui:ExternalInterfaceCall("hideTooltip")
-                ui:ExternalInterfaceCall(currentTooltip.UICall, unpack(currentTooltip.FlashParams))
-            end)
-        end
-    end
-end)
-
 -- Throw events for tooltips being removed.
 Ext.RegisterUINameCall("hideTooltip", function()
     Tooltip._currentTooltipData = nil
 
     Tooltip.Events.TooltipHidden:Throw()
 end)
-TextDisplay.Events.FormattedTooltipRemoved:Subscribe(function (_) -- In TextDisplay this is being done via an engine invoke, not a UI call.
-    Tooltip._currentTooltipData = nil
-
-    Tooltip.Events.TooltipHidden:Throw()
-end)
-
--- Hide custom tooltips from the Examine UI,
--- as the game does not appear to do this properly when hovering out of stats with custom IDs.
-Examine:RegisterCallListener("hideTooltip", function (_)
-    local ui = Tooltip._GetDefaultCustomTooltipUI()
-    ui:ExternalInterfaceCall("hideTooltip")
-end, "After")

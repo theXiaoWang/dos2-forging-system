@@ -16,6 +16,7 @@ local V = Vector.Create
 ---@field _AutoUpdateRemainingDelay number In seconds.
 ---@field _RequiredFeatures GenericUI.Prefabs.HotbarSlot.RequiredFeatures
 ---@field _ValidObjectTypes set<GenericUI_Prefab_HotbarSlot_Object_Type>
+---@field _DropValidator fun(slot:GenericUI_Prefab_HotbarSlot, context:GenericUI_Prefab_HotbarSlot_DropContext):boolean?
 local Slot = {
     ID = nil, ---@type string
     SlotElement = nil, ---@type GenericUI_Element_Slot
@@ -61,6 +62,12 @@ Generic.RegisterPrefab("GenericUI_Prefab_HotbarSlot", Slot)
 ---@field TextLabel boolean? Whether to use a Text element for the label instead of the simple flash textfield of the Slot element. Defaults to `false`.
 
 ---@alias GenericUI_Prefab_HotbarSlot_Object_Type "None"|"Skill"|"Item"|"Action"|"Template"
+
+---@class GenericUI_Prefab_HotbarSlot_DropContext
+---@field ObjectType GenericUI_Prefab_HotbarSlot_Object_Type
+---@field ObjectID string? For skills/actions.
+---@field Item EclItem?
+---@field DragData any
 
 ---@class GenericUI_Prefab_HotbarSlot_Object
 ---@field Type GenericUI_Prefab_HotbarSlot_Object_Type
@@ -131,6 +138,7 @@ function Slot.Create(ui, id, parent, requiredFeatures)
     obj._Usable = true
     obj._RequiredFeatures = requiredFeatures
     obj._ValidObjectTypes = {["Skill"] = true, ["Item"] = true, ["Action"] = true, ["Template"] = true} -- Allow all object types by default
+    obj._DropValidator = nil
 
     obj.SlotElement = ui:CreateElement(id, "GenericUI_Element_Slot", parent)
     local slot = obj.SlotElement
@@ -261,6 +269,12 @@ end
 ---@param types set<GenericUI_Prefab_HotbarSlot_Object_Type>
 function Slot:SetValidObjectTypes(types)
     self._ValidObjectTypes = types
+end
+
+---Sets a callback to validate drops before assigning them to the slot.
+---@param validator fun(slot:GenericUI_Prefab_HotbarSlot, context:GenericUI_Prefab_HotbarSlot_DropContext):boolean?
+function Slot:SetDropValidator(validator)
+    self._DropValidator = validator
 end
 
 ---Sets the icon of the slot.
@@ -446,6 +460,18 @@ end
 -- EVENT LISTENERS
 ---------------------------------------------
 
+function Slot:_PassesDropValidator(context)
+    local validator = self._DropValidator
+    if not validator then
+        return true
+    end
+    local ok, result = pcall(validator, self, context)
+    if not ok then
+        return true
+    end
+    return result ~= false
+end
+
 function Slot:_OnElementMouseUp(_)
     if self._CanDrop then
         local data = Ext.UI.GetDragDrop().PlayerDragDrops[1]
@@ -456,15 +482,28 @@ function Slot:_OnElementMouseUp(_)
             local isSkill = Stats.Get("SkillData", objectID) ~= nil
             local canDragIn = (isAction and self._ValidObjectTypes["Action"]) or (isSkill and self._ValidObjectTypes["Skill"])
             if canDragIn then
-                self:SetSkill(objectID)
-                objectWasDropped = true
+                local objectType = isAction and "Action" or "Skill"
+                if self:_PassesDropValidator({
+                    ObjectType = objectType,
+                    ObjectID = objectID,
+                    DragData = data,
+                }) then
+                    self:SetSkill(objectID)
+                    objectWasDropped = true
+                end
             end
         else
             local item = Item.Get(data.DragObject)
             if item and self._ValidObjectTypes["Item"] then
-                self:SetTemplate(item.RootTemplate.Id)
-                self.Object.ItemHandle = item.Handle -- For dragging purposes only.
-                objectWasDropped = true
+                if self:_PassesDropValidator({
+                    ObjectType = "Item",
+                    Item = item,
+                    DragData = data,
+                }) then
+                    self:SetTemplate(item.RootTemplate.Id)
+                    self.Object.ItemHandle = item.Handle -- For dragging purposes only.
+                    objectWasDropped = true
+                end
             end
         end
 

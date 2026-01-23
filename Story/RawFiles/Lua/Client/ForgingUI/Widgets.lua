@@ -95,6 +95,12 @@ function Widgets.CreateFrame(parent, id, x, y, width, height, fillColor, alpha, 
     frame:SetPosition(x, y)
     ApplySize(frame, width or 0, height or 0)
     NormalizeScale(frame)
+    if frame.SetMouseEnabled then
+        frame:SetMouseEnabled(true)
+    end
+    if frame.SetMouseChildren then
+        frame:SetMouseChildren(true)
+    end
 
     local frameTex = nil
     local hasSlicedTexture = false
@@ -171,6 +177,12 @@ function Widgets.CreateFrame(parent, id, x, y, width, height, fillColor, alpha, 
     local inner = frame:AddChild(id .. "_Inner", "GenericUI_Element_Empty")
     inner:SetPosition(0, 0)
     NormalizeScale(inner)
+    if inner.SetMouseEnabled then
+        inner:SetMouseEnabled(true)
+    end
+    if inner.SetMouseChildren then
+        inner:SetMouseChildren(true)
+    end
 
     -- Only create innerBG if not using sliced textures (sliced textures have their own transparency)
     -- Similar to how CreateSkinnedPanel handles textures
@@ -190,6 +202,12 @@ function Widgets.CreateFrame(parent, id, x, y, width, height, fillColor, alpha, 
         innerBG:SetAlpha(innerAlpha)
         if innerBG.SetVisible then
             innerBG:SetVisible(innerAlpha > 0)
+        end
+        if innerBG.SetMouseEnabled then
+            innerBG:SetMouseEnabled(false)
+        end
+        if innerBG.SetMouseChildren then
+            innerBG:SetMouseChildren(false)
         end
         NormalizeScale(innerBG)
     end
@@ -387,15 +405,42 @@ local function EnsurePreviewSlot(index)
         slot.SlotElement:SetSizeOverride(V(previewInventory.SlotSize, previewInventory.SlotSize))
     end
     slot:SetCanDrag(true, false)
-    slot:SetCanDrop(false)
+    slot:SetCanDrop(true)
     slot:SetEnabled(true)
     previewInventory.Slots[index] = slot
+    if ctx and ctx.PreviewLogic and ctx.PreviewLogic.WirePreviewSlot then
+        ctx.PreviewLogic.WirePreviewSlot(index, slot)
+    end
     return slot
 end
 
 local function RenderPreviewInventory()
     if not previewInventory.Grid or not previewInventory.ScrollList or not ctx or not ctx.Inventory then
         return
+    end
+
+    if ctx.PreviewLogic and ctx.PreviewLogic.SetPreviewFilter then
+        ctx.PreviewLogic.SetPreviewFilter(previewInventory.Filter)
+    end
+
+    local function ResolveEntryItem(entry)
+        if not entry then
+            return nil
+        end
+        local displayItem = entry.Item or entry.Entity
+        if not displayItem and entry.Guid and Item and Item.Get then
+            local ok, result = pcall(Item.Get, entry.Guid)
+            if ok then
+                displayItem = result
+            end
+        end
+        if not displayItem and entry.Entity and entry.Entity.Handle and Item and Item.Get then
+            local ok, result = pcall(Item.Get, entry.Entity.Handle)
+            if ok then
+                displayItem = result
+            end
+        end
+        return displayItem
     end
 
     local items = ctx.Inventory.GetInventoryItems()
@@ -415,32 +460,39 @@ local function RenderPreviewInventory()
     end
 
     local columns = previewInventory.Columns or 1
-    local rows = math.max(1, math.ceil(#filtered / columns) + 1)
+    local filteredItems = {}
+    for _, entry in ipairs(filtered) do
+        local displayItem = ResolveEntryItem(entry)
+        if displayItem then
+            table.insert(filteredItems, displayItem)
+        end
+    end
+    local allItems = {}
+    for _, entry in ipairs(items or {}) do
+        local displayItem = ResolveEntryItem(entry)
+        if displayItem then
+            table.insert(allItems, displayItem)
+        end
+    end
+
+    local displayItems = filteredItems
+    local totalSlots = 0
+    if ctx.PreviewLogic and ctx.PreviewLogic.BuildPreviewInventoryLayout then
+        displayItems, totalSlots = ctx.PreviewLogic.BuildPreviewInventoryLayout(filteredItems, allItems, columns)
+    else
+        local rows = math.max(1, math.ceil(#filteredItems / columns) + 1)
+        totalSlots = rows * columns
+    end
+
+    local rows = math.max(1, math.ceil(totalSlots / columns))
     if previewInventory.Grid.SetGridSize and columns > 0 then
         previewInventory.Grid:SetGridSize(columns, rows)
     end
 
-    local totalSlots = rows * columns
     for index = 1, totalSlots do
         local slot = EnsurePreviewSlot(index)
         if slot then
-            local item = filtered[index]
-            local displayItem = nil
-            if item then
-                displayItem = item.Item or item.Entity
-                if not displayItem and item.Guid and Item and Item.Get then
-                    local ok, result = pcall(Item.Get, item.Guid)
-                    if ok then
-                        displayItem = result
-                    end
-                end
-                if not displayItem and item.Entity and item.Entity.Handle and Item and Item.Get then
-                    local ok, result = pcall(Item.Get, item.Entity.Handle)
-                    if ok then
-                        displayItem = result
-                    end
-                end
-            end
+            local displayItem = displayItems and displayItems[index] or nil
             if displayItem then
                 slot:SetItem(displayItem)
                 slot:SetEnabled(true)
@@ -474,7 +526,14 @@ local function RenderPreviewInventory()
     end
 
     if previewInventory.EmptyLabel then
-        previewInventory.EmptyLabel:SetVisible(#filtered == 0)
+        local hasItems = false
+        for _, entry in pairs(displayItems or {}) do
+            if entry then
+                hasItems = true
+                break
+            end
+        end
+        previewInventory.EmptyLabel:SetVisible(not hasItems)
     end
     if ctx and ctx.PreviewLogic and ctx.PreviewLogic.RefreshInventoryHighlights then
         ctx.PreviewLogic.RefreshInventoryHighlights()
@@ -702,21 +761,76 @@ function Widgets.WireSlot(slot, id)
     end)
 end
 
-function Widgets.CreateDropSlot(parent, id, x, y, size)
+function Widgets.CreateDropSlot(parent, id, x, y, size, useFancyFrame)
     if not parent or not ctx then
         return nil
     end
 
+    -- Default to fancy frame for Main/Donor item slots
+    if useFancyFrame == nil then
+        useFancyFrame = id and (id:find("Main_ItemSlot") or id:find("Donor_ItemSlot"))
+    end
+
     if ctx.hotbarSlotPrefab and ctx.hotbarSlotPrefab.Create then
+        -- For fancy frame slots, create the frame background first
+        -- Frame is larger than slot to contain the hover highlight
+        local frameBackground = nil
+        local framePadding = 12  -- Extra padding to contain highlight
+        if useFancyFrame and ctx.mainSlotFrameTexture then
+            local frameSize = size + framePadding * 2
+            local frameX = x - framePadding
+            local frameY = y - framePadding
+            frameBackground = parent:AddChild(id .. "_FancyFrame", "GenericUI_Element_Texture")
+            frameBackground:SetTexture(ctx.mainSlotFrameTexture, V(frameSize, frameSize))
+            frameBackground:SetPosition(frameX, frameY)
+            frameBackground:SetSize(frameSize, frameSize)
+            if frameBackground.SetMouseEnabled then
+                frameBackground:SetMouseEnabled(false)
+            end
+        end
+
         local slot = ctx.hotbarSlotPrefab.Create(GetUI(), id, parent)
         slot:SetPosition(x, y)
         slot:SetSize(size, size)
         slot:SetCanDrop(true)
         slot:SetEnabled(true)
+        if slot.SlotElement then
+            if slot.SlotElement.SetMouseEnabled then
+                slot.SlotElement:SetMouseEnabled(true)
+            end
+            if slot.SlotElement.SetMouseChildren then
+                slot.SlotElement:SetMouseChildren(true)
+            end
+        end
+
+        -- Hide the original slot's frame elements and center the highlight for fancy frame slots
+        if useFancyFrame and ctx.mainSlotFrameTexture then
+            local slotElement = slot.SlotElement or slot
+            if slotElement and slotElement.GetMovieClip then
+                local mc = slotElement:GetMovieClip()
+                if mc then
+                    -- Hide internal frame elements
+                    if mc.frame_mc then mc.frame_mc.visible = false end
+                    if mc.source_frame_mc then mc.source_frame_mc.visible = false end
+                    if mc.bg_mc then mc.bg_mc.visible = false end
+                    -- Center and resize the highlight
+                    if mc.highlight_mc then
+                        -- Adjust x and y to center the highlight
+                        mc.highlight_mc.x = (mc.highlight_mc.x or 0) -2
+                        mc.highlight_mc.y = (mc.highlight_mc.y or 0) -2
+                        -- Adjust width and height to resize the highlight
+                        mc.highlight_mc.width = size + 1  -- Match frame size (size + framePadding*2)
+                        mc.highlight_mc.height = size + 1
+                    end
+                end
+            end
+        end
+
         if ctx.ForgingUI and ctx.ForgingUI.Slots then
             ctx.ForgingUI.Slots[id] = slot
         end
         Widgets.WireSlot(slot, id)
+
         return slot
     end
 

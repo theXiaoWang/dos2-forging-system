@@ -46,6 +46,7 @@ local resultPanelTexture = nil
 local dropdownPanelTexture = nil
 local gridCellTexture = nil
 local previewUsedFrameTexture = nil
+local mainSlotFrameTexture = nil  -- Frame texture for Main/Donor slot visuals
 local V = Vector.Create
 local BASE_UI_WIDTH = 1710
 local BASE_UI_HEIGHT = 950
@@ -85,7 +86,7 @@ local BORDER_SIZE = 1
 local FRAME_ALPHA = 1
 local FRAME_TEXTURE_ALPHA = 1
 local FRAME_TEXTURE_CENTER_ALPHA = 0.85
-local PANEL_FILL_ALPHA = 0.5
+local PANEL_FILL_ALPHA = 0
 local PANEL_TEXTURE_ALPHA = 0.5
 local SLOT_PANEL_TEXTURE_ALPHA = 1
 local PREVIEW_USED_FRAME_ALPHA = 1
@@ -101,7 +102,7 @@ local BORDER_COLOR = Color.CreateFromHex("2F2720")
 local FILL_COLOR = Color.CreateFromHex("1A1613")
 local HEADER_FILL_COLOR = Color.CreateFromHex("24201B")
 local GRID_COLOR = Color.CreateFromHex("1E1A16")
-local PREVIEW_FILL_COLOR = Color.CreateFromHex("26221D")
+local PREVIEW_FILL_COLOR = Color.CreateFromHex("000000")  -- Black transparent fill
 local TOGGLE_OFFSET_X = -70 
 local TOGGLE_OFFSET_Y = 0
 local USE_TEXTURE_BACKGROUND = false
@@ -178,6 +179,7 @@ local function RefreshContext()
     Context.dropdownPanelTexture = dropdownPanelTexture
     Context.gridCellTexture = gridCellTexture
     Context.PREVIEW_USED_FRAME_TEXTURE = previewUsedFrameTexture
+    Context.mainSlotFrameTexture = mainSlotFrameTexture
     Context.BORDER_SIZE = BORDER_SIZE
     Context.FRAME_ALPHA = FRAME_ALPHA
     Context.FRAME_TEXTURE_ALPHA = FRAME_TEXTURE_ALPHA
@@ -348,9 +350,19 @@ local function InitTextureStyles()
         if not gridCellTexture and textures.FRAMES.RECTANGLES then
             gridCellTexture = textures.FRAMES.RECTANGLES.TINY
         end
-        previewUsedFrameTexture = textures.FRAMES.WHITE_GLOWING
-            or textures.FRAMES.WHITE_SHADED
-            or textures.FRAMES.WHITE_TATTERED
+        -- Use WHITE_SHADED frame for used items in preview inventory
+        previewUsedFrameTexture = textures.FRAMES.WHITE_SHADED
+        -- Fancy silver highlighted frame for Main/Donor slots
+        Ext.Print("[ForgingUI] Checking textures.FRAMES.SLOT: " .. tostring(textures.FRAMES.SLOT ~= nil))
+        if textures.FRAMES.SLOT then
+            Ext.Print("[ForgingUI] SLOT.SILVER_HIGHLIGHTED: " .. tostring(textures.FRAMES.SLOT.SILVER_HIGHLIGHTED ~= nil))
+            Ext.Print("[ForgingUI] SLOT.SILVER: " .. tostring(textures.FRAMES.SLOT.SILVER ~= nil))
+            mainSlotFrameTexture = textures.FRAMES.SLOT.SILVER_HIGHLIGHTED
+                or textures.FRAMES.SLOT.SILVER
+            Ext.Print("[ForgingUI] mainSlotFrameTexture loaded: " .. tostring(mainSlotFrameTexture ~= nil))
+        else
+            Ext.Print("[ForgingUI] WARNING: textures.FRAMES.SLOT is nil!")
+        end
     end
 
     if slicedTexturePrefab and slicedTexturePrefab.STYLES then
@@ -497,7 +509,9 @@ function ForgingUI.InitializeWithGenericUI(generic)
         if Ext and Ext.UI and Ext.UI.GetByName and Ext.UI.GetByName(UI_ID) then
             DestroyStaleUI(genericUI)
         end
-        local ok, created = pcall(genericUI.Create, UI_ID, {Layer = 100, Visible = false})
+        local baseLayer = genericUI.DEFAULT_LAYER or 15
+        local uiLayer = math.max(1, baseLayer - 8)
+        local ok, created = pcall(genericUI.Create, UI_ID, {Layer = uiLayer, Visible = false})
         if not ok or not created then
             Ext.Print(string.format("[ForgingUI] ERROR: Generic UI creation failed: %s", tostring(created)))
             return false

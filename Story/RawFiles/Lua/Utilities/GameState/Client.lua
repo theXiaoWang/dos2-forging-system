@@ -20,14 +20,20 @@ end
 ---@param fromReset boolean?
 function GameState._ThrowClientReadyEvent(fromReset)
     ---@type GameStateLib_Event_ClientReady
+    local character = Client.GetCharacter()
+    if not character then
+        return
+    end
     local event = {
-        CharacterNetID = Client.GetCharacter().NetID,
+        CharacterNetID = character.NetID,
         ProfileGUID = Client.GetProfileGUID(),
         FromReset = fromReset or false,
     }
 
     GameState.Events.ClientReady:Throw(event)
-    Net.PostToServer("EPIPENCOUNTERS_GameStateLib_ClientReady", event)
+    if Net and Net.PostToServer then
+        Net.PostToServer("EPIPENCOUNTERS_GameStateLib_ClientReady", event)
+    end
 end
 
 ---------------------------------------------
