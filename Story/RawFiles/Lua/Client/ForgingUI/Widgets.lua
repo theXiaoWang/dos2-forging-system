@@ -18,7 +18,6 @@ local previewInventory = {
     Columns = 0,
     GridSpacing = 0,
     SlotSize = 66,  -- Increased to fully show item frames
-    EmptyLabel = nil,
 }
 
 local function GetUI()
@@ -525,16 +524,6 @@ local function RenderPreviewInventory()
         mc.scrollBar_mc.visible = true
     end
 
-    if previewInventory.EmptyLabel then
-        local hasItems = false
-        for _, entry in pairs(displayItems or {}) do
-            if entry then
-                hasItems = true
-                break
-            end
-        end
-        previewInventory.EmptyLabel:SetVisible(not hasItems)
-    end
     if ctx and ctx.PreviewLogic and ctx.PreviewLogic.RefreshInventoryHighlights then
         ctx.PreviewLogic.RefreshInventoryHighlights()
     end
@@ -583,7 +572,6 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     previewInventory.FilterButtons = {}
     previewInventory.Grid = nil
     previewInventory.ScrollList = nil
-    previewInventory.EmptyLabel = nil
     if not previewInventory.Filter and ctx.CRAFT_PREVIEW_MODES then
         previewInventory.Filter = ctx.CRAFT_PREVIEW_MODES.Equipment
     end
@@ -674,9 +662,6 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     grid:SetElementSpacing(previewInventory.GridSpacing, previewInventory.GridSpacing)
     previewInventory.Grid = grid
     grid:SetGridSize(columns, 1)
-
-    previewInventory.EmptyLabel = Widgets.CreateTextElement(previewInventory.Root, "PreviewInventory_EmptyLabel", "No items found", 0, filterHeight + 6, width, 18, "Center", false, {size = 13})
-    previewInventory.EmptyLabel:SetVisible(false)
 
     UpdatePreviewFilterButtons()
     RenderPreviewInventory()

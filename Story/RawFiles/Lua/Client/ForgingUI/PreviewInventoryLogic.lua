@@ -1298,43 +1298,47 @@ function PreviewLogic.BuildPreviewInventoryLayout(filteredItems, allItems, colum
         end
     end
 
+    local filteredLookup = {}
+    for _, item in ipairs(filteredList) do
+        filteredLookup[item.Handle] = item
+    end
+
     local cleanedSlotItems = {}
     local cleanedItemToSlot = {}
+    local maxIndex = 0
     for slotIndex, handle in pairs(State.PreviewSlotItems or {}) do
-        if allLookup[handle] and cleanedItemToSlot[handle] == nil then
+        if filteredLookup[handle] and cleanedItemToSlot[handle] == nil then
             cleanedSlotItems[slotIndex] = handle
             cleanedItemToSlot[handle] = slotIndex
-        end
-    end
-    State.PreviewSlotItems = cleanedSlotItems
-    State.PreviewItemToSlot = cleanedItemToSlot
-
-    local display = {}
-    local usedHandles = {}
-    local maxIndex = 0
-    for slotIndex, handle in pairs(State.PreviewSlotItems) do
-        local item = allLookup[handle]
-        if item then
-            display[slotIndex] = item
-            usedHandles[handle] = true
             if slotIndex > maxIndex then
                 maxIndex = slotIndex
             end
         end
     end
+    State.PreviewSlotItems = cleanedSlotItems
+    State.PreviewItemToSlot = cleanedItemToSlot
 
-    local cursor = 1
+    local nextSlot = maxIndex + 1
     for _, item in ipairs(filteredList) do
-        if item and item.Handle and not usedHandles[item.Handle] then
-            while display[cursor] ~= nil do
-                cursor = cursor + 1
+        if item and item.Handle and not cleanedItemToSlot[item.Handle] then
+            while State.PreviewSlotItems[nextSlot] ~= nil do
+                nextSlot = nextSlot + 1
             end
-            display[cursor] = item
-            usedHandles[item.Handle] = true
-            if cursor > maxIndex then
-                maxIndex = cursor
+            State.PreviewSlotItems[nextSlot] = item.Handle
+            State.PreviewItemToSlot[item.Handle] = nextSlot
+            cleanedItemToSlot[item.Handle] = nextSlot
+            if nextSlot > maxIndex then
+                maxIndex = nextSlot
             end
-            cursor = cursor + 1
+            nextSlot = nextSlot + 1
+        end
+    end
+
+    local display = {}
+    for slotIndex, handle in pairs(State.PreviewSlotItems) do
+        local item = filteredLookup[handle]
+        if item then
+            display[slotIndex] = item
         end
     end
 

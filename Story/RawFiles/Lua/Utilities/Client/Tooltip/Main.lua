@@ -21,6 +21,23 @@ local function GetTextDisplay()
     return TextDisplay
 end
 
+local function ResolveTooltipPosition(position)
+    local x, y
+    if position then
+        x = position[1] or position.X
+        y = position[2] or position.Y
+    end
+    if type(x) ~= "number" or type(y) ~= "number" then
+        if Client and Client.GetMousePosition then
+            x, y = Client.GetMousePosition()
+        end
+    end
+    if type(x) ~= "number" or type(y) ~= "number" then
+        return nil, nil, nil
+    end
+    return x, y, position or Vector.Create(x, y)
+end
+
 ---@class TooltipLib : Library
 local Tooltip = {
     nextTooltipData = nil, ---@type TooltipLib_TooltipSourceData?
@@ -446,8 +463,11 @@ function Tooltip.ShowCustomFormattedTooltip(tooltip)
     if not ui then
         return
     end
+    local mouseX, mouseY = ResolveTooltipPosition()
+    if not mouseX then
+        return
+    end
     local characterHandle = Ext.UI.HandleToDouble(Client.GetCharacter().Handle)
-    local mouseX, mouseY = Client.GetMousePosition()
 
     Tooltip._nextCustomTooltip = tooltip
     Tooltip._LastCustomTooltipEntry = tooltip
@@ -472,12 +492,15 @@ function Tooltip.ShowSkillTooltip(char, skillID, position)
     if not ui then
         return
     end
-    local mouseX, mouseY = Client.GetMousePosition()
+    local mouseX, mouseY, resolvedPosition = ResolveTooltipPosition(position)
+    if not mouseX then
+        return
+    end
 
     Tooltip._nextSkillTooltip = {
         CharacterHandle = char.Handle,
         SkillID = skillID,
-        Position = position or Vector.Create(mouseX, mouseY)
+        Position = resolvedPosition
     }
 
     pcall(ui.ExternalInterfaceCall, ui, "showSkillTooltip", Ext.UI.HandleToDouble(char.Handle), skillID, mouseX, mouseY, 20, 0, "left")
@@ -491,11 +514,14 @@ function Tooltip.ShowItemTooltip(item, position)
     if not ui then
         return
     end
-    local mouseX, mouseY = Client.GetMousePosition()
+    local mouseX, mouseY, resolvedPosition = ResolveTooltipPosition(position)
+    if not mouseX then
+        return
+    end
 
     Tooltip._nextItemTooltip = {
         ItemHandle = item.Handle,
-        Position = position or Vector.Create(mouseX, mouseY)
+        Position = resolvedPosition
     }
 
     pcall(ui.ExternalInterfaceCall, ui, "showItemTooltip", Ext.UI.HandleToDouble(item.Handle), mouseX, mouseY, 100, 100, -1, "left") -- TODO customize align
