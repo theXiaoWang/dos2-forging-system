@@ -13,6 +13,11 @@ local previewInventory = {
     Filter = nil,
     Slots = {},
     FilterButtons = {},
+    SearchRoot = nil,
+    SearchFrame = nil,
+    SearchText = nil,
+    SearchHint = nil,
+    SearchQuery = nil,
     Grid = nil,
     ScrollList = nil,
     AutoSortButton = nil,
@@ -396,6 +401,50 @@ local function UpdatePreviewFilterButtons()
     SetPreviewFilterButtonActive(previewInventory.FilterButtons[ctx.CRAFT_PREVIEW_MODES.Magical], previewInventory.Filter == ctx.CRAFT_PREVIEW_MODES.Magical)
 end
 
+local function NormalizeSearchQuery(value)
+    if value == nil then
+        return nil
+    end
+    local trimmed = tostring(value):gsub("^%s+", ""):gsub("%s+$", "")
+    if trimmed == "" then
+        return nil
+    end
+    return string.lower(trimmed)
+end
+
+local function GetItemSearchName(item)
+    if not item then
+        return nil
+    end
+    if Item and Item.GetDisplayName then
+        local ok, name = pcall(Item.GetDisplayName, item)
+        if ok and name and name ~= "" then
+            return name
+        end
+    end
+    if item.DisplayName and item.DisplayName ~= "" then
+        return item.DisplayName
+    end
+    local stats = item.Stats
+    if type(stats) == "string" and Ext and Ext.Stats and Ext.Stats.Get then
+        local ok, statsObj = pcall(Ext.Stats.Get, stats)
+        if ok and statsObj then
+            stats = statsObj
+        end
+    end
+    if stats and stats.Name and stats.Name ~= "" then
+        return stats.Name
+    end
+    return item.StatsId or item.StatsID
+end
+
+local function ResetPreviewLayout()
+    if ctx and ctx.PreviewLogic and ctx.PreviewLogic.GetPreviewSortMode and ctx.PreviewLogic.SetPreviewSortMode then
+        local currentMode = ctx.PreviewLogic.GetPreviewSortMode()
+        ctx.PreviewLogic.SetPreviewSortMode(currentMode, true)
+    end
+end
+
 local function EnsurePreviewSlot(index)
     local slot = previewInventory.Slots[index]
     if slot then
@@ -473,6 +522,20 @@ local function RenderPreviewInventory()
             table.insert(filteredItems, displayItem)
         end
     end
+    local searchQuery = NormalizeSearchQuery(previewInventory.SearchQuery)
+    if searchQuery then
+        local searchFiltered = {}
+        for _, displayItem in ipairs(filteredItems) do
+            local name = GetItemSearchName(displayItem)
+            if name then
+                local normalizedName = string.lower(tostring(name))
+                if normalizedName:find(searchQuery, 1, true) then
+                    table.insert(searchFiltered, displayItem)
+                end
+            end
+        end
+        filteredItems = searchFiltered
+    end
     local allItems = {}
     for _, entry in ipairs(items or {}) do
         local displayItem = ResolveEntryItem(entry)
@@ -490,11 +553,19 @@ local function RenderPreviewInventory()
 
     local displayItems = filteredItems
     local totalSlots = 0
+    if searchQuery then
+        ResetPreviewLayout()
+    end
     if ctx.PreviewLogic and ctx.PreviewLogic.BuildPreviewInventoryLayout then
         displayItems, totalSlots = ctx.PreviewLogic.BuildPreviewInventoryLayout(filteredItems, allItems, columns)
     else
         local rows = math.max(1, math.ceil(#filteredItems / columns) + 1)
         totalSlots = rows * columns
+    end
+    if not totalSlots or totalSlots <= 0 then
+        local rows = math.max(1, math.ceil(#filteredItems / columns) + 1)
+        totalSlots = rows * columns
+        displayItems = displayItems or filteredItems
     end
 
     local rows = math.max(1, math.ceil(totalSlots / columns))
@@ -637,6 +708,11 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
 
     previewInventory.Slots = {}
     previewInventory.FilterButtons = {}
+    previewInventory.SearchRoot = nil
+    previewInventory.SearchFrame = nil
+    previewInventory.SearchText = nil
+    previewInventory.SearchHint = nil
+    previewInventory.SearchQuery = previewInventory.SearchQuery or ""
     previewInventory.Grid = nil
     previewInventory.ScrollList = nil
     previewInventory.AutoSortButton = nil
@@ -686,7 +762,6 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     local buttonWidth = filterButtonSize
     local buttonHeight = filterButtonSize
     local buttonGap = ScaleX(4)
-    local startX = math.floor((width - (buttonWidth * 2 + buttonGap)) / 2)
     local startY = math.floor((filterHeight - buttonHeight) / 2)
 
     local sortButtonWidth = Clamp(ScaleX(88), 70, 110)
@@ -699,12 +774,167 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     end
     local sortY = math.floor((filterHeight - sortButtonHeight) / 2)
 
-    local minFilterX = sortPad
-    local maxFilterX = sortStartX - (buttonWidth * 2 + buttonGap + sortPad)
-    if maxFilterX >= minFilterX then
-        startX = math.min(startX, maxFilterX)
-    else
-        startX = minFilterX
+    local searchGap = ScaleX(6)
+    local searchPad = sortPad
+    local buttonClusterWidth = buttonWidth * 2 + buttonGap
+    local leftAreaWidth = sortStartX - searchPad
+    if leftAreaWidth < 0 then
+        leftAreaWidth = 0
+    end
+    local maxSearchWidth = leftAreaWidth - buttonClusterWidth - searchGap
+    if maxSearchWidth < 0 then
+        maxSearchWidth = 0
+    end
+    local minSearchWidth = Clamp(ScaleX(90), 70, 120)
+    local desiredSearchWidth = Clamp(ScaleX(160), minSearchWidth, 240)
+    local searchWidth = desiredSearchWidth
+    if maxSearchWidth <= 0 then
+        searchWidth = 0
+    elseif searchWidth > maxSearchWidth then
+        searchWidth = maxSearchWidth
+    end
+    local searchHeight = buttonHeight
+    local searchX = searchPad
+    local searchY = math.floor((filterHeight - searchHeight) / 2)
+    local startX = searchX
+    if searchWidth > 0 then
+        startX = searchX + searchWidth + searchGap
+    end
+
+    if searchWidth > 0 then
+        local searchRoot = filterBar:AddChild("PreviewInventory_Search", "GenericUI_Element_Empty")
+        searchRoot:SetPosition(searchX, searchY)
+        ApplySize(searchRoot, searchWidth, searchHeight)
+        NormalizeScale(searchRoot)
+
+        local searchTexture = nil
+        if ctx and ctx.Client and ctx.Client.Textures and ctx.Client.Textures.GenericUI then
+            local textures = ctx.Client.Textures.GenericUI.TEXTURES
+            if textures and textures.FRAMES and textures.FRAMES.ENTRIES then
+                searchTexture = textures.FRAMES.ENTRIES.GRAY
+            end
+        end
+
+        local searchFrame = searchRoot:AddChild("PreviewInventory_Search_Frame", "GenericUI_Element_Texture")
+        if searchTexture then
+            searchFrame:SetTexture(searchTexture, V(searchWidth, searchHeight))
+        end
+        searchFrame:SetPosition(0, 0)
+        searchFrame:SetSize(searchWidth, searchHeight)
+        NormalizeScale(searchFrame)
+
+        local textPadding = Clamp(ScaleX(6), 4, 10)
+        local iconPadding = Clamp(ScaleX(6), 4, 10)
+        local iconSize = Clamp(math.floor(searchHeight * 0.6), 10, 16)
+        local iconBlockWidth = iconSize + iconPadding
+        local textWidth = math.max(0, searchWidth - textPadding * 2 - iconBlockWidth)
+        local textSize = Clamp(math.floor(searchHeight * 0.55), 9, 12)
+        local textOffsetY = math.floor((searchHeight - textSize) / 2)
+        local textHeight = searchHeight
+
+        local searchInput = searchRoot:AddChild("PreviewInventory_Search_Input", "GenericUI_Element_Text")
+        searchInput:SetPosition(textPadding, 0)
+        searchInput:SetSize(textWidth, textHeight)
+        searchInput:SetType("Left")
+        searchInput:SetText(previewInventory.SearchQuery or "")
+        searchInput:SetEditable(true)
+        if searchInput.SetMouseEnabled then
+            searchInput:SetMouseEnabled(true)
+        end
+        if searchInput.SetMouseChildren then
+            searchInput:SetMouseChildren(true)
+        end
+        if searchInput.SetWordWrap then
+            searchInput:SetWordWrap(false)
+        end
+        if searchInput.SetTextFormat then
+            searchInput:SetTextFormat({color = 0xFFFFFF, size = textSize})
+        end
+
+        local searchHint = searchRoot:AddChild("PreviewInventory_Search_Hint", "GenericUI_Element_Text")
+        searchHint:SetPosition(textPadding, 0)
+        searchHint:SetSize(textWidth, textHeight)
+        searchHint:SetType("Left")
+        searchHint:SetText("Search...")
+        if searchHint.SetTextFormat then
+            searchHint:SetTextFormat({color = 0xB0B0B0, size = textSize})
+        end
+        if searchHint.SetMouseEnabled then
+            searchHint:SetMouseEnabled(false)
+        end
+
+        local function CenterSearchText(element)
+            local mc = element and element.GetMovieClip and element:GetMovieClip() or nil
+            if mc and mc.text_txt then
+                mc.text_txt.y = textOffsetY
+            end
+        end
+
+        CenterSearchText(searchInput)
+        CenterSearchText(searchHint)
+
+        local iconId = "magnifier-searchbar-2"
+        local iconOffsetX = searchWidth - iconBlockWidth + math.floor((iconBlockWidth - iconSize) / 2)
+        local iconOffsetY = math.floor((searchHeight - iconSize) / 2)
+        if iconId then
+            local searchIcon = searchRoot:AddChild("PreviewInventory_Search_Icon", "GenericUI_Element_IggyIcon")
+            searchIcon:SetPosition(iconOffsetX, iconOffsetY)
+            searchIcon:SetIcon(iconId, iconSize, iconSize)
+            if searchIcon.SetAlpha then
+                searchIcon:SetAlpha(0.9)
+            end
+            if searchIcon.SetMouseEnabled then
+                searchIcon:SetMouseEnabled(false)
+            end
+        end
+
+        local function UpdateSearchHint(rawText)
+            local hasText = NormalizeSearchQuery(rawText) ~= nil
+            local isFocused = searchInput.IsFocused and searchInput:IsFocused()
+            if searchHint.SetVisible then
+                searchHint:SetVisible((not hasText) and not isFocused)
+            end
+        end
+
+        local function ResolveDefaultSortMode()
+            if ctx and ctx.PreviewLogic and ctx.PreviewLogic.PREVIEW_SORT_MODES then
+                return ctx.PreviewLogic.PREVIEW_SORT_MODES.Default
+            end
+            return "Default"
+        end
+
+        UpdateSearchHint(previewInventory.SearchQuery or "")
+
+        if searchInput.Events and searchInput.Events.Changed then
+            searchInput.Events.Changed:Subscribe(function (ev)
+                local previousActive = NormalizeSearchQuery(previewInventory.SearchQuery) ~= nil
+                previewInventory.SearchQuery = ev and ev.Text or ""
+                local nextActive = NormalizeSearchQuery(previewInventory.SearchQuery) ~= nil
+                UpdateSearchHint(previewInventory.SearchQuery)
+                if previousActive and not nextActive then
+                    ApplyPreviewSortMode(ResolveDefaultSortMode())
+                else
+                    RenderPreviewInventory()
+                end
+            end)
+        end
+        if searchInput.Events and searchInput.Events.Focused then
+            searchInput.Events.Focused:Subscribe(function ()
+                if searchHint.SetVisible then
+                    searchHint:SetVisible(false)
+                end
+            end)
+        end
+        if searchInput.Events and searchInput.Events.Unfocused then
+            searchInput.Events.Unfocused:Subscribe(function ()
+                UpdateSearchHint(previewInventory.SearchQuery)
+            end)
+        end
+
+        previewInventory.SearchRoot = searchRoot
+        previewInventory.SearchFrame = searchFrame
+        previewInventory.SearchText = searchInput
+        previewInventory.SearchHint = searchHint
     end
 
     local equipmentBtn = Widgets.CreateButtonBox(filterBar, "PreviewFilter_Equipment", "", startX, startY, buttonWidth, buttonHeight, false, ctx.styleSquareStone)
@@ -833,8 +1063,9 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
 
     local list = previewInventory.Root:AddChild("PreviewInventory_List", "GenericUI_Element_ScrollList")
     local listOffsetY = filterHeight
+    local listHeight = math.max(0, height - listOffsetY)
     list:SetPosition(0, listOffsetY)
-    ApplySize(list, width, height - listOffsetY)
+    ApplySize(list, width, listHeight)
     NormalizeScale(list)
     list:SetMouseWheelEnabled(true)
     list:SetScrollbarSpacing(4)
@@ -857,7 +1088,7 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     local gridY = padding
     
     grid:SetPosition(gridX, gridY)
-    ApplySize(grid, gridContentWidth, height - filterHeight - padding * 2)
+    ApplySize(grid, gridContentWidth, math.max(0, listHeight - padding * 2))
     NormalizeScale(grid)
     grid:SetElementSpacing(previewInventory.GridSpacing, previewInventory.GridSpacing)
     previewInventory.Grid = grid
