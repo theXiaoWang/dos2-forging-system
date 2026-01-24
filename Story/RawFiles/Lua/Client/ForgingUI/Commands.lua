@@ -112,3 +112,48 @@ Ext.RegisterConsoleCommand("forgeuidumpfills", function(_, threshold)
     end
     ForgingUI.Debug.DumpFillElements(threshold)
 end)
+
+Ext.RegisterConsoleCommand("forgeuidumppreview", function()
+    local ForgingUI = GetForgingUI()
+    if not ForgingUI or not ForgingUI.Widgets or not ForgingUI.Widgets.GetPreviewInventory then
+        Ext.Print("[ForgingUI] forgeuidumppreview: Widgets not initialized")
+        return
+    end
+
+    local preview = ForgingUI.Widgets.GetPreviewInventory()
+    if not preview then
+        Ext.Print("[ForgingUI] forgeuidumppreview: Preview inventory not available")
+        return
+    end
+
+    local slotCount = preview.Slots and #preview.Slots or 0
+    local gridChildren = preview.Grid and preview.Grid.GetChildren and #(preview.Grid:GetChildren() or {}) or 0
+    local listChildren = preview.ScrollList and preview.ScrollList.GetChildren and #(preview.ScrollList:GetChildren() or {}) or 0
+
+    Ext.Print(string.format("[ForgingUI] PreviewInventory: Root=%s Filter=%s Slots=%s Grid=%s GridChildren=%s ScrollList=%s ScrollChildren=%s",
+        tostring(preview.Root ~= nil),
+        tostring(preview.Filter),
+        tostring(slotCount),
+        tostring(preview.Grid ~= nil),
+        tostring(gridChildren),
+        tostring(preview.ScrollList ~= nil),
+        tostring(listChildren)
+    ))
+    Ext.Print(string.format("[ForgingUI] PreviewInventory: AutoSort=%s SortBy=%s SortPanel=%s SortList=%s Options=%s",
+        tostring(preview.AutoSortButton ~= nil),
+        tostring(preview.SortByButton ~= nil),
+        tostring(preview.SortByPanel ~= nil),
+        tostring(preview.SortByList ~= nil),
+        tostring(preview.SortByOptions and #preview.SortByOptions or 0)
+    ))
+end)
+
+Ext.RegisterConsoleCommand("forgeuirefreshpreview", function()
+    local ForgingUI = GetForgingUI()
+    if not ForgingUI or not ForgingUI.Widgets or not ForgingUI.Widgets.RenderPreviewInventory then
+        Ext.Print("[ForgingUI] forgeuirefreshpreview: Widgets not initialized")
+        return
+    end
+    ForgingUI.Widgets.RenderPreviewInventory()
+    Ext.Print("[ForgingUI] forgeuirefreshpreview: RenderPreviewInventory called")
+end)

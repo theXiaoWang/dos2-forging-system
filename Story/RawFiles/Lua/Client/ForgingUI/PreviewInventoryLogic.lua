@@ -25,6 +25,9 @@ local State = {
     LastPreviewHoverSlot = nil,
     LastForgeHoverSlot = nil,
     EquipmentSlotNames = nil,
+    PreviewSortMode = "Default",
+    ItemAcquireOrder = {},
+    ItemAcquireCounter = 0,
 }
 
 PreviewLogic.State = State
@@ -37,6 +40,14 @@ local WARNING_THROTTLE_MS = 250
 local WARNING_TEXT_COLOR = "FFD27F"
 local WARNING_TEXT_SIZE = 14
 local PREVIEW_TOOLTIP_THROTTLE_MS = 150
+
+local PREVIEW_SORT_MODES = {
+    Default = "Default",
+    LastAcquired = "LastAcquired",
+    Rarity = "Rarity",
+    Type = "Type",
+}
+PreviewLogic.PREVIEW_SORT_MODES = PREVIEW_SORT_MODES
 
 local function V(...)
     return ctx and ctx.V and ctx.V(...) or Vector.Create(...)
@@ -60,6 +71,34 @@ function PreviewLogic.SetPreviewFilter(filterKey)
     State.CurrentPreviewFilter = key
     State.PreviewDragItemHandle = nil
     State.PreviewDragSourceIndex = nil
+end
+
+function PreviewLogic.SetPreviewSortMode(mode, resetLayout)
+    State.PreviewSortMode = mode or PREVIEW_SORT_MODES.Default
+    if resetLayout then
+        local key = State.CurrentPreviewFilter or "default"
+        State.PreviewSlotItems = {}
+        State.PreviewItemToSlot = {}
+        State.PreviewSlotItemsByFilter[key] = State.PreviewSlotItems
+        State.PreviewItemToSlotByFilter[key] = State.PreviewItemToSlot
+    end
+end
+
+function PreviewLogic.GetPreviewSortMode()
+    return State.PreviewSortMode or PREVIEW_SORT_MODES.Default
+end
+
+function PreviewLogic.TrackInventoryItems(items)
+    if not items then
+        return
+    end
+    for _, item in ipairs(items) do
+        local handle = item and (item.Handle or item.ItemHandle)
+        if handle and State.ItemAcquireOrder[handle] == nil then
+            State.ItemAcquireCounter = State.ItemAcquireCounter + 1
+            State.ItemAcquireOrder[handle] = State.ItemAcquireCounter
+        end
+    end
 end
 
 local function IsValidHandle(handle)
@@ -431,6 +470,55 @@ local function IsSkillbook(item)
     return false
 end
 
+local function GetItemSortHandle(item)
+    return item and (item.Handle or item.ItemHandle) or nil
+end
+
+local function GetItemRarityValue(item)
+    local stats = GetItemStats(item)
+    local rarity = item and (item.Rarity or SafeStatsField(stats, "Rarity")) or nil
+    if not rarity then
+        return 0
+    end
+    local map = {
+        Common = 1,
+        Uncommon = 2,
+        Rare = 3,
+        Epic = 4,
+        Legendary = 5,
+        Divine = 6,
+        Unique = 7,
+    }
+    return map[rarity] or 0
+end
+
+local function GetItemTypeKey(item)
+    local stats = GetItemStats(item)
+    local itemType = item and item.ItemType or SafeStatsField(stats, "ItemType")
+    if not itemType then
+        local template = item and item.RootTemplate or nil
+        itemType = SafeTemplateField(template, "ItemType")
+    end
+    if not itemType and Stats and Stats.GetType then
+        local ok, statsType = pcall(Stats.GetType, stats)
+        if ok and statsType then
+            itemType = statsType
+        end
+    end
+    if not itemType then
+        return ""
+    end
+    return string.lower(tostring(itemType))
+end
+
+local function GetItemAcquireValue(item, fallback)
+    local handle = GetItemSortHandle(item)
+    if handle and State.ItemAcquireOrder[handle] then
+        return State.ItemAcquireOrder[handle]
+    end
+    return fallback or 0
+end
+
 local function IsEquipmentItemType(itemType)
     return itemType == "armor"
         or itemType == "weapon"
@@ -471,6 +559,58 @@ local function IsEquipment(item)
         return true
     end
     return false
+end
+
+function PreviewLogic.SortPreviewItems(items, mode)
+    if not items then
+        return items
+    end
+    mode = mode or PreviewLogic.GetPreviewSortMode()
+    if mode == PREVIEW_SORT_MODES.Default then
+        return items
+    end
+
+    local sorted = {}
+    local orderIndex = {}
+    for i, item in ipairs(items) do
+        sorted[i] = item
+        local handle = GetItemSortHandle(item)
+        if handle then
+            orderIndex[handle] = i
+        end
+    end
+
+    local function GetOrderIndex(item, fallback)
+        local handle = GetItemSortHandle(item)
+        return (handle and orderIndex[handle]) or fallback or 0
+    end
+
+    table.sort(sorted, function(a, b)
+        local aFallback = GetOrderIndex(a, 0)
+        local bFallback = GetOrderIndex(b, 0)
+        if mode == PREVIEW_SORT_MODES.LastAcquired then
+            local aKey = GetItemAcquireValue(a, aFallback)
+            local bKey = GetItemAcquireValue(b, bFallback)
+            if aKey ~= bKey then
+                return aKey > bKey
+            end
+        elseif mode == PREVIEW_SORT_MODES.Rarity then
+            local aKey = GetItemRarityValue(a)
+            local bKey = GetItemRarityValue(b)
+            if aKey ~= bKey then
+                return aKey > bKey
+            end
+        elseif mode == PREVIEW_SORT_MODES.Type then
+            local aKey = GetItemTypeKey(a)
+            local bKey = GetItemTypeKey(b)
+            if aKey ~= bKey then
+                return aKey < bKey
+            end
+        end
+        return aFallback < bFallback
+    end)
+
+    return sorted
 end
 
 local function GetTemplateStats(template)

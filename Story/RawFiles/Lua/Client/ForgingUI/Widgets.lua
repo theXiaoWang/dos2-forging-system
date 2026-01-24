@@ -15,6 +15,13 @@ local previewInventory = {
     FilterButtons = {},
     Grid = nil,
     ScrollList = nil,
+    AutoSortButton = nil,
+    SortByButton = nil,
+    SortByPanel = nil,
+    SortByList = nil,
+    SortByOptions = {},
+    SortByOpen = false,
+    SortByStyles = nil,
     Columns = 0,
     GridSpacing = 0,
     SlotSize = 66,  -- Increased to fully show item frames
@@ -474,6 +481,13 @@ local function RenderPreviewInventory()
         end
     end
 
+    if ctx.PreviewLogic and ctx.PreviewLogic.TrackInventoryItems then
+        ctx.PreviewLogic.TrackInventoryItems(allItems)
+    end
+    if ctx.PreviewLogic and ctx.PreviewLogic.SortPreviewItems then
+        filteredItems = ctx.PreviewLogic.SortPreviewItems(filteredItems)
+    end
+
     local displayItems = filteredItems
     local totalSlots = 0
     if ctx.PreviewLogic and ctx.PreviewLogic.BuildPreviewInventoryLayout then
@@ -546,6 +560,59 @@ local function WirePreviewFilterButton(button, mode)
     end)
 end
 
+local function ApplyPreviewSortMode(mode)
+    if ctx and ctx.PreviewLogic and ctx.PreviewLogic.SetPreviewSortMode then
+        ctx.PreviewLogic.SetPreviewSortMode(mode, true)
+    end
+    if Widgets.RenderPreviewInventory then
+        Widgets.RenderPreviewInventory()
+    end
+end
+
+local function SetSortByPanelOpen(open)
+    previewInventory.SortByOpen = open == true
+    if previewInventory.SortByPanel and previewInventory.SortByPanel.SetVisible then
+        previewInventory.SortByPanel:SetVisible(previewInventory.SortByOpen)
+        if previewInventory.Root and previewInventory.Root.SetChildIndex then
+            previewInventory.Root:SetChildIndex(previewInventory.SortByPanel, 9999)
+        end
+    end
+    if previewInventory.SortByButton and previewInventory.SortByStyles then
+        local style = previewInventory.SortByOpen and previewInventory.SortByStyles.Open or previewInventory.SortByStyles.Closed
+        previewInventory.SortByButton:SetStyle(style)
+    end
+end
+
+local function CreateSortOption(list, id, label, sortMode, width, height)
+    if not list or not ctx or not ctx.buttonPrefab then
+        return nil
+    end
+    local style = ctx.buttonPrefab.STYLES
+        and (ctx.buttonPrefab.STYLES.LabelPointy or ctx.buttonPrefab.STYLES.MenuSlate or ctx.buttonStyle)
+        or ctx.buttonStyle
+    local button = ctx.buttonPrefab.Create(GetUI(), id .. "_Button", list, Widgets.BuildButtonStyle(width, height, style))
+    button.Root:SetPosition(0, 0)
+    if button.Root.SetAlpha then
+        button.Root:SetAlpha(0.7)
+    end
+
+    local labelText = label
+    if Text and Text.Format then
+        local labelSize = math.max(10, math.floor(height * 0.4))
+        labelText = Text.Format(label or "", {Color = "FFFFFF", Size = labelSize})
+    end
+    button:SetLabel(labelText, "Center")
+
+    if button.Events and button.Events.Pressed then
+        button.Events.Pressed:Subscribe(function ()
+            ApplyPreviewSortMode(sortMode)
+            SetSortByPanelOpen(false)
+        end)
+    end
+
+    return button
+end
+
 function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, offsetY)
     if not parent or not ctx then
         return
@@ -572,6 +639,13 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     previewInventory.FilterButtons = {}
     previewInventory.Grid = nil
     previewInventory.ScrollList = nil
+    previewInventory.AutoSortButton = nil
+    previewInventory.SortByButton = nil
+    previewInventory.SortByPanel = nil
+    previewInventory.SortByList = nil
+    previewInventory.SortByOptions = {}
+    previewInventory.SortByOpen = false
+    previewInventory.SortByStyles = nil
     if not previewInventory.Filter and ctx.CRAFT_PREVIEW_MODES then
         previewInventory.Filter = ctx.CRAFT_PREVIEW_MODES.Equipment
     end
@@ -603,7 +677,7 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     end
 
     local filterButtonSize = Clamp(ScaleY(26), 22, 28)
-    local filterHeight = filterButtonSize + 8
+    local filterHeight = filterButtonSize + 10
     local filterBar = previewInventory.Root:AddChild("PreviewInventory_FilterBar", "GenericUI_Element_Empty")
     filterBar:SetPosition(0, 0)
     ApplySize(filterBar, width, filterHeight)
@@ -615,8 +689,48 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     local startX = math.floor((width - (buttonWidth * 2 + buttonGap)) / 2)
     local startY = math.floor((filterHeight - buttonHeight) / 2)
 
+    local sortButtonWidth = Clamp(ScaleX(88), 70, 110)
+    local sortButtonHeight = Clamp(ScaleY(22), 20, buttonHeight)
+    local sortButtonGap = ScaleX(4)
+    local sortPad = ScaleX(6)
+    local sortStartX = width - (sortButtonWidth * 2 + sortButtonGap + sortPad)
+    if sortStartX < 0 then
+        sortStartX = 0
+    end
+    local sortY = math.floor((filterHeight - sortButtonHeight) / 2)
+
+    local minFilterX = sortPad
+    local maxFilterX = sortStartX - (buttonWidth * 2 + buttonGap + sortPad)
+    if maxFilterX >= minFilterX then
+        startX = math.min(startX, maxFilterX)
+    else
+        startX = minFilterX
+    end
+
     local equipmentBtn = Widgets.CreateButtonBox(filterBar, "PreviewFilter_Equipment", "", startX, startY, buttonWidth, buttonHeight, false, ctx.styleSquareStone)
     local magicalBtn = Widgets.CreateButtonBox(filterBar, "PreviewFilter_Magical", "", startX + buttonWidth + buttonGap, startY, buttonWidth, buttonHeight, false, ctx.styleSquareStone)
+
+    local smallBrown = ctx.buttonPrefab and ctx.buttonPrefab.STYLES and (ctx.buttonPrefab.STYLES.SmallBrown or ctx.buttonPrefab.STYLES.MenuSlate or ctx.buttonStyle) or ctx.buttonStyle
+    local smallRed = ctx.buttonPrefab and ctx.buttonPrefab.STYLES and (ctx.buttonPrefab.STYLES.SmallRed or ctx.buttonPrefab.STYLES.MediumRed or smallBrown) or smallBrown
+    local autoSortBtn = Widgets.CreateButtonBox(filterBar, "PreviewInventory_AutoSort", "AUTOSORT", sortStartX, sortY, sortButtonWidth, sortButtonHeight, false, smallBrown)
+    local sortByBtn = Widgets.CreateButtonBox(filterBar, "PreviewInventory_SortBy", "SORT BY", sortStartX + sortButtonWidth + sortButtonGap, sortY, sortButtonWidth, sortButtonHeight, false, smallBrown)
+
+    local buttonTextSize = Clamp(math.floor(sortButtonHeight * 0.45), 8, 10)
+    if Text and Text.Format then
+        if autoSortBtn then
+            autoSortBtn:SetLabel(Text.Format("AUTOSORT", {Size = buttonTextSize, Color = "FFFFFF"}), "Center")
+        end
+        if sortByBtn then
+            sortByBtn:SetLabel(Text.Format("SORT BY", {Size = buttonTextSize, Color = "FFFFFF"}), "Center")
+        end
+    end
+
+    previewInventory.AutoSortButton = autoSortBtn
+    previewInventory.SortByButton = sortByBtn
+    previewInventory.SortByStyles = {
+        Closed = Widgets.BuildButtonStyle(sortButtonWidth, sortButtonHeight, smallBrown),
+        Open = Widgets.BuildButtonStyle(sortButtonWidth, sortButtonHeight, smallRed),
+    }
 
     if equipmentBtn and equipmentBtn.SetIcon then
         local iconSize = math.floor(filterButtonSize * 0.65)
@@ -632,9 +746,95 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     WirePreviewFilterButton(equipmentBtn, ctx.CRAFT_PREVIEW_MODES.Equipment)
     WirePreviewFilterButton(magicalBtn, ctx.CRAFT_PREVIEW_MODES.Magical)
 
+    local sortModes = ctx.PreviewLogic and ctx.PreviewLogic.PREVIEW_SORT_MODES or {Default = "Default", LastAcquired = "LastAcquired", Rarity = "Rarity", Type = "Type"}
+    if autoSortBtn and autoSortBtn.Events and autoSortBtn.Events.Pressed then
+        autoSortBtn.Events.Pressed:Subscribe(function ()
+            ApplyPreviewSortMode(sortModes.Default)
+            SetSortByPanelOpen(false)
+        end)
+    end
+    if sortByBtn and sortByBtn.Events and sortByBtn.Events.Pressed then
+        sortByBtn.Events.Pressed:Subscribe(function ()
+            SetSortByPanelOpen(not previewInventory.SortByOpen)
+        end)
+    end
+
+    local optionHeight = Clamp(ScaleY(34), 28, 38)
+    local optionCount = 3
+    local sortPanelPadding = Scale(10)
+    local sortPanelWidth = Clamp(ScaleX(160), 150, width - sortPad * 2)
+    local sortPanelHeight = optionHeight * optionCount + ScaleY(25)
+    local sortPanelX = width - sortPanelWidth - sortPad
+    local sortPanelY = filterHeight + ScaleY(4)
+    local contextMenuStyle = ctx and ctx.slicedTexturePrefab and ctx.slicedTexturePrefab.STYLES
+        and ctx.slicedTexturePrefab.STYLES.ContextMenu
+        or nil
+    local baseFrameAlpha = ctx.FRAME_ALPHA or 1
+    local sortPanelAlphaScale = ctx.SORT_PANEL_ALPHA_SCALE or 1
+    local sortFrameAlpha = math.min(1, baseFrameAlpha + 0.15)
+    local baseCenterAlpha = ctx.FRAME_TEXTURE_CENTER_ALPHA or baseFrameAlpha
+    local sortCenterAlpha = math.min(1, (baseCenterAlpha + 0.2) * sortPanelAlphaScale)
+    local baseInnerAlpha = ctx.PANEL_FILL_ALPHA or baseFrameAlpha
+    local sortInnerAlpha = math.min(1, (baseInnerAlpha + 0.15) * sortPanelAlphaScale)
+    local sortFrame, sortInner, sortInnerWidth, sortInnerHeight = Widgets.CreateFrame(
+        previewInventory.Root,
+        "PreviewInventory_SortPanel",
+        sortPanelX,
+        sortPanelY,
+        sortPanelWidth,
+        sortPanelHeight,
+        ctx.FILL_COLOR,
+        sortFrameAlpha,
+        sortPanelPadding,
+        true,
+        sortCenterAlpha,
+        sortInnerAlpha,
+        contextMenuStyle
+    )
+    if sortFrame and sortFrame.SetVisible then
+        sortFrame:SetVisible(false)
+    end
+    if previewInventory.Root.SetChildIndex then
+        previewInventory.Root:SetChildIndex(sortFrame, 9998)
+    end
+    previewInventory.SortByPanel = sortFrame
+    if not sortInner then
+        sortInner = sortFrame:AddChild("PreviewInventory_SortPanel_Inner", "GenericUI_Element_Empty")
+        sortInner:SetPosition(sortPanelPadding, sortPanelPadding)
+        sortInnerWidth = math.max(0, sortPanelWidth - sortPanelPadding * 2)
+        sortInnerHeight = math.max(0, sortPanelHeight - sortPanelPadding * 2)
+        ApplySize(sortInner, sortInnerWidth, sortInnerHeight)
+        NormalizeScale(sortInner)
+    end
+
+    local sortList = sortInner:AddChild("PreviewInventory_SortList", "GenericUI_Element_VerticalList")
+    sortList:SetPosition(0, 0)
+    sortList:SetSize(sortInnerWidth, sortInnerHeight)
+    sortList:SetElementSpacing(0, 0)
+    sortList:SetTopSpacing(0)
+    sortList:SetSideSpacing(0)
+    sortList:SetRepositionAfterAdding(true)
+    previewInventory.SortByList = sortList
+
+    local options = {
+        {Key = sortModes.LastAcquired, Label = "Last Picked Up"},
+        {Key = sortModes.Rarity, Label = "Rarity"},
+        {Key = sortModes.Type, Label = "Type"},
+    }
+    for i, option in ipairs(options) do
+        local row = CreateSortOption(sortList, "PreviewInventory_SortOption_" .. tostring(i), option.Label, option.Key, sortInnerWidth, optionHeight)
+        if row then
+            table.insert(previewInventory.SortByOptions, row)
+        end
+    end
+    if sortList.RepositionElements then
+        sortList:RepositionElements()
+    end
+
     local list = previewInventory.Root:AddChild("PreviewInventory_List", "GenericUI_Element_ScrollList")
-    list:SetPosition(0, filterHeight)
-    ApplySize(list, width, height - filterHeight)
+    local listOffsetY = filterHeight
+    list:SetPosition(0, listOffsetY)
+    ApplySize(list, width, height - listOffsetY)
     NormalizeScale(list)
     list:SetMouseWheelEnabled(true)
     list:SetScrollbarSpacing(4)
@@ -662,6 +862,10 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     grid:SetElementSpacing(previewInventory.GridSpacing, previewInventory.GridSpacing)
     previewInventory.Grid = grid
     grid:SetGridSize(columns, 1)
+
+    if previewInventory.SortByPanel and previewInventory.Root and previewInventory.Root.SetChildIndex then
+        previewInventory.Root:SetChildIndex(previewInventory.SortByPanel, 9999)
+    end
 
     UpdatePreviewFilterButtons()
     RenderPreviewInventory()
