@@ -753,35 +753,46 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     end
 
     local filterButtonSize = Clamp(ScaleY(26), 22, 28)
-    local filterHeight = filterButtonSize + 10
+    local buttonWidth = filterButtonSize
+    local buttonHeight = filterButtonSize
+    local buttonGap = ScaleX(4)
+    local rowPaddingY = Clamp(ScaleY(3), 2, 6)
+    local rowGap = Clamp(ScaleY(4), 2, 8)
+    local topRowHeight = buttonHeight + rowPaddingY * 2
+    local bottomRowHeight = buttonHeight + rowPaddingY * 2
+    local filterHeight = topRowHeight + bottomRowHeight + rowGap
     local filterBar = previewInventory.Root:AddChild("PreviewInventory_FilterBar", "GenericUI_Element_Empty")
     filterBar:SetPosition(0, 0)
     ApplySize(filterBar, width, filterHeight)
     NormalizeScale(filterBar)
 
-    local buttonWidth = filterButtonSize
-    local buttonHeight = filterButtonSize
-    local buttonGap = ScaleX(4)
-    local startY = math.floor((filterHeight - buttonHeight) / 2)
+    local topRowY = 0
+    local bottomRowY = topRowHeight + rowGap
+    local topRowButtonY = topRowY + math.floor((topRowHeight - buttonHeight) / 2)
+
+    local buttonClusterWidth = buttonWidth * 2 + buttonGap
+    local startX = math.floor((width - buttonClusterWidth) / 2)
 
     local sortButtonWidth = Clamp(ScaleX(88), 70, 110)
     local sortButtonHeight = Clamp(ScaleY(22), 20, buttonHeight)
     local sortButtonGap = ScaleX(4)
-    local sortPad = ScaleX(6)
-    local sortStartX = width - (sortButtonWidth * 2 + sortButtonGap + sortPad)
+    local rowPadX = ScaleX(6)
+    local sortPad = rowPadX
+    local rowBGPadX = Clamp(ScaleX(9), 8, 13)
+    local rowBGPadY = Clamp(ScaleY(4), 2, 8)
+    local rowBGHeight = bottomRowHeight + rowBGPadY * 2
+    local rowBGTopY = bottomRowY - rowBGPadY
+    local rowBGContentOffsetY = -Clamp(ScaleY(1), 2, 3)
+    local sortClusterWidth = sortButtonWidth * 2 + sortButtonGap
+    local sortStartX = width - rowPadX - sortClusterWidth
     if sortStartX < 0 then
         sortStartX = 0
     end
-    local sortY = math.floor((filterHeight - sortButtonHeight) / 2)
+    local sortY = rowBGTopY + math.floor((rowBGHeight - sortButtonHeight) / 2) + rowBGContentOffsetY
 
-    local searchGap = ScaleX(6)
-    local searchPad = sortPad
-    local buttonClusterWidth = buttonWidth * 2 + buttonGap
-    local leftAreaWidth = sortStartX - searchPad
-    if leftAreaWidth < 0 then
-        leftAreaWidth = 0
-    end
-    local maxSearchWidth = leftAreaWidth - buttonClusterWidth - searchGap
+    local searchGap = ScaleX(8)
+    local searchX = rowPadX
+    local maxSearchWidth = sortStartX - searchX - searchGap
     if maxSearchWidth < 0 then
         maxSearchWidth = 0
     end
@@ -794,11 +805,31 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         searchWidth = maxSearchWidth
     end
     local searchHeight = buttonHeight
-    local searchX = searchPad
-    local searchY = math.floor((filterHeight - searchHeight) / 2)
-    local startX = searchX
-    if searchWidth > 0 then
-        startX = searchX + searchWidth + searchGap
+    local searchY = rowBGTopY + math.floor((rowBGHeight - searchHeight) / 2) + rowBGContentOffsetY
+
+    local rowTexture = nil
+    if ctx and ctx.Client and ctx.Client.Textures and ctx.Client.Textures.GenericUI then
+        local textures = ctx.Client.Textures.GenericUI.TEXTURES
+        if textures and textures.FRAMES and textures.FRAMES.ENTRIES then
+            rowTexture = textures.FRAMES.ENTRIES.DARK
+        end
+    end
+    local rowBG = filterBar:AddChild("PreviewInventory_SearchRowBG", "GenericUI_Element_Texture")
+    local rowBGWidth = width + rowBGPadX * 2
+    if rowTexture then
+        rowBG:SetTexture(rowTexture, V(rowBGWidth, rowBGHeight))
+    end
+    rowBG:SetPosition(-rowBGPadX, rowBGTopY)
+    rowBG:SetSize(rowBGWidth, rowBGHeight)
+    NormalizeScale(rowBG)
+    if rowBG.SetMouseEnabled then
+        rowBG:SetMouseEnabled(false)
+    end
+    if rowBG.SetMouseChildren then
+        rowBG:SetMouseChildren(false)
+    end
+    if filterBar.SetChildIndex then
+        filterBar:SetChildIndex(rowBG, 0)
     end
 
     if searchWidth > 0 then
@@ -828,9 +859,35 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         local iconSize = Clamp(math.floor(searchHeight * 0.6), 10, 16)
         local iconBlockWidth = iconSize + iconPadding
         local textWidth = math.max(0, searchWidth - textPadding * 2 - iconBlockWidth)
-        local textSize = Clamp(math.floor(searchHeight * 0.55), 9, 12)
-        local textOffsetY = math.floor((searchHeight - textSize) / 2)
+        local inputTextSize = Clamp(math.floor(searchHeight * 0.6), 11, 14)
+        local hintTextSize = Clamp(inputTextSize + 2, 12, 15)
+        local textLiftY = Clamp(ScaleY(1), 1, 2)
+        local inputTextOffsetY = math.floor((searchHeight - inputTextSize) / 2) - textLiftY
+        local hintTextOffsetY = math.floor((searchHeight - hintTextSize) / 2) - textLiftY
         local textHeight = searchHeight
+
+        local inputBGPadX = Clamp(ScaleX(1), 1, 3)
+        local inputBGPadY = Clamp(ScaleY(2), 1, 4)
+        local inputBGX = textPadding - inputBGPadX
+        local inputBGY = inputBGPadY
+        local inputBGWidth = math.max(0, textWidth + inputBGPadX * 2)
+        local inputBGHeight = math.max(0, searchHeight - inputBGPadY * 2)
+        local searchInputBG = searchRoot:AddChild("PreviewInventory_Search_InputBG", "GenericUI_Element_Color")
+        searchInputBG:SetPosition(inputBGX, inputBGY)
+        searchInputBG:SetSize(inputBGWidth, inputBGHeight)
+        local inputBGColor = (ctx and ctx.PREVIEW_FILL_COLOR) or (Color and Color.CreateFromHex and Color.CreateFromHex("000000")) or (ctx and ctx.FILL_COLOR)
+        if inputBGColor and searchInputBG.SetColor then
+            searchInputBG:SetColor(inputBGColor)
+        end
+        if searchInputBG.SetAlpha then
+            searchInputBG:SetAlpha(0.85)
+        end
+        if searchInputBG.SetMouseEnabled then
+            searchInputBG:SetMouseEnabled(false)
+        end
+        if searchInputBG.SetMouseChildren then
+            searchInputBG:SetMouseChildren(false)
+        end
 
         local searchInput = searchRoot:AddChild("PreviewInventory_Search_Input", "GenericUI_Element_Text")
         searchInput:SetPosition(textPadding, 0)
@@ -848,7 +905,7 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
             searchInput:SetWordWrap(false)
         end
         if searchInput.SetTextFormat then
-            searchInput:SetTextFormat({color = 0xFFFFFF, size = textSize})
+            searchInput:SetTextFormat({color = 0xFFFFFF, size = inputTextSize})
         end
 
         local searchHint = searchRoot:AddChild("PreviewInventory_Search_Hint", "GenericUI_Element_Text")
@@ -857,21 +914,21 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         searchHint:SetType("Left")
         searchHint:SetText("Search...")
         if searchHint.SetTextFormat then
-            searchHint:SetTextFormat({color = 0xB0B0B0, size = textSize})
+            searchHint:SetTextFormat({color = 0xB0B0B0, size = hintTextSize})
         end
         if searchHint.SetMouseEnabled then
             searchHint:SetMouseEnabled(false)
         end
 
-        local function CenterSearchText(element)
+        local function CenterSearchText(element, offsetY)
             local mc = element and element.GetMovieClip and element:GetMovieClip() or nil
             if mc and mc.text_txt then
-                mc.text_txt.y = textOffsetY
+                mc.text_txt.y = offsetY
             end
         end
 
-        CenterSearchText(searchInput)
-        CenterSearchText(searchHint)
+        CenterSearchText(searchInput, inputTextOffsetY)
+        CenterSearchText(searchHint, hintTextOffsetY)
 
         local iconId = "magnifier-searchbar-2"
         local iconOffsetX = searchWidth - iconBlockWidth + math.floor((iconBlockWidth - iconSize) / 2)
@@ -937,8 +994,8 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         previewInventory.SearchHint = searchHint
     end
 
-    local equipmentBtn = Widgets.CreateButtonBox(filterBar, "PreviewFilter_Equipment", "", startX, startY, buttonWidth, buttonHeight, false, ctx.styleSquareStone)
-    local magicalBtn = Widgets.CreateButtonBox(filterBar, "PreviewFilter_Magical", "", startX + buttonWidth + buttonGap, startY, buttonWidth, buttonHeight, false, ctx.styleSquareStone)
+    local equipmentBtn = Widgets.CreateButtonBox(filterBar, "PreviewFilter_Equipment", "", startX, topRowButtonY, buttonWidth, buttonHeight, false, ctx.styleSquareStone)
+    local magicalBtn = Widgets.CreateButtonBox(filterBar, "PreviewFilter_Magical", "", startX + buttonWidth + buttonGap, topRowButtonY, buttonWidth, buttonHeight, false, ctx.styleSquareStone)
 
     local smallBrown = ctx.buttonPrefab and ctx.buttonPrefab.STYLES and (ctx.buttonPrefab.STYLES.SmallBrown or ctx.buttonPrefab.STYLES.MenuSlate or ctx.buttonStyle) or ctx.buttonStyle
     local smallRed = ctx.buttonPrefab and ctx.buttonPrefab.STYLES and (ctx.buttonPrefab.STYLES.SmallRed or ctx.buttonPrefab.STYLES.MediumRed or smallBrown) or smallBrown

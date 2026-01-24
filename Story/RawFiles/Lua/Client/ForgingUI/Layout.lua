@@ -961,8 +961,8 @@ function Layout.BuildUI()
 
     local columnConfigs = {
         {ID = "Main", Title = "Main Slot", Mode = "Main", X = mainX, Width = mainWidth, Texture = ctx.slotPanelTexture, Padding = Layout.Scale(6)},
-        {ID = "Preview", Title = "", Mode = "Preview", X = previewX, Width = previewWidth, Texture = ctx.previewPanelTexture, Padding = Layout.Scale(8)},
         {ID = "Donor", Title = "Donor Slot", Mode = "Donor", X = donorX, Width = donorWidth, Texture = ctx.slotPanelTexture, Padding = Layout.Scale(6)},
+        {ID = "Preview", Title = "", Mode = "Preview", X = previewX, Width = previewWidth, Texture = ctx.previewPanelTexture, Padding = Layout.Scale(8)},
     }
 
     for _, cfg in ipairs(columnConfigs) do
