@@ -1533,10 +1533,23 @@ function PreviewLogic.HandlePreviewSlotDrop(index, slot, ev)
         return
     end
 
-    if item and item.Handle then
-        PreviewLogic.AssignPreviewSlot(index, item)
+    local sourceIndex = State.PreviewDragSourceIndex
+    local sourceHandle = State.PreviewDragItemHandle
+    local isPreviewDrag = sourceIndex ~= nil and sourceHandle ~= nil and sourceHandle == dropHandle
+    if isPreviewDrag and sourceIndex ~= index then
+        local targetHandle = State.PreviewSlotItems[index]
+        if targetHandle and targetHandle ~= dropHandle then
+            PreviewLogic.AssignPreviewSlot(index, item or {Handle = dropHandle})
+            PreviewLogic.AssignPreviewSlot(sourceIndex, {Handle = targetHandle})
+        else
+            PreviewLogic.AssignPreviewSlot(index, item or {Handle = dropHandle})
+        end
     else
-        PreviewLogic.AssignPreviewSlot(index, {Handle = dropHandle})
+        if item and item.Handle then
+            PreviewLogic.AssignPreviewSlot(index, item)
+        else
+            PreviewLogic.AssignPreviewSlot(index, {Handle = dropHandle})
+        end
     end
     State.PreviewDragItemHandle = nil
     State.PreviewDragSourceIndex = nil
