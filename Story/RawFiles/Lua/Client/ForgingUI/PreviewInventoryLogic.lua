@@ -960,6 +960,18 @@ local function HandlePreviewSlotHover(slot)
     ShowPreviewSlotTooltip(slot)
 end
 
+local function HandlePreviewSlotHoverHighlight(slot)
+    if State.LastPreviewHoverSlot and State.LastPreviewHoverSlot ~= slot then
+        ClearSlotHighlight(State.LastPreviewHoverSlot)
+    end
+    State.LastPreviewHoverSlot = slot
+    if slot and slot.SetHighlighted then
+        slot:SetHighlighted(true)
+    elseif slot and slot.SlotElement and slot.SlotElement.SetHighlighted then
+        slot.SlotElement:SetHighlighted(true)
+    end
+end
+
 local function HandleForgeSlotHover(slot)
     if State.LastForgeHoverSlot and State.LastForgeHoverSlot ~= slot then
         ClearSlotHighlight(State.LastForgeHoverSlot)
@@ -1618,6 +1630,19 @@ function PreviewLogic.WirePreviewSlot(index, slot)
                     State.LastPreviewHoverSlot = nil
                 end
             end, {Priority = 200, StringID = "ForgingUI_PreviewTooltipOut"})
+        end
+        if slot.SlotElement.Events.MouseOver then
+            slot.SlotElement.Events.MouseOver:Subscribe(function ()
+                HandlePreviewSlotHoverHighlight(slot)
+            end, {Priority = 190, StringID = "ForgingUI_PreviewHoverHighlight"})
+        end
+        if slot.SlotElement.Events.MouseOut then
+            slot.SlotElement.Events.MouseOut:Subscribe(function ()
+                ClearSlotHighlight(slot)
+                if State.LastPreviewHoverSlot == slot then
+                    State.LastPreviewHoverSlot = nil
+                end
+            end, {Priority = 190, StringID = "ForgingUI_PreviewHoverHighlightOut"})
         end
     end
     slot._PreviewInventoryBound = true
