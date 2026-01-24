@@ -766,6 +766,7 @@ function Layout.BuildUI()
     local CreateSectionBox = widgets.CreateSectionBox
     local CreateDropSlot = widgets.CreateDropSlot
     local WireButton = widgets.WireButton
+    local RegisterSearchBlur = widgets.RegisterSearchBlur
     local function ApplyElementSize(element, width, height)
         if not element then
             return
@@ -837,11 +838,17 @@ function Layout.BuildUI()
     local topBarWidth = canvasWidth - margin * 2
     local topBar = canvas:AddChild("TopBar", "GenericUI_Element_Empty")
     topBar:SetPosition(margin, margin)
+    if RegisterSearchBlur then
+        RegisterSearchBlur(topBar)
+    end
     local dragArea = topBar:AddChild("ForgeUIDragArea", "GenericUI_Element_Color")
     dragArea:SetSize(topBarWidth, topBarHeight)
     dragArea:SetColor(ctx.HEADER_FILL_COLOR)
     dragArea:SetAlpha(0)
     dragArea:SetAsDraggableArea()
+    if RegisterSearchBlur then
+        RegisterSearchBlur(dragArea)
+    end
 
     local topButtonHeight = Layout.Clamp(Layout.ScaleY(32), 40, 50)
     local topButtonY = math.floor((topBarHeight - topButtonHeight) / 2)
@@ -939,6 +946,10 @@ function Layout.BuildUI()
     local infoHeight = contentHeight - Layout.ScaleY(infoPanelOffsetY)
     local infoPanelY = contentTop + Layout.ScaleY(infoPanelOffsetY)
     local leftInfoFrame, leftInfo, leftInfoWidth, leftInfoHeight = CreateSkinnedPanel(canvas, "LeftInfo", leftX, infoPanelY, leftWidth, infoHeight, ctx.introPanelTexture, Layout.Scale(10))
+    if RegisterSearchBlur then
+        RegisterSearchBlur(leftInfoFrame)
+        RegisterSearchBlur(leftInfo)
+    end
     local leftHeaderHeight = 0
     if leftInfo then
         CreateTextElement(leftInfo, "LeftInfo_Header", "Forge / Unique Forge", 0, 0, leftInfoWidth, 22, "Center", false, {size = ctx.HEADER_TEXT_SIZE})
@@ -985,6 +996,10 @@ function Layout.BuildUI()
             cfg.Texture,
             cfg.Padding
         )
+        if RegisterSearchBlur and cfg.Mode ~= "Preview" then
+            RegisterSearchBlur(panelFrame)
+            RegisterSearchBlur(panel)
+        end
         local headerHeight = 0
         -- Vertical offset to push header and slot lower in Main/Donor panels
         local headerOffsetY = (cfg.Mode == "Main" or cfg.Mode == "Donor") and 47 or 0
@@ -1082,6 +1097,10 @@ function Layout.BuildUI()
 
     if ctx.USE_SIDE_INVENTORY_PANEL then
         local inventoryFrame, inventoryPanel, inventoryInnerWidth = CreateFrame(canvas, "InventoryPanel", rightXPos, contentTop, rightWidth, contentHeight, ctx.FILL_COLOR, ctx.FRAME_ALPHA)
+        if RegisterSearchBlur then
+            RegisterSearchBlur(inventoryFrame)
+            RegisterSearchBlur(inventoryPanel)
+        end
         local inventoryHeaderHeight = 22
         local _, inventoryHeaderInner, headerInnerWidth, headerInnerHeight = CreateFrame(inventoryPanel, "InventoryHeader", 0, 0, inventoryInnerWidth, inventoryHeaderHeight, ctx.HEADER_FILL_COLOR, 1)
         CreateTextElement(inventoryHeaderInner, "InventoryLabel", "Inventory", 0, 0, headerInnerWidth - 70, headerInnerHeight, "Center", false, {size = ctx.HEADER_TEXT_SIZE})
@@ -1119,6 +1138,12 @@ function Layout.BuildUI()
     local resultWidth = midWidth - wikiWidth - gap
     local wikiFrame, wikiPanel, wikiInnerWidth, wikiInnerHeight = CreateSkinnedPanel(canvas, "ForgeWiki", midX, midBottomY, wikiWidth, bottomHeight, ctx.wikiPanelTexture, Layout.Scale(10))
     local resultFrame, resultPanel, resultInnerWidth, resultInnerHeight = CreateSkinnedPanel(canvas, "ForgeResult", midX + wikiWidth + gap, midBottomY, resultWidth, bottomHeight, ctx.resultPanelTexture, Layout.Scale(10))
+    if RegisterSearchBlur then
+        RegisterSearchBlur(wikiFrame)
+        RegisterSearchBlur(wikiPanel)
+        RegisterSearchBlur(resultFrame)
+        RegisterSearchBlur(resultPanel)
+    end
 
     local wikiEntries = {
         {Label = "Rarity", Text = "Rarity determines the quality and power of forged equipment."},

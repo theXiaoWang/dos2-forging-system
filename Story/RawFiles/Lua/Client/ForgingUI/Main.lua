@@ -442,6 +442,14 @@ local function QueueLayoutBuild(showAfter)
                 ApplyUIInputState(true)
                 ScheduleUIInputRefresh()
                 Ext.Print("[ForgingUI] UI shown")
+                if USE_CUSTOM_PREVIEW_PANEL then
+                    if Widgets.ClearPreviewSearch then
+                        Widgets.ClearPreviewSearch()
+                    else
+                        RenderPreviewInventory()
+                    end
+                    StartPreviewInventoryRefresh()
+                end
                 if CraftState.DockRequested and displayMode == DISPLAY_MODES.Combine and Craft.DockUI then
                     Craft.DockUI(true)
                 end
@@ -619,10 +627,14 @@ function ForgingUI.Show()
         ApplyUIInputState(true)
         ScheduleUIInputRefresh()
         Ext.Print("[ForgingUI] UI shown")
-          if USE_CUSTOM_PREVIEW_PANEL then
-              RenderPreviewInventory()
-              StartPreviewInventoryRefresh()
-          end
+        if USE_CUSTOM_PREVIEW_PANEL then
+            if Widgets.ClearPreviewSearch then
+                Widgets.ClearPreviewSearch()
+            else
+                RenderPreviewInventory()
+            end
+            StartPreviewInventoryRefresh()
+        end
         if CraftState.DockRequested and displayMode == DISPLAY_MODES.Combine and Craft.DockUI then
             Craft.DockUI(true)
         end

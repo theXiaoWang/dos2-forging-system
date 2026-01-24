@@ -73,12 +73,50 @@ local function Clamp(value, minValue, maxValue)
     return value
 end
 
+local function ResolveDefaultSortMode()
+    if ctx and ctx.PreviewLogic and ctx.PreviewLogic.PREVIEW_SORT_MODES then
+        return ctx.PreviewLogic.PREVIEW_SORT_MODES.Default
+    end
+    return "Default"
+end
+
+local function UnfocusPreviewSearch()
+    local searchInput = previewInventory.SearchText
+    if searchInput and searchInput.SetFocused then
+        local isFocused = searchInput.IsFocused and searchInput:IsFocused()
+        if isFocused then
+            searchInput:SetFocused(false)
+        end
+    end
+end
+
+local function RegisterSearchBlur(element)
+    if not element or not element.Events or not element.Events.MouseDown then
+        return
+    end
+    if element._PreviewSearchBlurHooked then
+        return
+    end
+    element._PreviewSearchBlurHooked = true
+    element.Events.MouseDown:Subscribe(function ()
+        UnfocusPreviewSearch()
+    end)
+end
+
 function Widgets.SetContext(nextCtx)
     ctx = nextCtx
 end
 
 function Widgets.GetPreviewInventory()
     return previewInventory
+end
+
+function Widgets.UnfocusPreviewSearch()
+    UnfocusPreviewSearch()
+end
+
+function Widgets.RegisterSearchBlur(element)
+    RegisterSearchBlur(element)
 end
 
 function Widgets.CreateFrame(parent, id, x, y, width, height, fillColor, alpha, padding, useSliced, centerAlphaOverride, innerAlphaOverride, frameStyleOverride, frameOffset, frameSizeOverride)
@@ -379,6 +417,8 @@ function Widgets.CreateButtonBox(parent, id, label, x, y, width, height, wrap, s
             end
         end
     end
+    local buttonRoot = button.Root or (button.GetRootElement and button:GetRootElement() or nil)
+    RegisterSearchBlur(buttonRoot)
     return button
 end
 
@@ -463,6 +503,9 @@ local function EnsurePreviewSlot(index)
     slot:SetCanDrop(true)
     slot:SetEnabled(true)
     previewInventory.Slots[index] = slot
+    if slot.SlotElement then
+        RegisterSearchBlur(slot.SlotElement)
+    end
     if ctx and ctx.PreviewLogic and ctx.PreviewLogic.WirePreviewSlot then
         ctx.PreviewLogic.WirePreviewSlot(index, slot)
     end
@@ -638,6 +681,20 @@ local function ApplyPreviewSortMode(mode)
     if Widgets.RenderPreviewInventory then
         Widgets.RenderPreviewInventory()
     end
+end
+
+function Widgets.ClearPreviewSearch()
+    previewInventory.SearchQuery = ""
+    if previewInventory.SearchText and previewInventory.SearchText.SetText then
+        previewInventory.SearchText:SetText("")
+    end
+    if previewInventory.SearchText and previewInventory.SearchText.SetFocused then
+        previewInventory.SearchText:SetFocused(false)
+    end
+    if previewInventory.SearchHint and previewInventory.SearchHint.SetVisible then
+        previewInventory.SearchHint:SetVisible(true)
+    end
+    ApplyPreviewSortMode(ResolveDefaultSortMode())
 end
 
 local function SetSortByPanelOpen(open)
@@ -861,9 +918,10 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         local textWidth = math.max(0, searchWidth - textPadding * 2 - iconBlockWidth)
         local inputTextSize = Clamp(math.floor(searchHeight * 0.6), 11, 14)
         local hintTextSize = Clamp(inputTextSize + 2, 12, 15)
-        local textLiftY = Clamp(ScaleY(1), 1, 2)
-        local inputTextOffsetY = math.floor((searchHeight - inputTextSize) / 2) - textLiftY
-        local hintTextOffsetY = math.floor((searchHeight - hintTextSize) / 2) - textLiftY
+        local inputTextLiftY = Clamp(ScaleY(7), 6, 8)
+        local hintTextLiftY = Clamp(ScaleY(5), 4, 6)
+        local inputTextOffsetY = math.floor((searchHeight - inputTextSize) / 2) - inputTextLiftY
+        local hintTextOffsetY = math.floor((searchHeight - hintTextSize) / 2) - hintTextLiftY
         local textHeight = searchHeight
 
         local inputBGPadX = Clamp(ScaleX(1), 1, 3)
@@ -951,13 +1009,6 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
             if searchHint.SetVisible then
                 searchHint:SetVisible((not hasText) and not isFocused)
             end
-        end
-
-        local function ResolveDefaultSortMode()
-            if ctx and ctx.PreviewLogic and ctx.PreviewLogic.PREVIEW_SORT_MODES then
-                return ctx.PreviewLogic.PREVIEW_SORT_MODES.Default
-            end
-            return "Default"
         end
 
         UpdateSearchHint(previewInventory.SearchQuery or "")
@@ -1127,6 +1178,7 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     list:SetMouseWheelEnabled(true)
     list:SetScrollbarSpacing(4)
     previewInventory.ScrollList = list
+    RegisterSearchBlur(list)
 
     local grid = list:AddChild("PreviewInventory_Grid", "GenericUI_Element_Grid")
     local padding = Scale(4)  -- Reduced padding to give more space for slots
@@ -1149,6 +1201,7 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     NormalizeScale(grid)
     grid:SetElementSpacing(previewInventory.GridSpacing, previewInventory.GridSpacing)
     previewInventory.Grid = grid
+    RegisterSearchBlur(grid)
     grid:SetGridSize(columns, 1)
 
     if previewInventory.SortByPanel and previewInventory.Root and previewInventory.Root.SetChildIndex then
@@ -1211,8 +1264,11 @@ function Widgets.WireButton(button, id, requestDisplay)
         return
     end
     ctx.ForgingUI.Buttons[id] = button
+    local buttonRoot = button.Root or (button.GetRootElement and button:GetRootElement() or nil)
+    RegisterSearchBlur(buttonRoot or button)
     if button.Events and button.Events.Pressed then
         button.Events.Pressed:Subscribe(function ()
+            UnfocusPreviewSearch()
             if requestDisplay and ctx.RequestCraftDock then
                 ctx.RequestCraftDock(id)
             elseif ctx.ForgingUI.OnForgeButtonClicked and id == "ForgeAction" then
@@ -1226,12 +1282,17 @@ function Widgets.WireSlot(slot, id)
     if not slot or not ctx then
         return
     end
+    if slot.SlotElement then
+        RegisterSearchBlur(slot.SlotElement)
+    end
     slot.Events.Clicked:Subscribe(function ()
+        UnfocusPreviewSearch()
         if ctx.RequestCraftDock then
             ctx.RequestCraftDock(id)
         end
     end)
     slot.Events.ObjectDraggedIn:Subscribe(function ()
+        UnfocusPreviewSearch()
         if ctx.RequestCraftDock then
             ctx.RequestCraftDock(id)
         end
