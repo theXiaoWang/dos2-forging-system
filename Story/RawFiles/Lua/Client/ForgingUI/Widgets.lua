@@ -285,7 +285,8 @@ function Widgets.CreateFrame(parent, id, x, y, width, height, fillColor, alpha, 
         if not element then
             return
         end
-        if element.SetSize then
+        local skipSetSize = element.SetGridSize ~= nil
+        if element.SetSize and not skipSetSize then
             element:SetSize(w, h)
         end
         if element.SetSizeOverride then
@@ -784,7 +785,7 @@ local function RenderPreviewInventory()
     previewInventory.ScrollContentHeight = (previewInventory.GridOffsetY or padding) + gridHeight
     local gridWidth = previewInventory.GridContentWidth or 0
     if gridWidth > 0 then
-        if previewInventory.Grid.SetSize then
+        if previewInventory.Grid.SetSize and not previewInventory.Grid.SetGridSize then
             previewInventory.Grid:SetSize(gridWidth, gridHeight)
         end
         if previewInventory.Grid.SetSizeOverride then
