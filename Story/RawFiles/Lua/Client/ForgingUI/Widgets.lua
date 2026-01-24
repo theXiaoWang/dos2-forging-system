@@ -30,7 +30,29 @@ local previewInventory = {
     Columns = 0,
     GridSpacing = 0,
     SlotSize = 66,  -- Increased to fully show item frames
+    ListOffsetY = 0,
+    ListHeight = 0,
+    GridPadding = 0,
+    GridOffsetY = 0,
+    GridContentWidth = 0,
+    ScrollContentHeight = 0,
+    ScrollTrack = nil,
+    ScrollHandle = nil,
+    ScrollHandleStyle = nil,
+    ScrollHandleWidth = 0,
+    ScrollHandleHeight = 0,
+    ScrollHandleMinHeight = 0,
+    ScrollHandleOffsetX = 0,
+    ScrollHandleOffsetY = 0,
+    ScrollHandleRotation = 0,
+    ScrollTrackX = 0,
+    ScrollTrackY = 0,
+    ScrollTrackHeight = 0,
+    ScrollMaxOffset = 0,
+    ScrollDragging = false,
+    ScrollDragOffset = 0,
 }
+local previewScrollTickRegistered = false
 
 local function GetUI()
     return ctx and ctx.uiInstance or nil
@@ -101,6 +123,142 @@ local function RegisterSearchBlur(element)
     element.Events.MouseDown:Subscribe(function ()
         UnfocusPreviewSearch()
     end)
+end
+
+local function GetPreviewScrollBar()
+    local list = previewInventory.ScrollList
+    local mc = list and list.GetMovieClip and list:GetMovieClip() or nil
+    if mc and mc.list and mc.list.m_scrollbar_mc then
+        return mc.list.m_scrollbar_mc
+    end
+    if mc and mc.scrollBar_mc then
+        return mc.scrollBar_mc
+    end
+    if mc and mc.list and mc.list.scrollBar_mc then
+        return mc.list.scrollBar_mc
+    end
+    return nil
+end
+
+local function ApplyPreviewScrollOffset(offsetY)
+    local scrollBar = GetPreviewScrollBar()
+    if scrollBar and scrollBar.scrollTo then
+        scrollBar.scrollTo(offsetY)
+    end
+end
+
+local function UpdatePreviewScrollHandle()
+    local handle = previewInventory.ScrollHandle
+    local track = previewInventory.ScrollTrack
+    if not handle or not handle.Root or not track then
+        return
+    end
+
+    local listHeight = previewInventory.ListHeight or 0
+    local contentHeight = previewInventory.ScrollContentHeight or listHeight
+    local trackHeight = previewInventory.ScrollTrackHeight or 0
+    if listHeight <= 0 or trackHeight <= 0 or contentHeight <= listHeight then
+        previewInventory.ScrollMaxOffset = 0
+        if handle.Root.SetVisible then
+            handle.Root:SetVisible(false)
+        end
+        if track.SetVisible then
+            track:SetVisible(false)
+        end
+        return
+    end
+
+    local maxScroll = math.max(0, contentHeight - listHeight)
+    previewInventory.ScrollMaxOffset = maxScroll
+
+    local handleHeight = previewInventory.ScrollHandleHeight or 0
+    if handle.Root and handle.Root.GetHeight then
+        handleHeight = handle.Root:GetHeight()
+    end
+    if handleHeight <= 0 then
+        handleHeight = previewInventory.ScrollHandleMinHeight or 0
+    end
+    previewInventory.ScrollHandleHeight = handleHeight
+
+    local scrollBar = GetPreviewScrollBar()
+    local scrolledY = 0
+    if scrollBar then
+        scrolledY = scrollBar.scrolledY or scrollBar.m_scrolledY or 0
+        if scrollBar.visible ~= nil then
+            scrollBar.visible = false
+        end
+    end
+
+    scrolledY = Clamp(scrolledY, 0, maxScroll)
+    local range = trackHeight - handleHeight
+    local handleY = previewInventory.ScrollTrackY or 0
+    if range > 0 and maxScroll > 0 then
+        handleY = handleY + math.floor((scrolledY / maxScroll) * range + 0.5)
+    end
+    local offsetX = previewInventory.ScrollHandleOffsetX or 0
+    local offsetY = previewInventory.ScrollHandleOffsetY or 0
+    handle.Root:SetPosition((previewInventory.ScrollTrackX or 0) + offsetX, handleY + offsetY)
+    if handle.Root.SetVisible then
+        handle.Root:SetVisible(true)
+    end
+    if track.SetVisible then
+        track:SetVisible(true)
+    end
+end
+
+local function UpdatePreviewScrollFromMouse(mouseY)
+    if not previewInventory.ScrollDragging then
+        return
+    end
+    local handle = previewInventory.ScrollHandle
+    if not handle or not handle.Root then
+        return
+    end
+    local trackY = previewInventory.ScrollTrackY or 0
+    local trackHeight = previewInventory.ScrollTrackHeight or 0
+    local handleHeight = previewInventory.ScrollHandleHeight or 0
+    local maxScroll = previewInventory.ScrollMaxOffset or 0
+    if trackHeight <= handleHeight or maxScroll <= 0 then
+        return
+    end
+    local minY = trackY
+    local maxY = trackY + trackHeight - handleHeight
+    local targetY = Clamp(mouseY - (previewInventory.ScrollDragOffset or 0), minY, maxY)
+    local offsetX = previewInventory.ScrollHandleOffsetX or 0
+    local offsetY = previewInventory.ScrollHandleOffsetY or 0
+    handle.Root:SetPosition((previewInventory.ScrollTrackX or 0) + offsetX, targetY + offsetY)
+    local range = maxY - minY
+    local ratio = range > 0 and (targetY - minY) / range or 0
+    ApplyPreviewScrollOffset(ratio * maxScroll)
+end
+
+local function EnsurePreviewScrollTick()
+    if previewScrollTickRegistered then
+        return
+    end
+    previewScrollTickRegistered = true
+    local function SyncHandle()
+        if previewInventory.ScrollDragging then
+            return
+        end
+        local handle = previewInventory.ScrollHandle
+        if not handle or not handle.Root then
+            return
+        end
+        local root = previewInventory.Root
+        if root and root.IsDestroyed and root:IsDestroyed() then
+            return
+        end
+        local mc = root and root.GetMovieClip and root:GetMovieClip() or nil
+        if mc and mc.visible then
+            UpdatePreviewScrollHandle()
+        end
+    end
+    if GameState and GameState.Events and GameState.Events.RunningTick then
+        GameState.Events.RunningTick:Subscribe(SyncHandle, {StringID = "ForgingUI_PreviewScrollHandle"})
+    elseif Ext and Ext.Events and Ext.Events.Tick then
+        Ext.Events.Tick:Subscribe(SyncHandle, {StringID = "ForgingUI_PreviewScrollHandle"})
+    end
 end
 
 function Widgets.SetContext(nextCtx)
@@ -615,6 +773,24 @@ local function RenderPreviewInventory()
     if previewInventory.Grid.SetGridSize and columns > 0 then
         previewInventory.Grid:SetGridSize(columns, rows)
     end
+    local listHeight = previewInventory.ListHeight or 0
+    local padding = previewInventory.GridPadding or 0
+    local gridContentHeight = rows * (previewInventory.SlotSize or 0)
+    if rows > 1 then
+        gridContentHeight = gridContentHeight + (rows - 1) * (previewInventory.GridSpacing or 0)
+    end
+    local gridMinHeight = math.max(0, listHeight - padding * 2)
+    local gridHeight = math.max(gridMinHeight, gridContentHeight)
+    previewInventory.ScrollContentHeight = (previewInventory.GridOffsetY or padding) + gridHeight
+    local gridWidth = previewInventory.GridContentWidth or 0
+    if gridWidth > 0 then
+        if previewInventory.Grid.SetSize then
+            previewInventory.Grid:SetSize(gridWidth, gridHeight)
+        end
+        if previewInventory.Grid.SetSizeOverride then
+            previewInventory.Grid:SetSizeOverride(V(gridWidth, gridHeight))
+        end
+    end
 
     for index = 1, totalSlots do
         local slot = EnsurePreviewSlot(index)
@@ -647,9 +823,13 @@ local function RenderPreviewInventory()
         previewInventory.ScrollList:RepositionElements()
     end
 
-    local mc = previewInventory.ScrollList.GetMovieClip and previewInventory.ScrollList:GetMovieClip() or nil
-    if mc and mc.scrollBar_mc then
-        mc.scrollBar_mc.visible = true
+    if previewInventory.ScrollHandle and previewInventory.ScrollHandle.Root then
+        UpdatePreviewScrollHandle()
+    else
+        local scrollBar = GetPreviewScrollBar()
+        if scrollBar then
+            scrollBar.visible = true
+        end
     end
 
     if ctx and ctx.PreviewLogic and ctx.PreviewLogic.RefreshInventoryHighlights then
@@ -779,6 +959,27 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     previewInventory.SortByOptions = {}
     previewInventory.SortByOpen = false
     previewInventory.SortByStyles = nil
+    previewInventory.ListOffsetY = 0
+    previewInventory.ListHeight = 0
+    previewInventory.GridPadding = 0
+    previewInventory.GridOffsetY = 0
+    previewInventory.GridContentWidth = 0
+    previewInventory.ScrollContentHeight = 0
+    previewInventory.ScrollTrack = nil
+    previewInventory.ScrollHandle = nil
+    previewInventory.ScrollHandleStyle = nil
+    previewInventory.ScrollHandleWidth = 0
+    previewInventory.ScrollHandleHeight = 0
+    previewInventory.ScrollHandleMinHeight = 0
+    previewInventory.ScrollHandleOffsetX = 0
+    previewInventory.ScrollHandleOffsetY = 0
+    previewInventory.ScrollHandleRotation = 0
+    previewInventory.ScrollTrackX = 0
+    previewInventory.ScrollTrackY = 0
+    previewInventory.ScrollTrackHeight = 0
+    previewInventory.ScrollMaxOffset = 0
+    previewInventory.ScrollDragging = false
+    previewInventory.ScrollDragOffset = 0
     if not previewInventory.Filter and ctx.CRAFT_PREVIEW_MODES then
         previewInventory.Filter = ctx.CRAFT_PREVIEW_MODES.Equipment
     end
@@ -1178,6 +1379,8 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     list:SetMouseWheelEnabled(true)
     list:SetScrollbarSpacing(4)
     previewInventory.ScrollList = list
+    previewInventory.ListOffsetY = listOffsetY
+    previewInventory.ListHeight = listHeight
     RegisterSearchBlur(list)
 
     local grid = list:AddChild("PreviewInventory_Grid", "GenericUI_Element_Grid")
@@ -1201,8 +1404,125 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     NormalizeScale(grid)
     grid:SetElementSpacing(previewInventory.GridSpacing, previewInventory.GridSpacing)
     previewInventory.Grid = grid
+    previewInventory.GridPadding = padding
+    previewInventory.GridOffsetY = gridY
+    previewInventory.GridContentWidth = gridContentWidth
     RegisterSearchBlur(grid)
     grid:SetGridSize(columns, 1)
+
+    local scrollStyle = ctx.buttonPrefab and ctx.buttonPrefab.STYLES and ctx.buttonPrefab.STYLES.ScrollBarHorizontal or ctx.buttonStyle
+    local scrollHandle = ctx.buttonPrefab.Create(GetUI(), "PreviewInventory_ScrollHandle", previewInventory.Root, scrollStyle)
+    scrollHandle:SetLabel("")
+    if scrollHandle.Root and scrollHandle.Root.SetVisible then
+        scrollHandle.Root:SetVisible(false)
+    end
+    RegisterSearchBlur(scrollHandle.Root)
+
+    local scrollHandleWidth = 0
+    local scrollHandleHeight = 0
+    if scrollHandle.Root and scrollHandle.Root.GetWidth then
+        scrollHandleWidth = scrollHandle.Root:GetWidth()
+    end
+    if scrollHandle.Root and scrollHandle.Root.GetHeight then
+        scrollHandleHeight = scrollHandle.Root:GetHeight()
+    end
+    if scrollHandleWidth <= 0 then
+        scrollHandleWidth = Clamp(ScaleX(12), 10, 16)
+    end
+    if scrollHandleHeight <= 0 then
+        scrollHandleHeight = Clamp(ScaleY(20), 16, 28)
+    end
+
+    local handleOffsetX = 0
+    local handleOffsetY = 0
+    local handleRotation = 90
+    if scrollHandle.Root and scrollHandle.Root.SetRotation then
+        scrollHandle.Root:SetRotation(handleRotation)
+        handleOffsetX = scrollHandleHeight
+        handleOffsetY = 0
+        scrollHandleWidth, scrollHandleHeight = scrollHandleHeight, scrollHandleWidth
+    else
+        handleRotation = 0
+    end
+
+    local scrollTrackPadding = Clamp(ScaleX(4), 2, 6)
+    local desiredTrackX = gridX + gridContentWidth + scrollTrackPadding
+    local maxTrackX = width - scrollHandleWidth - scrollTrackPadding
+    local scrollTrackX = math.min(desiredTrackX, maxTrackX)
+    if scrollTrackX < 0 then
+        scrollTrackX = 0
+    end
+    local scrollTrackY = listOffsetY + padding
+    local scrollTrackHeight = math.max(0, listHeight - padding * 2)
+    local scrollTrack = previewInventory.Root:AddChild("PreviewInventory_ScrollTrack", "GenericUI_Element_Color")
+    scrollTrack:SetPosition(scrollTrackX, scrollTrackY)
+    scrollTrack:SetSize(scrollHandleWidth, scrollTrackHeight)
+    local trackColor = (ctx and (ctx.PREVIEW_FILL_COLOR or ctx.FILL_COLOR)) or 0x000000
+    if scrollTrack.SetColor then
+        scrollTrack:SetColor(trackColor)
+    end
+    if scrollTrack.SetAlpha then
+        scrollTrack:SetAlpha(0.15)
+    end
+    if scrollTrack.SetMouseEnabled then
+        scrollTrack:SetMouseEnabled(false)
+    end
+    if scrollTrack.SetMouseChildren then
+        scrollTrack:SetMouseChildren(false)
+    end
+    if scrollTrack.SetVisible then
+        scrollTrack:SetVisible(false)
+    end
+
+    if scrollHandle.Root and scrollHandle.Root.SetPosition then
+        scrollHandle.Root:SetPosition(scrollTrackX + handleOffsetX, scrollTrackY + handleOffsetY)
+    end
+    if previewInventory.Root and previewInventory.Root.SetChildIndex and scrollHandle.Root then
+        previewInventory.Root:SetChildIndex(scrollHandle.Root, 9998)
+    end
+
+    if scrollHandle.Root and scrollHandle.Root.Events then
+        scrollHandle.Root.Events.MouseDown:Subscribe(function ()
+            previewInventory.ScrollDragging = true
+            local dragHeight = previewInventory.ScrollHandleHeight > 0 and previewInventory.ScrollHandleHeight or scrollHandleHeight
+            previewInventory.ScrollDragOffset = math.floor(dragHeight / 2)
+        end)
+        scrollHandle.Root.Events.MouseUp:Subscribe(function ()
+            previewInventory.ScrollDragging = false
+        end)
+    end
+
+    if previewInventory.Root and previewInventory.Root.Events then
+        if previewInventory.Root.SetMouseMoveEventEnabled then
+            previewInventory.Root:SetMouseMoveEventEnabled(true)
+        end
+        previewInventory.Root.Events.MouseMove:Subscribe(function (ev)
+            if previewInventory.ScrollDragging then
+                local mouseY = ev and ev.LocalPos and ev.LocalPos[2] or 0
+                UpdatePreviewScrollFromMouse(mouseY)
+            end
+        end)
+        previewInventory.Root.Events.MouseUp:Subscribe(function ()
+            previewInventory.ScrollDragging = false
+        end)
+        previewInventory.Root.Events.MouseOut:Subscribe(function ()
+            previewInventory.ScrollDragging = false
+        end)
+    end
+
+    previewInventory.ScrollTrack = scrollTrack
+    previewInventory.ScrollHandle = scrollHandle
+    previewInventory.ScrollHandleStyle = scrollStyle
+    previewInventory.ScrollHandleWidth = scrollHandleWidth
+    previewInventory.ScrollHandleHeight = scrollHandleHeight
+    previewInventory.ScrollHandleMinHeight = scrollHandleHeight
+    previewInventory.ScrollHandleOffsetX = handleOffsetX
+    previewInventory.ScrollHandleOffsetY = handleOffsetY
+    previewInventory.ScrollHandleRotation = handleRotation
+    previewInventory.ScrollTrackX = scrollTrackX
+    previewInventory.ScrollTrackY = scrollTrackY
+    previewInventory.ScrollTrackHeight = scrollTrackHeight
+    EnsurePreviewScrollTick()
 
     if previewInventory.SortByPanel and previewInventory.Root and previewInventory.Root.SetChildIndex then
         previewInventory.Root:SetChildIndex(previewInventory.SortByPanel, 9999)
