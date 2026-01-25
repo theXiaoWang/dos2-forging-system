@@ -13,6 +13,10 @@ function Layout.SetContext(nextCtx)
     ctx = nextCtx
 end
 
+local function GetContext()
+    return ctx
+end
+
 local function V(...)
     return ctx and ctx.V and ctx.V(...) or Vector.Create(...)
 end
@@ -35,6 +39,30 @@ end
 local function GetDisplayModes()
     return ctx and ctx.DISPLAY_MODES or {Combine = "Combine", Preview = "Preview"}
 end
+
+local Diagnostics = Ext.Require("Client/ForgingUI/UI/Layout/Diagnostics.lua")
+local Viewport = Ext.Require("Client/ForgingUI/UI/Layout/Viewport.lua")
+
+local diagnostics = Diagnostics.Create({
+    getContext = GetContext,
+})
+Layout.PrintUIState = diagnostics.PrintUIState
+Layout.PrintElementInfo = diagnostics.PrintElementInfo
+Layout.DumpElementTree = diagnostics.DumpElementTree
+Layout.DumpFillElements = diagnostics.DumpFillElements
+
+local viewport = Viewport.Create({
+    getContext = GetContext,
+    getLayoutState = GetLayoutState,
+})
+Layout.GetViewportScale = viewport.GetViewportScale
+Layout.GetViewportSize = viewport.GetViewportSize
+Layout.GetUIScaleMultiplier = viewport.GetUIScaleMultiplier
+Layout.UpdateUISizeFromViewport = viewport.UpdateUISizeFromViewport
+Layout.ScaleX = viewport.ScaleX
+Layout.ScaleY = viewport.ScaleY
+Layout.Scale = viewport.Scale
+Layout.Clamp = viewport.Clamp
 
 function Layout.HasLayout()
     if not ctx or not ctx.uiInstance or not ctx.uiInstance.GetElementByID then
@@ -77,355 +105,6 @@ function Layout.PositionUI()
             ctx.Craft.DockUI(false)
         end
     end
-end
-
-function Layout.PrintUIState(tag)
-    if not ctx or not ctx.uiInstance then
-        if ctx and ctx.Ext then
-            ctx.Ext.Print(string.format("[ForgingUI] %s: uiInstance missing", tag))
-        end
-        return
-    end
-
-    local uiObject = ctx.uiInstance:GetUI()
-    if not uiObject then
-        ctx.Ext.Print(string.format("[ForgingUI] %s: UIObject missing", tag))
-        return
-    end
-
-    local x, y = ctx.uiInstance:GetPosition()
-    local size = nil
-    local sizeText = "nil"
-    local okSize, sizeValue = pcall(function()
-        return uiObject.SysPanelSize
-    end)
-    if okSize and sizeValue then
-        size = sizeValue
-        sizeText = string.format("%d,%d", size[1], size[2])
-    end
-
-    local scaleValue = 1
-    local okScale, scale = pcall(function()
-        return uiObject.SysPanelScale
-    end)
-    if okScale and scale ~= nil then
-        if type(scale) == "table" then
-            scaleValue = scale[1] or scaleValue
-        elseif type(scale) == "number" then
-            scaleValue = scale
-        end
-    end
-
-    ctx.Ext.Print(string.format(
-        "[ForgingUI] %s: visible=%s pos=%d,%d size=%s layer=%s scale=%.3f",
-        tag,
-        tostring(ctx.uiInstance:IsVisible()),
-        x or -1,
-        y or -1,
-        sizeText,
-        tostring(uiObject.Layer or "n/a"),
-        scaleValue
-    ))
-end
-
-function Layout.PrintElementInfo(id)
-    if not ctx or not ctx.uiInstance or not id then
-        return
-    end
-    local function UnpackSize(value)
-        if type(value) == "table" then
-            if value.unpack then
-                return value:unpack()
-            end
-            return value[1] or value.x or value.X, value[2] or value.y or value.Y
-        end
-        return nil, nil
-    end
-
-    local element = ctx.uiInstance:GetElementByID(id)
-    if not element then
-        ctx.Ext.Print(string.format("[ForgingUI] Debug: element '%s' missing", id))
-        return
-    end
-    local x, y = element:GetPosition()
-    local w, h = nil, nil
-    if element.GetSize then
-        local ok, sizeValue = pcall(element.GetSize, element, true)
-        if ok and sizeValue then
-            w, h = UnpackSize(sizeValue)
-        end
-    end
-    local rawW, rawH = nil, nil
-    if element.GetRawSize then
-        local ok, rawValue = pcall(element.GetRawSize, element)
-        if ok and rawValue then
-            rawW, rawH = UnpackSize(rawValue)
-        end
-    end
-    local overrideW, overrideH = nil, nil
-    if element.GetSizeOverride then
-        local ok, overrideValue = pcall(element.GetSizeOverride, element)
-        if ok and overrideValue then
-            overrideW, overrideH = UnpackSize(overrideValue)
-        end
-    end
-    local scaleText = "n/a"
-    if element.GetScale then
-        local ok, scale = pcall(element.GetScale, element)
-        if ok and scale then
-            scaleText = string.format("%.2f,%.2f", scale[1], scale[2])
-        end
-    end
-    if (w == nil or h == nil) and element.GetMovieClip then
-        local ok, mc = pcall(element.GetMovieClip, element)
-        if ok and mc then
-            if w == nil then
-                w = mc.width
-            end
-            if h == nil then
-                h = mc.height
-            end
-            if scaleText == "n/a" then
-                local sx = mc.scaleX
-                local sy = mc.scaleY
-                if sx and sy then
-                    scaleText = string.format("%.2f,%.2f", sx, sy)
-                end
-            end
-        end
-    end
-
-    ctx.Ext.Print(string.format(
-        "[ForgingUI] Debug: %s pos=%s,%s size=%s,%s raw=%s,%s override=%s,%s scale=%s visible=%s parent=%s",
-        tostring(id),
-        tostring(x or "n/a"),
-        tostring(y or "n/a"),
-        tostring(w or "n/a"),
-        tostring(h or "n/a"),
-        tostring(rawW or "n/a"),
-        tostring(rawH or "n/a"),
-        tostring(overrideW or "n/a"),
-        tostring(overrideH or "n/a"),
-        tostring(scaleText),
-        tostring(element.IsVisible and element:IsVisible() or true),
-        tostring(element.ParentID)
-    ))
-end
-
-function Layout.DumpElementTree(id, maxDepth)
-    if not ctx or not ctx.uiInstance or not id then
-        return
-    end
-    local depthLimit = maxDepth or 2
-
-    local function DumpElement(elem, depth)
-        local mcAlpha = "n/a"
-        local mcVisible = "n/a"
-        local mcWidth = "n/a"
-        local mcHeight = "n/a"
-        if elem.GetMovieClip then
-            local ok, mc = pcall(elem.GetMovieClip, elem)
-            if ok and mc then
-                if mc.alpha ~= nil then
-                    mcAlpha = mc.alpha
-                end
-                if mc.visible ~= nil then
-                    mcVisible = mc.visible
-                end
-                if mc.width ~= nil then
-                    mcWidth = mc.width
-                end
-                if mc.height ~= nil then
-                    mcHeight = mc.height
-                end
-            end
-        end
-        ctx.Ext.Print(string.format(
-            "[ForgingUI] AlphaDump: %s type=%s depth=%d alpha=%s visible=%s size=%s,%s",
-            tostring(elem.ID),
-            tostring(elem.Type or "n/a"),
-            depth,
-            tostring(mcAlpha),
-            tostring(mcVisible),
-            tostring(mcWidth),
-            tostring(mcHeight)
-        ))
-        if depth >= depthLimit then
-            return
-        end
-        if elem.GetChildren then
-            for _, child in ipairs(elem:GetChildren() or {}) do
-                DumpElement(child, depth + 1)
-            end
-        end
-    end
-
-    local element = ctx.uiInstance:GetElementByID(id)
-    if not element then
-        local matches = {}
-        local search = tostring(id)
-        for elemId,_ in pairs(ctx.uiInstance.Elements or {}) do
-            if tostring(elemId):find(search, 1, true) then
-                table.insert(matches, elemId)
-            end
-        end
-        table.sort(matches)
-        if #matches == 0 then
-            ctx.Ext.Print(string.format("[ForgingUI] AlphaDump: element '%s' missing", search))
-            return
-        end
-        ctx.Ext.Print(string.format("[ForgingUI] AlphaDump: element '%s' missing; %d match(es) found", search, #matches))
-        for _, matchId in ipairs(matches) do
-            local matchElem = ctx.uiInstance:GetElementByID(matchId)
-            if matchElem then
-                DumpElement(matchElem, 0)
-            end
-        end
-        return
-    end
-
-    DumpElement(element, 0)
-end
-
-function Layout.DumpFillElements(alphaThreshold)
-    if not ctx or not ctx.uiInstance then
-        return
-    end
-    local threshold = tonumber(alphaThreshold) or 0.05
-    local elements = ctx.uiInstance.Elements or {}
-    for id, element in pairs(elements) do
-        if element and (element.Type == "GenericUI_Element_Color"
-            or element.Type == "GenericUI_Element_Texture"
-            or element.Type == "GenericUI_Element_TiledBackground") then
-            local mcAlpha = nil
-            local mcVisible = nil
-            local mcWidth = nil
-            local mcHeight = nil
-            if element.GetMovieClip then
-                local ok, mc = pcall(element.GetMovieClip, element)
-                if ok and mc then
-                    mcAlpha = mc.alpha
-                    mcVisible = mc.visible
-                    mcWidth = mc.width
-                    mcHeight = mc.height
-                end
-            end
-            if mcAlpha and (mcVisible == nil or mcVisible == true) and mcAlpha > threshold then
-                ctx.Ext.Print(string.format(
-                    "[ForgingUI] FillDump: %s type=%s alpha=%.2f visible=%s size=%.1f,%.1f",
-                    tostring(id),
-                    tostring(element.Type),
-                    mcAlpha,
-                    tostring(mcVisible),
-                    tonumber(mcWidth or 0) or 0,
-                    tonumber(mcHeight or 0) or 0
-                ))
-            end
-        end
-    end
-end
-
-function Layout.GetViewportScale()
-    local size = nil
-    if ctx and ctx.Client and ctx.Client.GetViewportSize then
-        size = ctx.Client.GetViewportSize()
-    elseif ctx and ctx.Ext and ctx.Ext.UI and ctx.Ext.UI.GetViewportSize then
-        size = ctx.Ext.UI.GetViewportSize()
-    end
-    local scale = 1
-    if size and size[2] and size[2] > 0 then
-        scale = size[2] / 1080
-    end
-    if scale < 0.7 then
-        scale = 0.7
-    elseif scale > 1.5 then
-        scale = 1.5
-    end
-    return scale
-end
-
-function Layout.GetViewportSize()
-    local size = nil
-    if ctx and ctx.Client and ctx.Client.GetViewportSize then
-        size = ctx.Client.GetViewportSize()
-    elseif ctx and ctx.Ext and ctx.Ext.UI and ctx.Ext.UI.GetViewportSize then
-        size = ctx.Ext.UI.GetViewportSize()
-    end
-    if size and size[1] and size[2] then
-        return size[1], size[2]
-    end
-    return nil, nil
-end
-
-function Layout.GetUIScaleMultiplier()
-    if ctx and ctx.uiInstance and ctx.uiInstance.GetUI then
-        local uiObject = ctx.uiInstance:GetUI()
-        if uiObject and uiObject.GetUIScaleMultiplier then
-            local ok, scale = pcall(uiObject.GetUIScaleMultiplier, uiObject)
-            if ok and scale and scale > 0 then
-                return scale
-            end
-        end
-    end
-    return 1
-end
-
-function Layout.UpdateUISizeFromViewport()
-    local state = GetLayoutState()
-    if not state then
-        return
-    end
-
-    local viewportW, viewportH = Layout.GetViewportSize()
-    local uiScale = Layout.GetUIScaleMultiplier()
-    if not uiScale or uiScale <= 0 then
-        uiScale = 1
-    end
-    if viewportW and viewportH and viewportW > 0 and viewportH > 0 then
-        state.Width = math.floor((viewportW * (ctx.UI_TARGET_WIDTH_RATIO or 1)) / uiScale)
-        state.Height = math.floor((viewportH * (ctx.UI_TARGET_HEIGHT_RATIO or 1)) / uiScale)
-        state.ScaleX = state.Width / (ctx.BASE_UI_WIDTH or state.Width)
-        state.ScaleY = state.Height / (ctx.BASE_UI_HEIGHT or state.Height)
-    else
-        state.Width = ctx.BASE_UI_WIDTH or state.Width
-        state.Height = ctx.BASE_UI_HEIGHT or state.Height
-        state.ScaleX = 1
-        state.ScaleY = 1
-    end
-end
-
-function Layout.ScaleX(value)
-    local state = GetLayoutState()
-    if not state then
-        return value
-    end
-    return math.floor(value * state.ScaleX + 0.5)
-end
-
-function Layout.ScaleY(value)
-    local state = GetLayoutState()
-    if not state then
-        return value
-    end
-    return math.floor(value * state.ScaleY + 0.5)
-end
-
-function Layout.Scale(value)
-    local state = GetLayoutState()
-    if not state then
-        return value
-    end
-    return math.floor(value * math.min(state.ScaleX, state.ScaleY) + 0.5)
-end
-
-function Layout.Clamp(value, minValue, maxValue)
-    if value < minValue then
-        return minValue
-    end
-    if value > maxValue then
-        return maxValue
-    end
-    return value
 end
 
 function Layout.GetClientGameState()

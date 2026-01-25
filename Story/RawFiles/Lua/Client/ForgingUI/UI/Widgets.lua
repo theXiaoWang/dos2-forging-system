@@ -60,7 +60,6 @@ local previewInventory = {
     ScrollDragging = false,
     ScrollDragOffset = 0,
 }
-local previewSearchShortcutsRegistered = false
 
 local function GetUI()
     return ctx and ctx.uiInstance or nil
@@ -113,47 +112,68 @@ local UpdatePreviewScrollHandle = PreviewScroll.UpdatePreviewScrollHandle
 local UpdatePreviewScrollFromMouse = PreviewScroll.UpdatePreviewScrollFromMouse
 local EnsurePreviewScrollTick = PreviewScroll.EnsurePreviewScrollTick
 
+local PreviewSearch = Ext.Require("Client/ForgingUI/UI/PreviewInventory/Search.lua").Create({
+    previewInventory = previewInventory,
+    previewSearchShortcuts = PreviewSearchShortcuts,
+})
+local UnfocusPreviewSearch = PreviewSearch.UnfocusPreviewSearch
+local RegisterSearchBlur = PreviewSearch.RegisterSearchBlur
+local RegisterPreviewSearchShortcuts = PreviewSearch.RegisterPreviewSearchShortcuts
+local NormalizeSearchQuery = PreviewSearch.NormalizeSearchQuery
+local GetItemSearchName = PreviewSearch.GetItemSearchName
+
+local PreviewRenderer = Ext.Require("Client/ForgingUI/UI/PreviewInventory/Renderer.lua").Create({
+    previewInventory = previewInventory,
+    getContext = function()
+        return ctx
+    end,
+    vector = V,
+    normalizeSearchQuery = NormalizeSearchQuery,
+    getItemSearchName = GetItemSearchName,
+    resetPreviewLayout = function()
+        if ctx and ctx.PreviewLogic and ctx.PreviewLogic.GetPreviewSortMode and ctx.PreviewLogic.SetPreviewSortMode then
+            local currentMode = ctx.PreviewLogic.GetPreviewSortMode()
+            ctx.PreviewLogic.SetPreviewSortMode(currentMode, true)
+        end
+    end,
+    registerSearchBlur = RegisterSearchBlur,
+    updateScrollHandle = UpdatePreviewScrollHandle,
+    getScrollBar = GetPreviewScrollBar,
+    getUI = GetUI,
+})
+local EnsurePreviewSlot = PreviewRenderer.EnsurePreviewSlot
+local RenderPreviewInventory = PreviewRenderer.RenderPreviewInventory
+
+local PreviewControls = Ext.Require("Client/ForgingUI/UI/PreviewInventory/Controls.lua").Create({
+    previewInventory = previewInventory,
+    getContext = function()
+        return ctx
+    end,
+    getUI = GetUI,
+    buildButtonStyle = function(width, height, baseStyle)
+        if Widgets.BuildButtonStyle then
+            return Widgets.BuildButtonStyle(width, height, baseStyle)
+        end
+        return nil
+    end,
+    renderPreviewInventory = function()
+        if RenderPreviewInventory then
+            RenderPreviewInventory()
+        end
+    end,
+})
+local UpdatePreviewFilterButtons = PreviewControls.UpdatePreviewFilterButtons
+local WirePreviewFilterButton = PreviewControls.WirePreviewFilterButton
+local ApplyPreviewSortMode = PreviewControls.ApplyPreviewSortMode
+local SetSortByPanelOpen = PreviewControls.SetSortByPanelOpen
+local CreateSortOption = PreviewControls.CreateSortOption
+local SetPreviewInventoryMode = PreviewControls.SetPreviewInventoryMode
+
 local function ResolveDefaultSortMode()
     if ctx and ctx.PreviewLogic and ctx.PreviewLogic.PREVIEW_SORT_MODES then
         return ctx.PreviewLogic.PREVIEW_SORT_MODES.Default
     end
     return "Default"
-end
-
-local function UnfocusPreviewSearch()
-    local searchInput = previewInventory.SearchText
-    if searchInput and searchInput.SetFocused then
-        local isFocused = searchInput.IsFocused and searchInput:IsFocused()
-        if isFocused then
-            searchInput:SetFocused(false)
-        end
-    end
-end
-
-local function RegisterSearchBlur(element)
-    if not element or not element.Events or not element.Events.MouseDown then
-        return
-    end
-    if element._PreviewSearchBlurHooked then
-        return
-    end
-    element._PreviewSearchBlurHooked = true
-    element.Events.MouseDown:Subscribe(function ()
-        UnfocusPreviewSearch()
-    end)
-end
-
-local function RegisterPreviewSearchShortcuts()
-    if previewSearchShortcutsRegistered then
-        return
-    end
-    if not Ext or not Ext.Events or not Ext.Events.RawInput then
-        return
-    end
-    previewSearchShortcutsRegistered = true
-    if PreviewSearchShortcuts and PreviewSearchShortcuts.Register then
-        PreviewSearchShortcuts.Register(previewInventory)
-    end
 end
 
 function Widgets.SetContext(nextCtx)
@@ -476,288 +496,12 @@ function Widgets.CreateButtonBox(parent, id, label, x, y, width, height, wrap, s
     return button
 end
 
-local function SetPreviewFilterButtonActive(button, active)
-    if not button then
-        return
-    end
-    if button._IsStateButton and button:_IsStateButton() and button.SetActivated then
-        button:SetActivated(active)
-    elseif button.Root and button.Root.SetAlpha then
-        button.Root:SetAlpha(active and 1 or 0.5)
-    end
-end
-
-local function UpdatePreviewFilterButtons()
-    if not ctx or not ctx.CRAFT_PREVIEW_MODES then
-        return
-    end
-    SetPreviewFilterButtonActive(previewInventory.FilterButtons[ctx.CRAFT_PREVIEW_MODES.Equipment], previewInventory.Filter == ctx.CRAFT_PREVIEW_MODES.Equipment)
-    SetPreviewFilterButtonActive(previewInventory.FilterButtons[ctx.CRAFT_PREVIEW_MODES.Magical], previewInventory.Filter == ctx.CRAFT_PREVIEW_MODES.Magical)
-end
-
-local function NormalizeSearchQuery(value)
-    if value == nil then
-        return nil
-    end
-    local trimmed = tostring(value):gsub("^%s+", ""):gsub("%s+$", "")
-    if trimmed == "" then
-        return nil
-    end
-    return string.lower(trimmed)
-end
-
-local function GetItemSearchName(item)
-    if not item then
-        return nil
-    end
-    if Item and Item.GetDisplayName then
-        local ok, name = pcall(Item.GetDisplayName, item)
-        if ok and name and name ~= "" then
-            return name
-        end
-    end
-    if item.DisplayName and item.DisplayName ~= "" then
-        return item.DisplayName
-    end
-    local stats = item.Stats
-    if type(stats) == "string" and Ext and Ext.Stats and Ext.Stats.Get then
-        local ok, statsObj = pcall(Ext.Stats.Get, stats)
-        if ok and statsObj then
-            stats = statsObj
-        end
-    end
-    if stats and stats.Name and stats.Name ~= "" then
-        return stats.Name
-    end
-    return item.StatsId or item.StatsID
-end
-
-local function ResetPreviewLayout()
-    if ctx and ctx.PreviewLogic and ctx.PreviewLogic.GetPreviewSortMode and ctx.PreviewLogic.SetPreviewSortMode then
-        local currentMode = ctx.PreviewLogic.GetPreviewSortMode()
-        ctx.PreviewLogic.SetPreviewSortMode(currentMode, true)
-    end
-end
-
-local function EnsurePreviewSlot(index)
-    local slot = previewInventory.Slots[index]
-    if slot then
-        return slot
-    end
-
-    if not previewInventory.Grid or not ctx or not ctx.hotbarSlotPrefab then
-        return nil
-    end
-
-    slot = ctx.hotbarSlotPrefab.Create(GetUI(), "PreviewItemSlot_" .. tostring(index), previewInventory.Grid)
-    if slot.SlotElement and slot.SlotElement.SetSizeOverride then
-        slot.SlotElement:SetSizeOverride(V(previewInventory.SlotSize, previewInventory.SlotSize))
-    end
-    slot:SetCanDrag(true, false)
-    slot:SetCanDrop(true)
-    slot:SetEnabled(true)
-    previewInventory.Slots[index] = slot
-    if slot.SlotElement then
-        RegisterSearchBlur(slot.SlotElement)
-    end
-    if ctx and ctx.PreviewLogic and ctx.PreviewLogic.WirePreviewSlot then
-        ctx.PreviewLogic.WirePreviewSlot(index, slot)
-    end
-    return slot
-end
-
-local function RenderPreviewInventory()
-    if not previewInventory.Grid or not previewInventory.ScrollList or not ctx or not ctx.Inventory then
-        return
-    end
-
-    if ctx.PreviewLogic and ctx.PreviewLogic.SetPreviewFilter then
-        ctx.PreviewLogic.SetPreviewFilter(previewInventory.Filter)
-    end
-
-    local function ResolveEntryItem(entry)
-        if not entry then
-            return nil
-        end
-        local displayItem = entry.Item or entry.Entity
-        if not displayItem and entry.Guid and Item and Item.Get then
-            local ok, result = pcall(Item.Get, entry.Guid)
-            if ok then
-                displayItem = result
-            end
-        end
-        if not displayItem and entry.Entity and entry.Entity.Handle and Item and Item.Get then
-            local ok, result = pcall(Item.Get, entry.Entity.Handle)
-            if ok then
-                displayItem = result
-            end
-        end
-        return displayItem
-    end
-
-    local items = ctx.Inventory.GetInventoryItems()
-    local filtered = {}
-    for _, item in ipairs(items or {}) do
-        local ok = true
-        if ctx.CRAFT_PREVIEW_MODES then
-            if previewInventory.Filter == ctx.CRAFT_PREVIEW_MODES.Equipment then
-                ok = ctx.Inventory.IsEquipmentItem(item)
-            elseif previewInventory.Filter == ctx.CRAFT_PREVIEW_MODES.Magical then
-                ok = ctx.Inventory.IsMagicalItem(item)
-            end
-        end
-        if ok then
-            table.insert(filtered, item)
-        end
-    end
-
-    local columns = previewInventory.Columns or 1
-    local filteredItems = {}
-    for _, entry in ipairs(filtered) do
-        local displayItem = ResolveEntryItem(entry)
-        if displayItem then
-            table.insert(filteredItems, displayItem)
-        end
-    end
-    local searchQuery = NormalizeSearchQuery(previewInventory.SearchQuery)
-    if searchQuery then
-        local searchFiltered = {}
-        for _, displayItem in ipairs(filteredItems) do
-            local name = GetItemSearchName(displayItem)
-            if name then
-                local normalizedName = string.lower(tostring(name))
-                if normalizedName:find(searchQuery, 1, true) then
-                    table.insert(searchFiltered, displayItem)
-                end
-            end
-        end
-        filteredItems = searchFiltered
-    end
-    local allItems = {}
-    for _, entry in ipairs(items or {}) do
-        local displayItem = ResolveEntryItem(entry)
-        if displayItem then
-            table.insert(allItems, displayItem)
-        end
-    end
-
-    if ctx.PreviewLogic and ctx.PreviewLogic.TrackInventoryItems then
-        ctx.PreviewLogic.TrackInventoryItems(allItems)
-    end
-    if ctx.PreviewLogic and ctx.PreviewLogic.SortPreviewItems then
-        filteredItems = ctx.PreviewLogic.SortPreviewItems(filteredItems)
-    end
-
-    local displayItems = filteredItems
-    local totalSlots = 0
-    if searchQuery then
-        ResetPreviewLayout()
-    end
-    if ctx.PreviewLogic and ctx.PreviewLogic.BuildPreviewInventoryLayout then
-        displayItems, totalSlots = ctx.PreviewLogic.BuildPreviewInventoryLayout(filteredItems, allItems, columns)
-    else
-        local rows = math.max(1, math.ceil(#filteredItems / columns) + 1)
-        totalSlots = rows * columns
-    end
-    if not totalSlots or totalSlots <= 0 then
-        local rows = math.max(1, math.ceil(#filteredItems / columns) + 1)
-        totalSlots = rows * columns
-        displayItems = displayItems or filteredItems
-    end
-
-    local rows = math.max(1, math.ceil(totalSlots / columns))
-    if previewInventory.Grid.SetGridSize and columns > 0 then
-        previewInventory.Grid:SetGridSize(columns, rows)
-    end
-    local listHeight = previewInventory.ListHeight or 0
-    local padding = previewInventory.GridPadding or 0
-    local gridContentHeight = rows * (previewInventory.SlotSize or 0)
-    if rows > 1 then
-        gridContentHeight = gridContentHeight + (rows - 1) * (previewInventory.GridSpacing or 0)
-    end
-    local gridMinHeight = math.max(0, listHeight - padding * 2)
-    local gridHeight = math.max(gridMinHeight, gridContentHeight)
-    previewInventory.ScrollContentHeight = (previewInventory.GridOffsetY or padding) + gridHeight
-    local gridWidth = previewInventory.GridContentWidth or 0
-    if gridWidth > 0 then
-        if previewInventory.Grid.SetSize and not previewInventory.Grid.SetGridSize then
-            previewInventory.Grid:SetSize(gridWidth, gridHeight)
-        end
-        if previewInventory.Grid.SetSizeOverride then
-            previewInventory.Grid:SetSizeOverride(V(gridWidth, gridHeight))
-        end
-    end
-
-    for index = 1, totalSlots do
-        local slot = EnsurePreviewSlot(index)
-        if slot then
-            local displayItem = displayItems and displayItems[index] or nil
-            if displayItem then
-                slot:SetItem(displayItem)
-                slot:SetEnabled(true)
-            else
-                slot:Clear()
-                slot:SetEnabled(true)
-            end
-            slot.SlotElement:SetVisible(true)
-        end
-    end
-
-    for index = totalSlots + 1, #previewInventory.Slots do
-        local slot = previewInventory.Slots[index]
-        if slot then
-            slot:Clear()
-            slot:SetEnabled(true)
-            slot.SlotElement:SetVisible(false)
-        end
-    end
-
-    if previewInventory.Grid.RepositionElements then
-        previewInventory.Grid:RepositionElements()
-    end
-    if previewInventory.ScrollList.RepositionElements then
-        previewInventory.ScrollList:RepositionElements()
-    end
-
-    if previewInventory.ScrollHandle and previewInventory.ScrollHandle.Root then
-        UpdatePreviewScrollHandle()
-    else
-        local scrollBar = GetPreviewScrollBar()
-        if scrollBar then
-            scrollBar.visible = true
-        end
-    end
-
-    if ctx and ctx.PreviewLogic and ctx.PreviewLogic.RefreshInventoryHighlights then
-        ctx.PreviewLogic.RefreshInventoryHighlights()
-    end
-end
-
-Widgets.RenderPreviewInventory = RenderPreviewInventory
-
 function Widgets.SetPreviewInventoryMode(mode)
-    previewInventory.Filter = mode
-    UpdatePreviewFilterButtons()
-    RenderPreviewInventory()
-end
-
-local function WirePreviewFilterButton(button, mode)
-    if not button or not button.Events or not button.Events.Pressed then
-        return
-    end
-    button.Events.Pressed:Subscribe(function ()
-        Widgets.SetPreviewInventoryMode(mode)
-    end)
-end
-
-local function ApplyPreviewSortMode(mode)
-    if ctx and ctx.PreviewLogic and ctx.PreviewLogic.SetPreviewSortMode then
-        ctx.PreviewLogic.SetPreviewSortMode(mode, true)
-    end
-    if Widgets.RenderPreviewInventory then
-        Widgets.RenderPreviewInventory()
+    if SetPreviewInventoryMode then
+        SetPreviewInventoryMode(mode)
     end
 end
+Widgets.RenderPreviewInventory = RenderPreviewInventory
 
 function Widgets.ClearPreviewSearch()
     previewInventory.SearchQuery = ""
@@ -776,50 +520,6 @@ function Widgets.ClearPreviewSearch()
     previewInventory.SearchHistoryIndex = 1
     previewInventory.SearchClipboard = ""
     ApplyPreviewSortMode(ResolveDefaultSortMode())
-end
-
-local function SetSortByPanelOpen(open)
-    previewInventory.SortByOpen = open == true
-    if previewInventory.SortByPanel and previewInventory.SortByPanel.SetVisible then
-        previewInventory.SortByPanel:SetVisible(previewInventory.SortByOpen)
-        if previewInventory.Root and previewInventory.Root.SetChildIndex then
-            previewInventory.Root:SetChildIndex(previewInventory.SortByPanel, 9999)
-        end
-    end
-    if previewInventory.SortByButton and previewInventory.SortByStyles then
-        local style = previewInventory.SortByOpen and previewInventory.SortByStyles.Open or previewInventory.SortByStyles.Closed
-        previewInventory.SortByButton:SetStyle(style)
-    end
-end
-
-local function CreateSortOption(list, id, label, sortMode, width, height)
-    if not list or not ctx or not ctx.buttonPrefab then
-        return nil
-    end
-    local style = ctx.buttonPrefab.STYLES
-        and (ctx.buttonPrefab.STYLES.LabelPointy or ctx.buttonPrefab.STYLES.MenuSlate or ctx.buttonStyle)
-        or ctx.buttonStyle
-    local button = ctx.buttonPrefab.Create(GetUI(), id .. "_Button", list, Widgets.BuildButtonStyle(width, height, style))
-    button.Root:SetPosition(0, 0)
-    if button.Root.SetAlpha then
-        button.Root:SetAlpha(0.7)
-    end
-
-    local labelText = label
-    if Text and Text.Format then
-        local labelSize = math.max(10, math.floor(height * 0.4))
-        labelText = Text.Format(label or "", {Color = "FFFFFF", Size = labelSize})
-    end
-    button:SetLabel(labelText, "Center")
-
-    if button.Events and button.Events.Pressed then
-        button.Events.Pressed:Subscribe(function ()
-            ApplyPreviewSortMode(sortMode)
-            SetSortByPanelOpen(false)
-        end)
-    end
-
-    return button
 end
 
 function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, offsetY)
