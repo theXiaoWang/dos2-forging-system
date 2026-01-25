@@ -85,6 +85,8 @@ local PREVIEW_USED_FRAME_SIZE_DELTA = UIConstants.PreviewUsedFrameSizeDelta or 0
 local PREVIEW_DROP_SOUND = UIConstants.PreviewDropSound
 local MAIN_SLOT_FRAME_PADDING = UIConstants.MainSlotFramePadding or 0
 local MAIN_SLOT_ICON_SCALE = UIConstants.MainSlotIconScale or 1
+local MAIN_SLOT_ICON_OFFSET_X = UIConstants.MainSlotIconOffsetX or 0
+local MAIN_SLOT_ICON_OFFSET_Y = UIConstants.MainSlotIconOffsetY or 0
 local BASE_PANEL_ALPHA = UIConstants.BasePanelAlpha
 local SECTION_FRAME_ALPHA = UIConstants.SectionFrameAlpha
 local SECTION_TEXTURE_CENTER_ALPHA = UIConstants.SectionTextureCenterAlpha
@@ -192,6 +194,8 @@ local function RefreshContext()
     Context.PREVIEW_DROP_SOUND = PREVIEW_DROP_SOUND
     Context.mainSlotFramePadding = MAIN_SLOT_FRAME_PADDING
     Context.mainSlotIconScale = MAIN_SLOT_ICON_SCALE
+    Context.mainSlotIconOffsetX = MAIN_SLOT_ICON_OFFSET_X
+    Context.mainSlotIconOffsetY = MAIN_SLOT_ICON_OFFSET_Y
     Context.BASE_PANEL_ALPHA = BASE_PANEL_ALPHA
     Context.SECTION_FRAME_ALPHA = SECTION_FRAME_ALPHA
     Context.SECTION_TEXTURE_CENTER_ALPHA = SECTION_TEXTURE_CENTER_ALPHA

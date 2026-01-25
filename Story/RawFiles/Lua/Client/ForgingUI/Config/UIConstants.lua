@@ -48,6 +48,9 @@ local UIConstants = {
     MainSlotFramePadding = 8,
     -- Scale factor applied to Main/Donor slot icons (1 = default size).
     MainSlotIconScale = 0.85,
+    -- Fine-tune Main/Donor slot icon placement (base UI pixels).
+    MainSlotIconOffsetX = 1,
+    MainSlotIconOffsetY = 1,
     PanelFillAlpha = 0,
     PanelTextureAlpha = 0.5,
     SlotPanelTextureAlpha = 1,

@@ -185,6 +185,8 @@ function Slots.Create(options)
             if useFancy and framePadding > 0 then
                 local parentScale = frameSize / size
                 local scaleFactor = ctx.mainSlotIconScale or 1
+                local offsetBiasX = scale(ctx.mainSlotIconOffsetX or 0)
+                local offsetBiasY = scale(ctx.mainSlotIconOffsetY or 0)
                 local iconScale = math.min(1, scaleFactor / parentScale)
                 local iconScaleVector = vector(iconScale, iconScale)
 
@@ -205,8 +207,8 @@ function Slots.Create(options)
                     local iconW, iconH = GetIconSize(target)
                     local scaledW = math.floor(iconW * scaleFactor)
                     local scaledH = math.floor(iconH * scaleFactor)
-                    local iconOffsetX = (framePadding + math.floor((size - scaledW) / 2)) / parentScale
-                    local iconOffsetY = (framePadding + math.floor((size - scaledH) / 2)) / parentScale
+                    local iconOffsetX = (framePadding + math.floor((size - scaledW) / 2) + offsetBiasX) / parentScale
+                    local iconOffsetY = (framePadding + math.floor((size - scaledH) / 2) + offsetBiasY) / parentScale
                     if target.SlotIcon then
                         if target.SlotIcon.SetScale then
                             target.SlotIcon:SetScale(iconScaleVector)
