@@ -8,7 +8,8 @@ Epip.InitializeLibrary("Image", Image)
 Image.LibDeflate = Ext.Require("Utilities/LibDeflate.lua") ---@type unknown TODO annotate
 
 if Ext.IsClient() then
-    Client.Image = Image -- Legacy alias.
+    local LegacyAlias = Ext.Require("Utilities/LegacyAlias.lua")
+    Client.Image = LegacyAlias.Create("Client.Image", "Image", Image)
 end
 
 ---------------------------------------------

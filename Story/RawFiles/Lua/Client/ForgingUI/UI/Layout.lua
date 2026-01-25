@@ -1,4 +1,4 @@
--- Client/ForgingUI/Layout.lua
+-- Client/ForgingUI/UI/Layout.lua
 -- Layout, sizing, and input/toggle helpers for the forging UI.
 
 local ForgingUI = Client.ForgingUI or {}

@@ -1,4 +1,4 @@
--- Client/ForgingUI/Craft.lua
+-- Client/ForgingUI/Backend/CraftDocking.lua
 -- Craft/preview docking logic shared by the forging UI.
 
 local ForgingUI = Client.ForgingUI or {}

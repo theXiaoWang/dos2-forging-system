@@ -1,4 +1,4 @@
--- Client/ForgingUI/Widgets.lua
+-- Client/ForgingUI/UI/Widgets.lua
 -- Reusable UI widget helpers for the forging panel.
 
 local ForgingUI = Client.ForgingUI or {}

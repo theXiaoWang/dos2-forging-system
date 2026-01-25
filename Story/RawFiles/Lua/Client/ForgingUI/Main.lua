@@ -4,11 +4,11 @@
 local ForgingUI = {}
 Client = Client or {}
 Client.ForgingUI = ForgingUI
-Ext.Require("Client/ForgingUI/Inventory.lua")
-Ext.Require("Client/ForgingUI/PreviewInventoryLogic.lua")
-Ext.Require("Client/ForgingUI/Widgets.lua")
-Ext.Require("Client/ForgingUI/Layout.lua")
-Ext.Require("Client/ForgingUI/Craft.lua")
+Ext.Require("Client/ForgingUI/Backend/InventoryService.lua")
+Ext.Require("Client/ForgingUI/Backend/PreviewInventory/Logic.lua")
+Ext.Require("Client/ForgingUI/UI/Widgets.lua")
+Ext.Require("Client/ForgingUI/UI/Layout.lua")
+Ext.Require("Client/ForgingUI/Backend/CraftDocking.lua")
 local LayoutTuning = Ext.Require("Client/ForgingUI/Config/LayoutTuning.lua")
 local UIConstants = Ext.Require("Client/ForgingUI/Config/UIConstants.lua")
 local PreviewInventoryTuning = Ext.Require("Client/ForgingUI/Config/PreviewInventoryTuning.lua")
@@ -405,11 +405,6 @@ local function DestroyStaleUI(generic)
     uiInstance = nil
 end
 
--- Layout helpers moved to Client/ForgingUI/Layout.lua.
-
-
--- Craft helpers moved to Client/ForgingUI/Craft.lua.
-
 local function QueueLayoutBuild(showAfter)
     UIState.PendingShowAfterBuild = UIState.PendingShowAfterBuild or showAfter
     if not Timer or not Timer.Start then
@@ -467,10 +462,6 @@ local function SetDisplayMode(mode)
         end
     end
 end
-
-
--- Widget/layout helpers moved to Client/ForgingUI/Widgets.lua and Layout.lua.
-
 function ForgingUI.Initialize()
     if isEditorBuild then
         WarnEditorUnsupported()

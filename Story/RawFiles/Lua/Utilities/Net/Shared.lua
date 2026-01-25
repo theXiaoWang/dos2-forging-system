@@ -13,7 +13,8 @@ Net = {
 }
 Epip.InitializeLibrary("Net", Net)
 
-Game.Net = Net -- Backwards compatibility
+local LegacyAlias = Ext.Require("Utilities/LegacyAlias.lua")
+Game.Net = LegacyAlias.Create("Game.Net", "Net", Net)
 
 ---------------------------------------------
 -- CLASSES

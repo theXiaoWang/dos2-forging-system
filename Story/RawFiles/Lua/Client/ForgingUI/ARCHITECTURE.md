@@ -12,5 +12,4 @@ Goal: keep the Forging System UI easy to extend while staying **standalone** (no
 
 ## Compatibility strategy
 
-For safety, legacy entry files (e.g. `Main.lua`, `Layout.lua`, `Widgets.lua`) are kept as thin wrappers while functionality is migrated into the folders above. This avoids breaking `Ext.Require(...)` paths while refactoring.
-
+Legacy wrapper files have been removed; `Ext.Require(...)` calls now point directly at the module that owns the implementation.

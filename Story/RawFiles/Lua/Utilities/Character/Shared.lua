@@ -217,7 +217,8 @@ Character = {
         GetSkillAPCost = {}, ---@type Hook<CharacterLib.Hooks.GetSkillAPCost>
     },
 }
-Game.Character = Character -- Legacy alias.
+local LegacyAlias = Ext.Require("Utilities/LegacyAlias.lua")
+Game.Character = LegacyAlias.Create("Game.Character", "Character", Character)
 Epip.InitializeLibrary("Character", Character)
 
 ---@alias aitype "base"|"bazooka"|"berserker"|"bomber"|"healer"|"mage"|"melee"|"ranged"|"ranger"|"rogue"|"warrior"
