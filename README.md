@@ -20,10 +20,7 @@ This mod adds a sophisticated forging system that allows players to combine item
 - **Dependencies**:
   - Divinity: Original Sin 2 (Base Game)
   - Game Master
-  - **EPIP (EpipEncounters)** - **REQUIRED** - Provides Generic UI framework
-    - Download from: https://www.pinewood.team/epip/
-    - Install the `.pak` file to your Mods folder
-    - **This mod will not function without EPIP installed**
+  - None (standalone). The UI framework is shipped inside this mod.
 
 ## Documentation
 
@@ -116,4 +113,3 @@ See `SETUP_GITHUB.md` for instructions on setting up the GitHub repository and d
 ## Credits
 
 [Add credits/attribution here]
-
