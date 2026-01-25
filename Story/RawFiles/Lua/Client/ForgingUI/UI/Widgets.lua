@@ -60,7 +60,6 @@ local previewInventory = {
     ScrollDragging = false,
     ScrollDragOffset = 0,
 }
-local previewScrollTickRegistered = false
 local previewSearchShortcutsRegistered = false
 
 local function GetUI()
@@ -104,6 +103,16 @@ local function Clamp(value, minValue, maxValue)
     return value
 end
 
+local PreviewScroll = Ext.Require("Client/ForgingUI/UI/PreviewInventory/Scroll.lua").Create({
+    previewInventory = previewInventory,
+    clamp = Clamp,
+})
+local GetPreviewScrollBar = PreviewScroll.GetPreviewScrollBar
+local ApplyPreviewScrollOffset = PreviewScroll.ApplyPreviewScrollOffset
+local UpdatePreviewScrollHandle = PreviewScroll.UpdatePreviewScrollHandle
+local UpdatePreviewScrollFromMouse = PreviewScroll.UpdatePreviewScrollFromMouse
+local EnsurePreviewScrollTick = PreviewScroll.EnsurePreviewScrollTick
+
 local function ResolveDefaultSortMode()
     if ctx and ctx.PreviewLogic and ctx.PreviewLogic.PREVIEW_SORT_MODES then
         return ctx.PreviewLogic.PREVIEW_SORT_MODES.Default
@@ -144,142 +153,6 @@ local function RegisterPreviewSearchShortcuts()
     previewSearchShortcutsRegistered = true
     if PreviewSearchShortcuts and PreviewSearchShortcuts.Register then
         PreviewSearchShortcuts.Register(previewInventory)
-    end
-end
-
-local function GetPreviewScrollBar()
-    local list = previewInventory.ScrollList
-    local mc = list and list.GetMovieClip and list:GetMovieClip() or nil
-    if mc and mc.list and mc.list.m_scrollbar_mc then
-        return mc.list.m_scrollbar_mc
-    end
-    if mc and mc.scrollBar_mc then
-        return mc.scrollBar_mc
-    end
-    if mc and mc.list and mc.list.scrollBar_mc then
-        return mc.list.scrollBar_mc
-    end
-    return nil
-end
-
-local function ApplyPreviewScrollOffset(offsetY)
-    local scrollBar = GetPreviewScrollBar()
-    if scrollBar and scrollBar.scrollTo then
-        scrollBar.scrollTo(offsetY)
-    end
-end
-
-local function UpdatePreviewScrollHandle()
-    local handle = previewInventory.ScrollHandle
-    local track = previewInventory.ScrollTrack
-    if not handle or not handle.Root or not track then
-        return
-    end
-
-    local listHeight = previewInventory.ListHeight or 0
-    local contentHeight = previewInventory.ScrollContentHeight or listHeight
-    local trackHeight = previewInventory.ScrollTrackHeight or 0
-    if listHeight <= 0 or trackHeight <= 0 or contentHeight <= listHeight then
-        previewInventory.ScrollMaxOffset = 0
-        if handle.Root.SetVisible then
-            handle.Root:SetVisible(false)
-        end
-        if track.SetVisible then
-            track:SetVisible(false)
-        end
-        return
-    end
-
-    local maxScroll = math.max(0, contentHeight - listHeight)
-    previewInventory.ScrollMaxOffset = maxScroll
-
-    local handleHeight = previewInventory.ScrollHandleHeight or 0
-    if handle.Root and handle.Root.GetHeight then
-        handleHeight = handle.Root:GetHeight()
-    end
-    if handleHeight <= 0 then
-        handleHeight = previewInventory.ScrollHandleMinHeight or 0
-    end
-    previewInventory.ScrollHandleHeight = handleHeight
-
-    local scrollBar = GetPreviewScrollBar()
-    local scrolledY = 0
-    if scrollBar then
-        scrolledY = scrollBar.scrolledY or scrollBar.m_scrolledY or 0
-        if scrollBar.visible ~= nil then
-            scrollBar.visible = false
-        end
-    end
-
-    scrolledY = Clamp(scrolledY, 0, maxScroll)
-    local range = trackHeight - handleHeight
-    local handleY = previewInventory.ScrollTrackY or 0
-    if range > 0 and maxScroll > 0 then
-        handleY = handleY + math.floor((scrolledY / maxScroll) * range + 0.5)
-    end
-    local offsetX = previewInventory.ScrollHandleOffsetX or 0
-    local offsetY = previewInventory.ScrollHandleOffsetY or 0
-    handle.Root:SetPosition((previewInventory.ScrollTrackX or 0) + offsetX, handleY + offsetY)
-    if handle.Root.SetVisible then
-        handle.Root:SetVisible(true)
-    end
-    if track.SetVisible then
-        track:SetVisible(true)
-    end
-end
-
-local function UpdatePreviewScrollFromMouse(mouseY)
-    if not previewInventory.ScrollDragging then
-        return
-    end
-    local handle = previewInventory.ScrollHandle
-    if not handle or not handle.Root then
-        return
-    end
-    local trackY = previewInventory.ScrollTrackY or 0
-    local trackHeight = previewInventory.ScrollTrackHeight or 0
-    local handleHeight = previewInventory.ScrollHandleHeight or 0
-    local maxScroll = previewInventory.ScrollMaxOffset or 0
-    if trackHeight <= handleHeight or maxScroll <= 0 then
-        return
-    end
-    local minY = trackY
-    local maxY = trackY + trackHeight - handleHeight
-    local targetY = Clamp(mouseY - (previewInventory.ScrollDragOffset or 0), minY, maxY)
-    local offsetX = previewInventory.ScrollHandleOffsetX or 0
-    local offsetY = previewInventory.ScrollHandleOffsetY or 0
-    handle.Root:SetPosition((previewInventory.ScrollTrackX or 0) + offsetX, targetY + offsetY)
-    local range = maxY - minY
-    local ratio = range > 0 and (targetY - minY) / range or 0
-    ApplyPreviewScrollOffset(ratio * maxScroll)
-end
-
-local function EnsurePreviewScrollTick()
-    if previewScrollTickRegistered then
-        return
-    end
-    previewScrollTickRegistered = true
-    local function SyncHandle()
-        if previewInventory.ScrollDragging then
-            return
-        end
-        local handle = previewInventory.ScrollHandle
-        if not handle or not handle.Root then
-            return
-        end
-        local root = previewInventory.Root
-        if root and root.IsDestroyed and root:IsDestroyed() then
-            return
-        end
-        local mc = root and root.GetMovieClip and root:GetMovieClip() or nil
-        if mc and mc.visible then
-            UpdatePreviewScrollHandle()
-        end
-    end
-    if GameState and GameState.Events and GameState.Events.RunningTick then
-        GameState.Events.RunningTick:Subscribe(SyncHandle, {StringID = "ForgingUI_PreviewScrollHandle"})
-    elseif Ext and Ext.Events and Ext.Events.Tick then
-        Ext.Events.Tick:Subscribe(SyncHandle, {StringID = "ForgingUI_PreviewScrollHandle"})
     end
 end
 

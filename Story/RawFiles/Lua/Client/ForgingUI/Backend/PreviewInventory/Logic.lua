@@ -152,49 +152,6 @@ local ResolveForgeSlotMode = Ext.Require("Client/ForgingUI/Backend/PreviewInvent
     .Create(State)
     .ResolveForgeSlotMode
 
-local function ShouldBlockDrop(slotId)
-    local slotMode = ResolveForgeSlotMode(slotId)
-    if not slotMode then
-        return false
-    end
-    if not HasDragData() then
-        return false
-    end
-    local item = GetDraggedItem()
-    if item then
-        return not PreviewLogic.CanAcceptItem(slotId, item)
-    end
-    local data = GetDragDropState()
-    if data and data.DragId and data.DragId ~= "" and Stats then
-        if (Stats.Get and Stats.Get("SkillData", data.DragId))
-            or (Stats.GetAction and Stats.GetAction(data.DragId)) then
-            return true
-        end
-    end
-    return false
-end
-
-local function ResolveForgeSlotId(slotId, slot)
-    if slotId and slot and State.ForgeSlots[slotId] == slot then
-        return slotId
-    end
-    if slot then
-        for id, forgeSlot in pairs(State.ForgeSlots) do
-            if forgeSlot == slot then
-                return id
-            end
-        end
-        local rawId = slot.ID or (slot.SlotElement and slot.SlotElement.ID) or nil
-        if rawId then
-            if State.ForgeSlots[rawId] == slot then
-                return rawId
-            end
-            return rawId
-        end
-    end
-    return slotId
-end
-
 local function PlaySound(soundId)
     if not soundId then
         return
@@ -314,56 +271,6 @@ function PreviewLogic.ShowDropWarning(slotId, item)
     ShowDropWarning(slotId, item)
 end
 
-local function ValidateForgeSlotDrop(slotId, slot, context)
-    local slotMode = ResolveForgeSlotMode(slotId)
-    if not slotMode then
-        return true
-    end
-    local item = context and context.Item or nil
-
-    local dropObj = nil
-    local dragData = (context and context.DragData) or GetDragDropState()
-    if dragData then
-        if not item and dragData.DragObject then
-            item = ResolveItemFromDragObject(dragData.DragObject)
-        end
-        if not item and dragData.DragId and dragData.DragId ~= "" then
-            if Ext and Ext.Template and Ext.Template.GetTemplate and Ext.Template.GetTemplate(dragData.DragId) then
-                dropObj = {TemplateID = dragData.DragId}
-            elseif Stats and Stats.Get and Stats.Get("SkillData", dragData.DragId) then
-                PreviewLogic.ShowDropWarning(slotId, nil)
-                FlashSlotWarning(slotId, slot)
-                return false
-            elseif Stats and Stats.GetAction and Stats.GetAction(dragData.DragId) then
-                PreviewLogic.ShowDropWarning(slotId, nil)
-                FlashSlotWarning(slotId, slot)
-                return false
-            end
-        end
-        if not item and not dropObj and dragData.DragObject and IsValidHandle(dragData.DragObject) then
-            dropObj = {ItemHandle = dragData.DragObject}
-        end
-    end
-
-    if not item and not dropObj then
-        return true
-    end
-    if PreviewLogic.CanAcceptItem(slotId, item, dropObj) then
-        return true
-    end
-    PreviewLogic.ShowDropWarning(slotId, item)
-    FlashSlotWarning(slotId, slot)
-    return false
-end
-
-
-local function IsItemAllowed(slotId, item)
-    if PreviewLogic.CanAcceptItem then
-        return PreviewLogic.CanAcceptItem(slotId, item)
-    end
-    return item ~= nil
-end
-
 function PreviewLogic.CanAcceptItem(slotId, item, obj)
     local itemType, isEquipment, isSkillbook = GetDropClassification(item, obj)
 
@@ -395,6 +302,24 @@ function PreviewLogic.CanAcceptItem(slotId, item, obj)
     
     return true
 end
+
+local ForgeDropValidation = Ext.Require("Client/ForgingUI/Backend/PreviewInventory/ForgeDropValidation.lua").Create({
+    state = State,
+    resolveForgeSlotMode = ResolveForgeSlotMode,
+    hasDragData = HasDragData,
+    getDraggedItem = GetDraggedItem,
+    getDragDropState = GetDragDropState,
+    resolveItemFromDragObject = ResolveItemFromDragObject,
+    isValidHandle = IsValidHandle,
+    canAcceptItem = function(slotId, item, obj)
+        return PreviewLogic.CanAcceptItem(slotId, item, obj)
+    end,
+    showDropWarning = PreviewLogic.ShowDropWarning,
+    flashSlotWarning = FlashSlotWarning,
+})
+local ResolveForgeSlotId = ForgeDropValidation.ResolveForgeSlotId
+local ShouldBlockDrop = ForgeDropValidation.ShouldBlockDrop
+local ValidateForgeSlotDrop = ForgeDropValidation.ValidateForgeSlotDrop
 
 local ForgeSlotMapping = Ext.Require("Client/ForgingUI/Backend/PreviewInventory/ForgeSlotMapping.lua").Create({
     state = State,
