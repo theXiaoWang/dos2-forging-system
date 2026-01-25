@@ -52,6 +52,10 @@ local UIConstants = {
     PanelTextureAlpha = 0.5,
     SlotPanelTextureAlpha = 1,
     PreviewUsedFrameAlpha = 1,
+    -- Preview inventory "used" frame alignment.
+    PreviewUsedFrameOffsetX = 0,
+    PreviewUsedFrameOffsetY = 0,
+    PreviewUsedFrameSizeDelta = 8,
     BasePanelAlpha = 0.85,
     SectionFrameAlpha = 0.5,
     SectionTextureCenterAlpha = 0.2,
