@@ -2,6 +2,11 @@
 -- Creates warning proxies for legacy aliases.
 
 local LegacyAlias = {}
+LegacyAlias.WarningsEnabled = true
+
+function LegacyAlias.SetWarningsEnabled(enabled)
+    LegacyAlias.WarningsEnabled = enabled == true
+end
 
 ---@param aliasName string
 ---@param targetName string
@@ -12,6 +17,9 @@ function LegacyAlias.Create(aliasName, targetName, target)
 
     local function WarnOnce()
         if warned then
+            return
+        end
+        if not LegacyAlias.WarningsEnabled then
             return
         end
         warned = true

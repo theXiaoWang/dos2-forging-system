@@ -209,7 +209,41 @@ function ItemHelpers.Create(state)
 
     local function GetItemRarityValue(item)
         local stats = GetItemStats(item)
-        local rarity = item and (item.Rarity or SafeStatsField(stats, "Rarity")) or nil
+        local statsId = item and (item.StatsId or item.StatsID) or nil
+        if statsId then
+            local key = string.upper(tostring(statsId))
+            if key:find("^SKILLBOOK_") ~= nil then
+                return 0
+            end
+        end
+
+        local rarity = nil
+        if not rarity and stats then
+            local statsType = nil
+            if Stats and Stats.GetType then
+                local ok, statsTypeValue = pcall(Stats.GetType, stats)
+                if ok and statsTypeValue then
+                    statsType = NormalizeItemType(statsTypeValue)
+                end
+            end
+            if statsType == "skilldata" or statsType == "skillbook" or statsType == "object" then
+                return 0
+            end
+            if GetStatsItemType(stats) == "skillbook" then
+                return 0
+            end
+        end
+        if rarity == nil and item then
+            local ok, value = pcall(function()
+                return item.Rarity
+            end)
+            if ok then
+                rarity = value
+            end
+        end
+        if rarity == nil and stats then
+            rarity = SafeStatsField(stats, "Rarity")
+        end
         if not rarity then
             return 0
         end
@@ -318,4 +352,3 @@ function ItemHelpers.Create(state)
 end
 
 return ItemHelpers
-

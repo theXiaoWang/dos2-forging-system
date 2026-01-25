@@ -137,34 +137,40 @@ function ScrollbarLayout.Build(options)
     end
 
     if scrollHandle.Root and scrollHandle.Root.Events then
-        scrollHandle.Root.Events.MouseDown:Subscribe(function ()
-            previewInventory.ScrollDragging = true
-            local dragHeight = previewInventory.ScrollHandleHeight > 0 and previewInventory.ScrollHandleHeight or scrollHandleHeight
-            previewInventory.ScrollDragOffset = math.floor(dragHeight / 2)
-        end)
-        scrollHandle.Root.Events.MouseUp:Subscribe(function ()
-            previewInventory.ScrollDragging = false
-        end)
+        if previewInventory.ScrollHandleEventsRoot ~= scrollHandle.Root then
+            previewInventory.ScrollHandleEventsRoot = scrollHandle.Root
+            scrollHandle.Root.Events.MouseDown:Subscribe(function ()
+                previewInventory.ScrollDragging = true
+                local dragHeight = previewInventory.ScrollHandleHeight > 0 and previewInventory.ScrollHandleHeight or scrollHandleHeight
+                previewInventory.ScrollDragOffset = math.floor(dragHeight / 2)
+            end)
+            scrollHandle.Root.Events.MouseUp:Subscribe(function ()
+                previewInventory.ScrollDragging = false
+            end)
+        end
     end
 
     if previewInventory.Root and previewInventory.Root.Events then
-        if previewInventory.Root.SetMouseMoveEventEnabled then
-            previewInventory.Root:SetMouseMoveEventEnabled(true)
-        end
-        previewInventory.Root.Events.MouseMove:Subscribe(function (ev)
-            if previewInventory.ScrollDragging then
-                local mouseY = ev and ev.LocalPos and ev.LocalPos[2] or 0
-                if updatePreviewScrollFromMouse then
-                    updatePreviewScrollFromMouse(mouseY)
-                end
+        if previewInventory.ScrollRootEventsRoot ~= previewInventory.Root then
+            previewInventory.ScrollRootEventsRoot = previewInventory.Root
+            if previewInventory.Root.SetMouseMoveEventEnabled then
+                previewInventory.Root:SetMouseMoveEventEnabled(true)
             end
-        end)
-        previewInventory.Root.Events.MouseUp:Subscribe(function ()
-            previewInventory.ScrollDragging = false
-        end)
-        previewInventory.Root.Events.MouseOut:Subscribe(function ()
-            previewInventory.ScrollDragging = false
-        end)
+            previewInventory.Root.Events.MouseMove:Subscribe(function (ev)
+                if previewInventory.ScrollDragging then
+                    local mouseY = ev and ev.LocalPos and ev.LocalPos[2] or 0
+                    if updatePreviewScrollFromMouse then
+                        updatePreviewScrollFromMouse(mouseY)
+                    end
+                end
+            end)
+            previewInventory.Root.Events.MouseUp:Subscribe(function ()
+                previewInventory.ScrollDragging = false
+            end)
+            previewInventory.Root.Events.MouseOut:Subscribe(function ()
+                previewInventory.ScrollDragging = false
+            end)
+        end
     end
 
     previewInventory.ScrollTrack = scrollTrack

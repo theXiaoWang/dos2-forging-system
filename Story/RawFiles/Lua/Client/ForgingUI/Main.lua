@@ -636,6 +636,9 @@ function ForgingUI.Hide()
         uiInstance:Hide()
         UIState.IsVisible = false
         ApplyUIInputState(false)
+        if Widgets.ClearPreviewSearch then
+            Widgets.ClearPreviewSearch({skipSort = true})
+        end
           CraftState.DockRequested = false
           Craft.SetPreviewMode(nil)
           Craft.HideUI()

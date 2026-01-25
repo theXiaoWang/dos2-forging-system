@@ -4,13 +4,15 @@
 local PreviewSearchShortcuts = {}
 
 local registered = false
+local activePreview = nil
 
 ---@param previewInventory table
 function PreviewSearchShortcuts.Register(previewInventory)
-    if registered then
+    if not previewInventory then
         return
     end
-    if not previewInventory then
+    activePreview = previewInventory
+    if registered then
         return
     end
     if not Ext or not Ext.Events or not Ext.Events.RawInput then
@@ -19,7 +21,7 @@ function PreviewSearchShortcuts.Register(previewInventory)
     registered = true
 
     local function GetSearchTextField()
-        local searchInput = previewInventory.SearchText
+        local searchInput = activePreview and activePreview.SearchText
         local mc = searchInput and searchInput.GetMovieClip and searchInput:GetMovieClip() or nil
         return mc and mc.text_txt or nil
     end
@@ -51,7 +53,9 @@ function PreviewSearchShortcuts.Register(previewInventory)
         if textValue == nil then
             return
         end
-        previewInventory.SearchClipboard = textValue
+        if activePreview then
+            activePreview.SearchClipboard = textValue
+        end
 
         if Ext and Ext.UI and Ext.UI.GetByType then
             local ui = Ext.UI.GetByType(Ext.UI.TypeID.msgBox)
@@ -95,14 +99,14 @@ function PreviewSearchShortcuts.Register(previewInventory)
                         text = inputField.text or ""
                     end
                     if text == nil or text == "" then
-                        text = previewInventory.SearchClipboard or ""
+                        text = activePreview and activePreview.SearchClipboard or ""
                     end
                     callback(text)
                 end)
                 return
             end
         end
-        callback(previewInventory.SearchClipboard or "")
+        callback(activePreview and activePreview.SearchClipboard or "")
     end
 
     local function PasteIntoSearch(pasteText)
@@ -110,7 +114,7 @@ function PreviewSearchShortcuts.Register(previewInventory)
             return
         end
         local cleaned = tostring(pasteText):gsub("[\r\n\t]", "")
-        local textValue = previewInventory.SearchQuery or ""
+        local textValue = activePreview and activePreview.SearchQuery or ""
         local startIndex, endIndex = GetSearchSelectionRange()
         if startIndex == nil or endIndex == nil then
             startIndex = #textValue
@@ -120,12 +124,16 @@ function PreviewSearchShortcuts.Register(previewInventory)
         local after = textValue:sub(endIndex + 1)
         local merged = before .. cleaned .. after
         local caretIndex = startIndex + #cleaned
-        if previewInventory.ApplySearchText then
-            previewInventory.ApplySearchText(merged, false, false, caretIndex)
+        if activePreview and activePreview.ApplySearchText then
+            activePreview.ApplySearchText(merged, false, false, caretIndex)
         end
     end
 
     Ext.Events.RawInput:Subscribe(function(ev)
+        local preview = activePreview
+        if not preview then
+            return
+        end
         local inputEvent = ev and ev.Input or nil
         local input = inputEvent and inputEvent.Input or nil
         local value = inputEvent and inputEvent.Value or nil
@@ -140,9 +148,9 @@ function PreviewSearchShortcuts.Register(previewInventory)
 
         local state = value.State
         if id == "lctrl" or id == "rctrl" then
-            previewInventory.SearchCtrlHeld = state == "Pressed"
+            preview.SearchCtrlHeld = state == "Pressed"
             if state == "Released" then
-                previewInventory.SearchCtrlHeld = false
+                preview.SearchCtrlHeld = false
             end
             return
         end
@@ -150,47 +158,47 @@ function PreviewSearchShortcuts.Register(previewInventory)
         if state ~= "Pressed" then
             return
         end
-        if not previewInventory.SearchFocused or not previewInventory.SearchCtrlHeld then
+        if not preview.SearchFocused or not preview.SearchCtrlHeld then
             return
         end
 
         local key = string.lower(id)
         if key == "a" then
-            local textValue = previewInventory.SearchQuery or ""
+            local textValue = preview.SearchQuery or ""
             SetSearchSelection(0, #textValue)
             return
         end
 
         if key == "z" then
-            local history = previewInventory.SearchHistory
-            local index = previewInventory.SearchHistoryIndex or 0
+            local history = preview.SearchHistory
+            local index = preview.SearchHistoryIndex or 0
             if history and index > 1 then
                 index = index - 1
-                previewInventory.SearchHistoryIndex = index
+                preview.SearchHistoryIndex = index
                 local text = history[index] or ""
-                if previewInventory.ApplySearchText then
-                    previewInventory.ApplySearchText(text, true, true)
+                if preview.ApplySearchText then
+                    preview.ApplySearchText(text, true, true)
                 end
             end
             return
         end
 
         if key == "y" then
-            local history = previewInventory.SearchHistory
-            local index = previewInventory.SearchHistoryIndex or 0
+            local history = preview.SearchHistory
+            local index = preview.SearchHistoryIndex or 0
             if history and index < #history then
                 index = index + 1
-                previewInventory.SearchHistoryIndex = index
+                preview.SearchHistoryIndex = index
                 local text = history[index] or ""
-                if previewInventory.ApplySearchText then
-                    previewInventory.ApplySearchText(text, true, true)
+                if preview.ApplySearchText then
+                    preview.ApplySearchText(text, true, true)
                 end
             end
             return
         end
 
         if key == "c" then
-            local textValue = previewInventory.SearchQuery or ""
+            local textValue = preview.SearchQuery or ""
             local startIndex, endIndex = GetSearchSelectionRange()
             if startIndex ~= nil and endIndex ~= nil and startIndex ~= endIndex then
                 local selection = textValue:sub(startIndex + 1, endIndex)
@@ -209,7 +217,7 @@ function PreviewSearchShortcuts.Register(previewInventory)
         end
 
         if key == "x" then
-            local textValue = previewInventory.SearchQuery or ""
+            local textValue = preview.SearchQuery or ""
             local startIndex, endIndex = GetSearchSelectionRange()
             if startIndex ~= nil and endIndex ~= nil and startIndex ~= endIndex then
                 local selection = textValue:sub(startIndex + 1, endIndex)
@@ -219,8 +227,8 @@ function PreviewSearchShortcuts.Register(previewInventory)
                 local before = textValue:sub(1, startIndex)
                 local after = textValue:sub(endIndex + 1)
                 local merged = before .. after
-                if previewInventory.ApplySearchText then
-                    previewInventory.ApplySearchText(merged, false, false, startIndex)
+                if preview.ApplySearchText then
+                    preview.ApplySearchText(merged, false, false, startIndex)
                 end
             end
             return
@@ -229,4 +237,3 @@ function PreviewSearchShortcuts.Register(previewInventory)
 end
 
 return PreviewSearchShortcuts
-

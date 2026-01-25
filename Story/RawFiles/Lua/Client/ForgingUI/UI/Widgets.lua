@@ -246,7 +246,8 @@ function Widgets.SetPreviewInventoryMode(mode)
 end
 Widgets.RenderPreviewInventory = RenderPreviewInventory
 
-function Widgets.ClearPreviewSearch()
+function Widgets.ClearPreviewSearch(options)
+    local opts = options or {}
     previewInventory.SearchQuery = ""
     if previewInventory.SearchText and previewInventory.SearchText.SetText then
         previewInventory.SearchText:SetText("")
@@ -262,7 +263,9 @@ function Widgets.ClearPreviewSearch()
     previewInventory.SearchHistory = {""}
     previewInventory.SearchHistoryIndex = 1
     previewInventory.SearchClipboard = ""
-    ApplyPreviewSortMode(ResolveDefaultSortMode())
+    if not opts.skipSort then
+        ApplyPreviewSortMode(ResolveDefaultSortMode())
+    end
 end
 
 function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, offsetY)
