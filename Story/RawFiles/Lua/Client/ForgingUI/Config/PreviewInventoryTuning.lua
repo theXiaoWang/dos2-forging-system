@@ -6,6 +6,10 @@
 -- - Clamp bounds are unscaled unless explicitly noted; they should match the existing UI behavior.
 
 local PreviewInventoryTuning = {
+    -- Grid layout
+    -- Increase this to 10 if you want 10 slots per row.
+    GridColumns = 9,
+
     -- Search bar
     SearchPlaceholderText = "Type to search...",
     SearchMinWidthX = 90,
@@ -40,4 +44,3 @@ local PreviewInventoryTuning = {
 }
 
 return PreviewInventoryTuning
-

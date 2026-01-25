@@ -13,7 +13,7 @@ local UIConstants = {
     BaseHeight = 950,
 
     -- Target size relative to viewport (before UI scale multiplier).
-    TargetWidthRatio = 0.80,
+    TargetWidthRatio = 0.90,
     TargetHeightRatio = 0.95,
 
     -- Global spacing.

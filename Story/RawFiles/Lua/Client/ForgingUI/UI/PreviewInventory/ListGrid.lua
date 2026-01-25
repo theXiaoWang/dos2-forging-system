@@ -6,6 +6,7 @@ local ListGrid = {}
 ---@param options table
 function ListGrid.Build(options)
     local opts = options or {}
+    local ctx = opts.ctx
     local previewInventory = opts.previewInventory
     local parent = opts.parent
     if not parent or not previewInventory then
@@ -19,6 +20,7 @@ function ListGrid.Build(options)
     local applySize = opts.applySize or function() end
     local normalizeScale = opts.normalizeScale or function() end
     local registerSearchBlur = opts.registerSearchBlur
+    local previewTuning = (opts.previewTuning or (ctx and ctx.PreviewInventoryTuning)) or {}
 
     local list = parent:AddChild("PreviewInventory_List", "GenericUI_Element_ScrollList")
     local listOffsetY = filterHeight
@@ -37,8 +39,8 @@ function ListGrid.Build(options)
     local grid = list:AddChild("PreviewInventory_Grid", "GenericUI_Element_Grid")
     local padding = scale(4)  -- Reduced padding to give more space for slots
 
-    -- Fixed 8 columns per row for consistent layout.
-    local columns = 8
+    -- Fixed columns per row for consistent layout (tunable).
+    local columns = math.max(1, math.floor(tonumber(previewTuning.GridColumns) or 8))
     previewInventory.Columns = columns
     local gridWidth = math.max(0, width - padding * 2)
     local maxSlot = math.floor((gridWidth - previewInventory.GridSpacing * (columns - 1)) / columns)
