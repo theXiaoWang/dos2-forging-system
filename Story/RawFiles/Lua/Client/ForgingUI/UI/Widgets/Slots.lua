@@ -146,12 +146,21 @@ function Slots.Create(options)
                 if slotElement and slotElement.GetMovieClip then
                     local mc = slotElement:GetMovieClip()
                     if mc then
-                        if mc.frame_mc then mc.frame_mc.visible = false end
-                        if mc.source_frame_mc then mc.source_frame_mc.visible = false end
-                        if mc.bg_mc then mc.bg_mc.visible = false end
+                        if mc.frame_mc then
+                            mc.frame_mc.alpha = 0
+                            mc.frame_mc.visible = true
+                        end
+                        if mc.source_frame_mc then
+                            mc.source_frame_mc.alpha = 0
+                            mc.source_frame_mc.visible = true
+                        end
+                        if mc.bg_mc then
+                            mc.bg_mc.alpha = 0
+                            mc.bg_mc.visible = true
+                        end
                         if useCustomHover and mc.highlight_mc then
-                            mc.highlight_mc.visible = false
                             mc.highlight_mc.alpha = 0
+                            mc.highlight_mc.visible = true
                         end
                     end
                 end
