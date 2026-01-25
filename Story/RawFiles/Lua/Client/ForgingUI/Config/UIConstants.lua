@@ -55,7 +55,7 @@ local UIConstants = {
     -- Preview inventory "used" frame alignment.
     PreviewUsedFrameOffsetX = 0,
     PreviewUsedFrameOffsetY = 0,
-    PreviewUsedFrameSizeDelta = 8,
+    PreviewUsedFrameSizeDelta = 10,
     BasePanelAlpha = 0.85,
     SectionFrameAlpha = 0.5,
     SectionTextureCenterAlpha = 0.2,
