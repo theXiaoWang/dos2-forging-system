@@ -79,30 +79,59 @@ function Slots.Create(options)
         end
 
         if ctx.hotbarSlotPrefab and ctx.hotbarSlotPrefab.Create then
-            -- For fancy frame slots, create the frame background first
-            -- Frame is larger than slot to contain the hover highlight
-            local frameBackground = nil
-            local framePadding = 12  -- Extra padding to contain highlight
-            if useFancyFrame and ctx.mainSlotFrameTexture then
-                local frameSize = size + framePadding * 2
-                local frameX = x - framePadding
-                local frameY = y - framePadding
-                frameBackground = parent:AddChild(id .. "_FancyFrame", "GenericUI_Element_Texture")
-                frameBackground:SetTexture(ctx.mainSlotFrameTexture, vector(frameSize, frameSize))
-                frameBackground:SetPosition(frameX, frameY)
-                frameBackground:SetSize(frameSize, frameSize)
-                if frameBackground.SetMouseEnabled then
-                    frameBackground:SetMouseEnabled(false)
+            local baseFrameTexture = ctx.mainSlotFrameBaseTexture or ctx.mainSlotFrameTexture
+            local highlightFrameTexture = ctx.mainSlotFrameHighlightTexture
+            local useFancy = useFancyFrame and baseFrameTexture ~= nil
+            local useCustomHover = useFancy and highlightFrameTexture ~= nil
+            local framePadding = (useFancy and ctx.mainSlotFramePadding and scale(ctx.mainSlotFramePadding)) or 0
+            local frameSize = size + framePadding * 2
+            local frameX = x - framePadding
+            local frameY = y - framePadding
+
+            local frameBase = nil
+            if useFancy then
+                frameBase = parent:AddChild(id .. "_FrameBase", "GenericUI_Element_Texture")
+                frameBase:SetTexture(baseFrameTexture, vector(frameSize, frameSize))
+                frameBase:SetPosition(frameX, frameY)
+                frameBase:SetSize(frameSize, frameSize)
+                if frameBase.SetMouseEnabled then
+                    frameBase:SetMouseEnabled(false)
+                end
+                if frameBase.SetMouseChildren then
+                    frameBase:SetMouseChildren(false)
+                end
+            end
+
+            local frameHighlight = nil
+            if useCustomHover then
+                frameHighlight = parent:AddChild(id .. "_FrameHighlight", "GenericUI_Element_Texture")
+                frameHighlight:SetTexture(highlightFrameTexture, vector(frameSize, frameSize))
+                frameHighlight:SetPosition(frameX, frameY)
+                frameHighlight:SetSize(frameSize, frameSize)
+                if frameHighlight.SetVisible then
+                    frameHighlight:SetVisible(false)
+                end
+                if frameHighlight.SetMouseEnabled then
+                    frameHighlight:SetMouseEnabled(false)
+                end
+                if frameHighlight.SetMouseChildren then
+                    frameHighlight:SetMouseChildren(false)
                 end
             end
 
             local ui = getUI and getUI() or nil
             local slot = ctx.hotbarSlotPrefab.Create(ui, id, parent)
-            slot:SetPosition(x, y)
-            slot:SetSize(size, size)
+            slot:SetPosition(frameX, frameY)
+            slot:SetSize(frameSize, frameSize)
             slot:SetCanDrop(true)
             slot:SetEnabled(true)
             if slot.SlotElement then
+                if slot.SlotElement.SetSizeOverride then
+                    slot.SlotElement:SetSizeOverride(vector(frameSize, frameSize))
+                end
+                if slot.SlotElement.SetSize then
+                    slot.SlotElement:SetSize(frameSize, frameSize)
+                end
                 if slot.SlotElement.SetMouseEnabled then
                     slot.SlotElement:SetMouseEnabled(true)
                 end
@@ -111,25 +140,111 @@ function Slots.Create(options)
                 end
             end
 
-            -- Hide the original slot's frame elements and center the highlight for fancy frame slots
-            if useFancyFrame and ctx.mainSlotFrameTexture then
+            -- Hide the original slot visuals for fancy frame slots and drive hover via textures.
+            if useFancy then
                 local slotElement = slot.SlotElement or slot
                 if slotElement and slotElement.GetMovieClip then
                     local mc = slotElement:GetMovieClip()
                     if mc then
-                        -- Hide internal frame elements
                         if mc.frame_mc then mc.frame_mc.visible = false end
                         if mc.source_frame_mc then mc.source_frame_mc.visible = false end
                         if mc.bg_mc then mc.bg_mc.visible = false end
-                        -- Center and resize the highlight
-                        if mc.highlight_mc then
-                            -- Adjust x and y to center the highlight
-                            mc.highlight_mc.x = (mc.highlight_mc.x or 0) -2
-                            mc.highlight_mc.y = (mc.highlight_mc.y or 0) -2
-                            -- Adjust width and height to resize the highlight
-                            mc.highlight_mc.width = size + 1  -- Match frame size (size + framePadding*2)
-                            mc.highlight_mc.height = size + 1
+                        if useCustomHover and mc.highlight_mc then
+                            mc.highlight_mc.visible = false
+                            mc.highlight_mc.alpha = 0
                         end
+                    end
+                end
+                if useCustomHover and slot.SlotElement and slot.SlotElement.SetHighlighted then
+                    slot.SlotElement.SetHighlighted = function() end
+                end
+            end
+
+            if frameHighlight and slot.SlotElement and slot.SlotElement.Events then
+                local function SetHoverFrame(visible)
+                    if frameHighlight.SetVisible then
+                        frameHighlight:SetVisible(visible)
+                    end
+                end
+                slot.SlotElement.Events.MouseOver:Subscribe(function()
+                    SetHoverFrame(true)
+                end)
+                slot.SlotElement.Events.MouseOut:Subscribe(function()
+                    SetHoverFrame(false)
+                end)
+            end
+            if useFancy and framePadding > 0 then
+                local parentScale = frameSize / size
+                local scaleFactor = ctx.mainSlotIconScale or 1
+                local iconScale = math.min(1, scaleFactor / parentScale)
+                local iconScaleVector = vector(iconScale, iconScale)
+
+                local function GetIconSize(target)
+                    local iconW, iconH = 52, 52
+                    if target.ICON_SIZE then
+                        if target.ICON_SIZE.unpack then
+                            iconW, iconH = target.ICON_SIZE:unpack()
+                        else
+                            iconW = target.ICON_SIZE[1] or iconW
+                            iconH = target.ICON_SIZE[2] or iconH
+                        end
+                    end
+                    return iconW, iconH
+                end
+
+                local function ApplySlotIconLayout(target)
+                    local iconW, iconH = GetIconSize(target)
+                    local scaledW = math.floor(iconW * scaleFactor)
+                    local scaledH = math.floor(iconH * scaleFactor)
+                    local iconOffsetX = (framePadding + math.floor((size - scaledW) / 2)) / parentScale
+                    local iconOffsetY = (framePadding + math.floor((size - scaledH) / 2)) / parentScale
+                    if target.SlotIcon then
+                        if target.SlotIcon.SetScale then
+                            target.SlotIcon:SetScale(iconScaleVector)
+                        end
+                        if target.SlotIcon.SetPosition then
+                            target.SlotIcon:SetPosition(iconOffsetX, iconOffsetY)
+                        end
+                    end
+                    if target.RarityIcon then
+                        if target.RarityIcon.SetScale then
+                            target.RarityIcon:SetScale(iconScaleVector)
+                        end
+                        if target.RarityIcon.SetPosition then
+                            target.RarityIcon:SetPosition(iconOffsetX, iconOffsetY)
+                        end
+                    end
+                    if target.RuneSlotsIcon then
+                        if target.RuneSlotsIcon.SetScale then
+                            target.RuneSlotsIcon:SetScale(iconScaleVector)
+                        end
+                        if target.RuneSlotsIcon.SetPosition then
+                            target.RuneSlotsIcon:SetPosition(iconOffsetX, iconOffsetY)
+                        end
+                    end
+                end
+
+                ApplySlotIconLayout(slot)
+
+                if slot.SetIcon then
+                    local originalSetIcon = slot.SetIcon
+                    slot.SetIcon = function(self, icon, iconSize)
+                        originalSetIcon(self, icon, iconSize)
+                        ApplySlotIconLayout(self)
+                    end
+                end
+                if slot.SetRarityIcon then
+                    local originalSetRarityIcon = slot.SetRarityIcon
+                    slot.SetRarityIcon = function(self, rarity)
+                        originalSetRarityIcon(self, rarity)
+                        ApplySlotIconLayout(self)
+                    end
+                end
+                if slot.SetItem then
+                    local originalSetItem = slot.SetItem
+                    slot.SetItem = function(self, item)
+                        originalSetItem(self, item)
+                        ApplySlotIconLayout(self)
                     end
                 end
             end

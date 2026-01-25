@@ -44,6 +44,10 @@ local UIConstants = {
     FrameAlpha = 1,
     FrameTextureAlpha = 1,
     FrameTextureCenterAlpha = 0.85,
+    -- Extra padding around Main/Donor slot frames (base UI pixels).
+    MainSlotFramePadding = 8,
+    -- Scale factor applied to Main/Donor slot icons (1 = default size).
+    MainSlotIconScale = 0.85,
     PanelFillAlpha = 0,
     PanelTextureAlpha = 0.5,
     SlotPanelTextureAlpha = 1,
@@ -72,4 +76,3 @@ local UIConstants = {
 }
 
 return UIConstants
-

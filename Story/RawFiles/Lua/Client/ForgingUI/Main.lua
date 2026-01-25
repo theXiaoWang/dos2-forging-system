@@ -51,7 +51,8 @@ local resultPanelTexture = nil
 local dropdownPanelTexture = nil
 local gridCellTexture = nil
 local previewUsedFrameTexture = nil
-local mainSlotFrameTexture = nil  -- Frame texture for Main/Donor slot visuals
+local mainSlotFrameBaseTexture = nil
+local mainSlotFrameHighlightTexture = nil
 local V = Vector.Create
 local BASE_UI_WIDTH = UIConstants.BaseWidth
 local BASE_UI_HEIGHT = UIConstants.BaseHeight
@@ -79,6 +80,8 @@ local PANEL_TEXTURE_ALPHA = UIConstants.PanelTextureAlpha
 local SLOT_PANEL_TEXTURE_ALPHA = UIConstants.SlotPanelTextureAlpha
 local PREVIEW_USED_FRAME_ALPHA = UIConstants.PreviewUsedFrameAlpha
 local PREVIEW_DROP_SOUND = UIConstants.PreviewDropSound
+local MAIN_SLOT_FRAME_PADDING = UIConstants.MainSlotFramePadding or 0
+local MAIN_SLOT_ICON_SCALE = UIConstants.MainSlotIconScale or 1
 local BASE_PANEL_ALPHA = UIConstants.BasePanelAlpha
 local SECTION_FRAME_ALPHA = UIConstants.SectionFrameAlpha
 local SECTION_TEXTURE_CENTER_ALPHA = UIConstants.SectionTextureCenterAlpha
@@ -169,7 +172,9 @@ local function RefreshContext()
     Context.dropdownPanelTexture = dropdownPanelTexture
     Context.gridCellTexture = gridCellTexture
     Context.PREVIEW_USED_FRAME_TEXTURE = previewUsedFrameTexture
-    Context.mainSlotFrameTexture = mainSlotFrameTexture
+    Context.mainSlotFrameBaseTexture = mainSlotFrameBaseTexture
+    Context.mainSlotFrameHighlightTexture = mainSlotFrameHighlightTexture
+    Context.mainSlotFrameTexture = mainSlotFrameBaseTexture
     Context.BORDER_SIZE = BORDER_SIZE
     Context.FRAME_ALPHA = FRAME_ALPHA
     Context.FRAME_TEXTURE_ALPHA = FRAME_TEXTURE_ALPHA
@@ -179,6 +184,8 @@ local function RefreshContext()
     Context.SLOT_PANEL_TEXTURE_ALPHA = SLOT_PANEL_TEXTURE_ALPHA
     Context.PREVIEW_USED_FRAME_ALPHA = PREVIEW_USED_FRAME_ALPHA
     Context.PREVIEW_DROP_SOUND = PREVIEW_DROP_SOUND
+    Context.mainSlotFramePadding = MAIN_SLOT_FRAME_PADDING
+    Context.mainSlotIconScale = MAIN_SLOT_ICON_SCALE
     Context.BASE_PANEL_ALPHA = BASE_PANEL_ALPHA
     Context.SECTION_FRAME_ALPHA = SECTION_FRAME_ALPHA
     Context.SECTION_TEXTURE_CENTER_ALPHA = SECTION_TEXTURE_CENTER_ALPHA
@@ -342,14 +349,16 @@ local function InitTextureStyles()
         end
         -- Use WHITE_SHADED frame for used items in preview inventory
         previewUsedFrameTexture = textures.FRAMES.WHITE_SHADED
-        -- Fancy silver highlighted frame for Main/Donor slots
+        -- Fancy silver frame for Main/Donor slots
         Ext.Print("[ForgingUI] Checking textures.FRAMES.SLOT: " .. tostring(textures.FRAMES.SLOT ~= nil))
         if textures.FRAMES.SLOT then
             Ext.Print("[ForgingUI] SLOT.SILVER_HIGHLIGHTED: " .. tostring(textures.FRAMES.SLOT.SILVER_HIGHLIGHTED ~= nil))
             Ext.Print("[ForgingUI] SLOT.SILVER: " .. tostring(textures.FRAMES.SLOT.SILVER ~= nil))
-            mainSlotFrameTexture = textures.FRAMES.SLOT.SILVER_HIGHLIGHTED
-                or textures.FRAMES.SLOT.SILVER
-            Ext.Print("[ForgingUI] mainSlotFrameTexture loaded: " .. tostring(mainSlotFrameTexture ~= nil))
+            mainSlotFrameBaseTexture = textures.FRAMES.SLOT.SILVER
+            mainSlotFrameHighlightTexture = textures.FRAMES.SLOT.SILVER_HIGHLIGHTED
+                or mainSlotFrameBaseTexture
+            Ext.Print("[ForgingUI] mainSlotFrameBaseTexture loaded: " .. tostring(mainSlotFrameBaseTexture ~= nil))
+            Ext.Print("[ForgingUI] mainSlotFrameHighlightTexture loaded: " .. tostring(mainSlotFrameHighlightTexture ~= nil))
         else
             Ext.Print("[ForgingUI] WARNING: textures.FRAMES.SLOT is nil!")
         end
