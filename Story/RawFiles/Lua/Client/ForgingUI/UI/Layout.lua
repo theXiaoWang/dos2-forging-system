@@ -42,6 +42,14 @@ end
 
 local Diagnostics = Ext.Require("Client/ForgingUI/UI/Layout/Diagnostics.lua")
 local Viewport = Ext.Require("Client/ForgingUI/UI/Layout/Viewport.lua")
+local TopBar = Ext.Require("Client/ForgingUI/UI/Layout/TopBar.lua")
+local WarningBanner = Ext.Require("Client/ForgingUI/UI/Layout/WarningBanner.lua")
+local LeftInfo = Ext.Require("Client/ForgingUI/UI/Layout/LeftInfo.lua")
+local Columns = Ext.Require("Client/ForgingUI/UI/Layout/Columns.lua")
+local SideInventory = Ext.Require("Client/ForgingUI/UI/Layout/SideInventory.lua")
+local BottomPanels = Ext.Require("Client/ForgingUI/UI/Layout/BottomPanels.lua")
+local Base = Ext.Require("Client/ForgingUI/UI/Layout/Base.lua")
+local Geometry = Ext.Require("Client/ForgingUI/UI/Layout/Geometry.lua")
 
 local diagnostics = Diagnostics.Create({
     getContext = GetContext,
@@ -460,169 +468,91 @@ function Layout.BuildUI()
 
     local layout = GetLayoutState()
     local borderSize = ctx.BORDER_SIZE or 0
-    local canvasWidth = layout.Width - borderSize * 2
-    local canvasHeight = layout.Height - borderSize * 2
+    local base = Base.Build({
+        ctx = ctx,
+        layout = layout,
+        borderSize = borderSize,
+        createFrame = CreateFrame,
+        scale = Layout.Scale,
+        vector = V,
+    })
+    if not base then
+        return false
+    end
+    local root = base.Root
+    local canvas = base.Canvas
+    local canvasWidth = base.CanvasWidth
+    local canvasHeight = base.CanvasHeight
 
-    local existingRoot = ctx.uiInstance:GetElementByID(ctx.ROOT_ID)
-    if existingRoot then
-        ctx.uiInstance:DestroyElement(existingRoot)
+    local geometry = Geometry.Compute({
+        ctx = ctx,
+        canvasWidth = canvasWidth,
+        canvasHeight = canvasHeight,
+        scale = Layout.Scale,
+        scaleX = Layout.ScaleX,
+        scaleY = Layout.ScaleY,
+        clamp = Layout.Clamp,
+    })
+    if not geometry then
+        return false
     end
+    local margin = geometry.margin
+    local gap = geometry.gap
+    local topBarHeight = geometry.topBarHeight
+    local leftWidth = geometry.leftWidth
+    local rightWidth = geometry.rightWidth
+    local bottomHeight = geometry.bottomHeight
+    local topBarWidth = geometry.topBarWidth
+    local topBar = TopBar.Create({
+        ctx = ctx,
+        canvas = canvas,
+        margin = margin,
+        topBarHeight = topBarHeight,
+        topBarWidth = topBarWidth,
+        registerSearchBlur = RegisterSearchBlur,
+        createButtonBox = CreateButtonBox,
+        wireButton = WireButton,
+        scaleX = Layout.ScaleX,
+        scaleY = Layout.ScaleY,
+        clamp = Layout.Clamp,
+    })
 
-    local root = nil
-    if ctx.USE_BASE_BACKGROUND and (ctx.USE_TEXTURE_BACKGROUND and ctx.backgroundTexture) then
-        root = ctx.uiInstance:CreateElement(ctx.ROOT_ID, "GenericUI_Element_Texture")
-        root:SetTexture(ctx.backgroundTexture, V(layout.Width, layout.Height))
-        root:SetSize(layout.Width, layout.Height)
-    elseif ctx.USE_BASE_BACKGROUND then
-        root = ctx.uiInstance:CreateElement(ctx.ROOT_ID, "GenericUI_Element_TiledBackground")
-        root:SetBackground("Note", layout.Width, layout.Height)
-    else
-        root = ctx.uiInstance:CreateElement(ctx.ROOT_ID, "GenericUI_Element_Empty")
-        root:SetSize(layout.Width, layout.Height)
-    end
-
-    if ctx.USE_SLICED_BASE then
-        CreateFrame(root, "BaseFrame", 0, 0, layout.Width, layout.Height, ctx.FILL_COLOR, ctx.BASE_PANEL_ALPHA, Layout.Scale(10), true)
-    end
-    if root.SetScale then
-        root:SetScale(V(1, 1))
-    end
-    if root.SetSizeOverride then
-        root:SetSizeOverride(layout.Width, layout.Height)
-    end
-    root:SetPosition(0, 0)
-
-    local canvas = root:AddChild("ForgingUI_Content", "GenericUI_Element_Empty")
-    canvas:SetPosition(borderSize, borderSize)
-    -- Only create opaque canvas background if not using sliced base (which has its own transparency)
-    if not (ctx.USE_TEXTURE_BACKGROUND and ctx.backgroundTexture) and not ctx.USE_SLICED_BASE then
-        local canvasBG = canvas:AddChild("ForgingUI_ContentBG", "GenericUI_Element_Color")
-        canvasBG:SetSize(canvasWidth, canvasHeight)
-        canvasBG:SetColor(ctx.FILL_COLOR)
-        canvasBG:SetAlpha(1)
-        canvasBG:SetPosition(0, 0)
-    end
-
-    local margin = Layout.Scale(ctx.UI_OUTER_MARGIN or 0)
-    local gap = Layout.Scale(ctx.UI_PANEL_GAP or 0)
-    -- Allow negative gap to close gaps between panels
-    local gapX = gap
-    local topBarHeight = Layout.ScaleY(40)
-    local leftWidth = Layout.ScaleX(400)
-    local rightWidth = ctx.USE_SIDE_INVENTORY_PANEL and Layout.ScaleX(480) or 0
-    -- Height for Wiki + Result panels (positive increases height)
-    local wikiResultHeightOffset = -30
-    local bottomHeight = Layout.ScaleY(260 + wikiResultHeightOffset)
-
-    local topBarWidth = canvasWidth - margin * 2
-    local topBar = canvas:AddChild("TopBar", "GenericUI_Element_Empty")
-    topBar:SetPosition(margin, margin)
-    if RegisterSearchBlur then
-        RegisterSearchBlur(topBar)
-    end
-    local dragArea = topBar:AddChild("ForgeUIDragArea", "GenericUI_Element_Color")
-    dragArea:SetSize(topBarWidth, topBarHeight)
-    dragArea:SetColor(ctx.HEADER_FILL_COLOR)
-    dragArea:SetAlpha(0)
-    dragArea:SetAsDraggableArea()
-    if RegisterSearchBlur then
-        RegisterSearchBlur(dragArea)
-    end
-
-    local topButtonHeight = Layout.Clamp(Layout.ScaleY(32), 40, 50)
-    local topButtonY = math.floor((topBarHeight - topButtonHeight) / 2)
-    local topBarPaddingX = Layout.ScaleX(8)
-    local forgeTabBtn = CreateButtonBox(topBar, "Btn_ForgeTab", "Forge", topBarPaddingX, topButtonY, 100, topButtonHeight, false, ctx.styleDOS1Blue or ctx.styleLargeRed)
-    WireButton(forgeTabBtn, "ForgeTab")
-    local uniqueTabBtn = CreateButtonBox(topBar, "Btn_UniqueTab", "Unique Forge", topBarPaddingX + 100, topButtonY, 175, topButtonHeight, false, ctx.styleDOS1Blue or ctx.styleLargeRed)
-    WireButton(uniqueTabBtn, "UniqueForgeTab")
-
-    local rightX = topBarWidth - topBarPaddingX
-    local closeSize = topBarHeight
-    local closeBtn = CreateButtonBox(topBar, "Btn_Close", "", topBarWidth - closeSize, 0, closeSize, closeSize, false, ctx.styleCloseDOS1Square or ctx.styleClose)
-    if closeBtn and closeBtn.Events and closeBtn.Events.Pressed then
-        closeBtn.Events.Pressed:Subscribe(function()
-            if ctx.ForgingUI and ctx.ForgingUI.Hide then
-                ctx.ForgingUI.Hide()
-            end
-        end)
-    end
-    rightX = rightX - closeSize - 6
-
-    local rightButtons = {
-        {Label = "Level Up", Width = 80},
-        {Label = "Level Up All", Width = 100},
-        {Label = "Toggle Auto\nLevel Up", Width = 110, Wrap = true},
-    }
-    for i = #rightButtons, 1, -1 do
-        local button = rightButtons[i]
-        rightX = rightX - button.Width
-        local topBtn = CreateButtonBox(topBar, "Btn_TopRight_" .. i, button.Label, rightX, topButtonY, button.Width, topButtonHeight, button.Wrap, ctx.styleTabCharacterSheetWide)
-        WireButton(topBtn, button.Label)
-        rightX = rightX - 6
-    end
-
-    local contentTop = margin + topBarHeight + gap
-    local contentHeight = canvasHeight - margin - contentTop
-    local warningHeight = Layout.Clamp(Layout.ScaleY(24), 20, 28)
-    local warningY = contentTop - warningHeight - Layout.ScaleY(4)
-    if warningY < (margin + topBarHeight) then
-        warningY = margin + topBarHeight + Layout.ScaleY(2)
-    end
-    local warningX = margin
-    local warningWidth = canvasWidth - margin * 2
-    local warningBG = canvas:AddChild("ForgeWarning_BG", "GenericUI_Element_Color")
-    warningBG:SetPosition(warningX, warningY)
-    warningBG:SetSize(warningWidth, warningHeight)
-    warningBG:SetColor(Color.CreateFromHex("2E1D12"))
-    warningBG:SetAlpha(0.75)
-    if warningBG.SetVisible then
-        warningBG:SetVisible(false)
-    end
-    local warningLabel = CreateTextElement(canvas, "ForgeWarning_Label", "", warningX + 8, warningY + 2, warningWidth - 16, warningHeight, "Left", false, {Size = 14, Color = "FFD27F", FontType = Text.FONTS.BOLD})
-    if warningLabel and warningLabel.SetVisible then
-        warningLabel:SetVisible(false)
-    end
+    local contentTop = geometry.contentTop
+    local contentHeight = geometry.contentHeight
+    local warningHeight = geometry.warningHeight
+    local warningY = geometry.warningY
+    local warningX = geometry.warningX
+    local warningWidth = geometry.warningWidth
+    local warningElements = WarningBanner.Create({
+        canvas = canvas,
+        x = warningX,
+        y = warningY,
+        width = warningWidth,
+        height = warningHeight,
+        createTextElement = CreateTextElement,
+        textStyle = {Size = 14, Color = "FFD27F", FontType = Text.FONTS.BOLD},
+        bgColor = "2E1D12",
+        bgAlpha = 0.75,
+        labelOffsetX = 8,
+        labelOffsetY = 2,
+    })
+    local warningBG = warningElements and warningElements.Background or nil
+    local warningLabel = warningElements and warningElements.Label or nil
     local uiState = GetUIState()
     if uiState then
         uiState.WarningLabel = warningLabel
         uiState.WarningBackground = warningBG
     end
-    local contentInsetX = Layout.Scale(ctx.UI_CONTENT_INSET_X or 0)
-    local rightXPos = canvasWidth - margin - rightWidth - contentInsetX
-    local leftX = margin
-    local midX = leftX + leftWidth + gapX + contentInsetX
-    -- Don't subtract gapX from midWidth - already accounted for in midX
-    local midWidth = rightXPos - midX
-    local midTopHeight = contentHeight - bottomHeight - gap
-    local layoutTuning = ctx and ctx.LayoutTuning or nil
-    -- Height multiplier for Main/Donor slot panels (1.0 = same as Preview, >1.0 = taller, <1.0 = shorter)
-    local slotPanelHeightMultiplier = (layoutTuning and layoutTuning.SlotPanelHeightMultiplier) or 1.05
-    local slotPanelHeightBoost = Layout.ScaleY((layoutTuning and layoutTuning.SlotPanelHeightBoostY) or 20)
-    local slotPanelHeight = math.floor(midTopHeight * slotPanelHeightMultiplier) + slotPanelHeightBoost
-    -- Vertical offset to move Main/Donor panels up (negative values move up, positive move down)
-    -- Keep the bottom edge steady while extending upward to close the top gap.
-    local slotPanelOffsetY = ((layoutTuning and layoutTuning.SlotPanelOffsetYBase) or -11) - slotPanelHeightBoost
-    -- Vertical offset for Info panel and Preview panel (positive moves down)
-    local infoPanelOffsetY = 4
-    local midBottomY = contentTop + midTopHeight + gap
-    local columnGap = Layout.Scale(ctx.UI_COLUMN_GAP or 0)
-    local columnTotal = midWidth - columnGap * 2
-    -- Main and Donor slots share the same width ratio (they use the same template)
-    local slotPanelWidthRatio = 0.30
-    local slotPanelWidth = math.floor(columnTotal * slotPanelWidthRatio)
-    local previewWidth = columnTotal - slotPanelWidth * 2
-    local baseMainX = midX
-    local basePreviewX = baseMainX + slotPanelWidth + columnGap
-    local baseDonorX = basePreviewX + previewWidth + columnGap
-    local slotPanelWidthBoost = Layout.ScaleX((layoutTuning and layoutTuning.SlotPanelWidthBoostX) or 16)
-    local slotPanelWidthHalf = math.floor(slotPanelWidthBoost / 2)
-    local donorRightEdgeBoost = Layout.ScaleX((layoutTuning and layoutTuning.DonorRightEdgeBoostX) or 9)
-    local mainWidth = slotPanelWidth + slotPanelWidthBoost
-    local donorWidth = slotPanelWidth + slotPanelWidthBoost + donorRightEdgeBoost
-    local mainX = baseMainX - slotPanelWidthHalf
-    local previewX = basePreviewX
-    local donorX = baseDonorX - slotPanelWidthHalf
+    local rightXPos = geometry.rightXPos
+    local leftX = geometry.leftX
+    local midX = geometry.midX
+    local midWidth = geometry.midWidth
+    local midTopHeight = geometry.midTopHeight
+    local layoutTuning = geometry.layoutTuning
+    local slotPanelHeight = geometry.slotPanelHeight
+    local slotPanelOffsetY = geometry.slotPanelOffsetY
+    local infoPanelOffsetY = geometry.infoPanelOffsetY
+    local midBottomY = geometry.midBottomY
 
     local craftState = ctx.Craft and ctx.Craft.State or nil
     if craftState then
@@ -633,263 +563,95 @@ function Layout.BuildUI()
 
     local infoHeight = contentHeight - Layout.ScaleY(infoPanelOffsetY)
     local infoPanelY = contentTop + Layout.ScaleY(infoPanelOffsetY)
-    local leftInfoFrame, leftInfo, leftInfoWidth, leftInfoHeight = CreateSkinnedPanel(canvas, "LeftInfo", leftX, infoPanelY, leftWidth, infoHeight, ctx.introPanelTexture, Layout.Scale(10))
-    if RegisterSearchBlur then
-        RegisterSearchBlur(leftInfoFrame)
-        RegisterSearchBlur(leftInfo)
-    end
-    local leftHeaderHeight = 0
-    if leftInfo then
-        CreateTextElement(leftInfo, "LeftInfo_Header", "Forge / Unique Forge", 0, 0, leftInfoWidth, 22, "Center", false, {size = ctx.HEADER_TEXT_SIZE})
-        leftHeaderHeight = 22
-    end
-    local infoText = table.concat({
-        "Only the items that are at or greater than",
-        "the player's level can be used for forge.",
-        "",
-        "Higher quality materials yield better",
-        "results.",
-        "",
-        "Combine different materials to create",
-        "unique properties and enchantments.",
-        "",
-        "Use materials and items to craft powerful",
-        "equipment.",
-    }, "\n")
-    CreateTextElement(leftInfo, "LeftInfo_Text", infoText, 12, leftHeaderHeight + 10, leftInfoWidth - 24, infoHeight - leftHeaderHeight - 20, "Left", true)
+    LeftInfo.Create({
+        canvas = canvas,
+        x = leftX,
+        y = infoPanelY,
+        width = leftWidth,
+        height = infoHeight,
+        texture = ctx.introPanelTexture,
+        padding = Layout.Scale(10),
+        headerText = "Forge / Unique Forge",
+        headerStyle = {size = ctx.HEADER_TEXT_SIZE},
+        bodyText = table.concat({
+            "Only the items that are at or greater than",
+            "the player's level can be used for forge.",
+            "",
+            "Higher quality materials yield better",
+            "results.",
+            "",
+            "Combine different materials to create",
+            "unique properties and enchantments.",
+            "",
+            "Use materials and items to craft powerful",
+            "equipment.",
+        }, "\n"),
+        createSkinnedPanel = CreateSkinnedPanel,
+        createTextElement = CreateTextElement,
+        registerSearchBlur = RegisterSearchBlur,
+    })
 
-    local columnConfigs = {
-        {ID = "Main", Title = "Main Slot", Mode = "Main", X = mainX, Width = mainWidth, Texture = ctx.slotPanelTexture, Padding = Layout.Scale(6)},
-        {ID = "Donor", Title = "Donor Slot", Mode = "Donor", X = donorX, Width = donorWidth, Texture = ctx.slotPanelTexture, Padding = Layout.Scale(6)},
-        {ID = "Preview", Title = "", Mode = "Preview", X = previewX, Width = previewWidth, Texture = ctx.previewPanelTexture, Padding = Layout.Scale(8)},
-    }
+    local columnConfigs = geometry.columnConfigs
 
-    for _, cfg in ipairs(columnConfigs) do
-        -- Use separate height for Main/Donor panels, standard height for Preview
-        local panelHeight = (cfg.Mode == "Main" or cfg.Mode == "Donor") and slotPanelHeight or (midTopHeight - Layout.ScaleY(infoPanelOffsetY))
-        -- Apply vertical offset: Main/Donor move up, Preview moves down
-        local panelY = contentTop
-        if cfg.Mode == "Main" or cfg.Mode == "Donor" then
-            panelY = contentTop + Layout.ScaleY(slotPanelOffsetY)
-        elseif cfg.Mode == "Preview" then
-            panelY = contentTop + Layout.ScaleY(infoPanelOffsetY)
-        end
-        local panelFrame, panel, panelInnerWidth, panelInnerHeight = CreateSkinnedPanel(
-            canvas,
-            "Column_" .. cfg.ID,
-            cfg.X,
-            panelY,
-            cfg.Width,
-            panelHeight,
-            cfg.Texture,
-            cfg.Padding
-        )
-        if RegisterSearchBlur and cfg.Mode ~= "Preview" then
-            RegisterSearchBlur(panelFrame)
-            RegisterSearchBlur(panel)
-        end
-        local headerHeight = 0
-        -- Vertical offset to push header and slot lower in Main/Donor panels
-        local headerOffsetY = (cfg.Mode == "Main" or cfg.Mode == "Donor") and 47 or 0
-        if cfg.Title and cfg.Title ~= "" then
-            local headerFormat = {size = ctx.HEADER_TEXT_SIZE}
-            -- Make Main/Donor titles larger, black, and use bold font
-            if cfg.Mode == "Main" or cfg.Mode == "Donor" then
-                headerFormat = {Size = 14, Color = "000000", FontType = Text.FONTS.BOLD}
-            end
-            CreateTextElement(panel, cfg.ID .. "_HeaderText", cfg.Title, 0, headerOffsetY, panelInnerWidth, 26, "Center", false, headerFormat)
-            headerHeight = 26 + headerOffsetY
-        end
-
-        local columnGap = 6
-        if cfg.Mode == "Preview" then
-            -- Use a fixed width to prevent stretching of GreenMediumTextured style
-            -- Alternatively, use a style designed for wide buttons like styleTabCharacterSheetWide
-            local primaryStyle = ctx.styleGreenMediumTextured or ctx.buttonStyle
-            local previewButtonHeight = 35
-            local previewButtonGap = 6
-            -- Fixed width prevents texture stretching; button will be centered
-            local previewButtonWidth = Layout.ScaleX(260)  -- Fixed width that maintains aspect ratio
-            local previewButtonX = math.floor((panelInnerWidth - previewButtonWidth) / 2)  -- Center the button
-            local previewButtonY = headerHeight + columnGap
-            local previewButton = CreateButtonBox(panel, "Preview_PreviewButton", "Click to Preview", previewButtonX, previewButtonY, previewButtonWidth, previewButtonHeight, false, primaryStyle)
-            WireButton(previewButton, "ClickToPreview")
-            local previewY = previewButtonY + previewButtonHeight + previewButtonGap
-            local previewHeight = panelInnerHeight - previewY - columnGap
-            local previewInner = panel:AddChild(cfg.ID .. "_PreviewArea_Inner", "GenericUI_Element_Empty")
-            previewInner:SetPosition(6, previewY)
-            ApplyElementSize(previewInner, panelInnerWidth - 12, previewHeight)
-            if previewInner.SetScale then
-                previewInner:SetScale(V(1, 1))
-            end
-            local innerWidth = panelInnerWidth - 12
-            local innerHeight = previewHeight
-
-            if ctx.USE_CUSTOM_PREVIEW_PANEL then
-                CreatePreviewInventoryPanel(previewInner, innerWidth, innerHeight, 0, 0)
-            elseif ctx.USE_VANILLA_COMBINE_PANEL and craftState then
-                craftState.PreviewAnchorID = cfg.ID .. "_PreviewArea_Inner"
-                craftState.PreviewArea = {W = innerWidth, H = innerHeight}
-                previewInner:SetMouseEnabled(false)
-                previewInner:SetMouseChildren(false)
-            else
-                previewInner:SetMouseEnabled(false)
-                previewInner:SetMouseChildren(false)
-            end
-        else
-            local runeHeight = 18
-            local available = panelInnerHeight - headerHeight - runeHeight - columnGap * 4
-            local itemHeight = math.floor(available * 0.28)
-            local statsHeight = math.floor(available * 0.32)
-            local extraHeight = math.floor(available * 0.28)
-            local skillsHeight = available - itemHeight - statsHeight - extraHeight
-
-            -- Width reduction for child panels (Stats, Extra Properties, Skills, Rune Slots)
-            -- Positive values make panels narrower by reducing width from both sides
-            local childPanelWidthReduction = Layout.ScaleX(60)
-            local childPanelWidth = panelInnerWidth - 12 - childPanelWidthReduction
-            local childPanelX = 6 + math.floor(childPanelWidthReduction / 2)
-
-            local cursorY = headerHeight + columnGap
-            local socketSize = math.min(56, itemHeight - 8)
-            local slotX = math.floor((panelInnerWidth - socketSize) / 2)
-            local slotY = cursorY + 4
-            CreateDropSlot(panel, cfg.ID .. "_ItemSlot", slotX, slotY, socketSize)
-            local slotBottom = slotY + socketSize
-            local slotToPanelGap = 60
-            local reducedGap = math.max(2, math.floor(columnGap * 0.5))
-            cursorY = slotBottom + slotToPanelGap
-
-            CreateSectionBox(panel, cfg.ID .. "_Stats", childPanelX, cursorY, childPanelWidth, statsHeight, "Stats", "", "")
-            cursorY = cursorY + statsHeight + reducedGap
-
-            CreateSectionBox(panel, cfg.ID .. "_Extra", childPanelX, cursorY, childPanelWidth, extraHeight, "Extra Properties", "", "")
-            cursorY = cursorY + extraHeight + reducedGap
-
-            local skillsTitle = cfg.Mode == "Donor" and "Granted Skill / Skillbook Protect" or "Granted Skills"
-            local skillsBox = CreateSectionBox(panel, cfg.ID .. "_Skills", childPanelX, cursorY, childPanelWidth, skillsHeight, skillsTitle, "", "")
-            if cfg.Mode == "Donor" then
-                local slotSize = math.min(50, skillsHeight - 30)
-                if slotSize > 0 then
-                    local skillsBoxWidth = childPanelWidth
-                    local slotSlotX = skillsBoxWidth - slotSize - 8
-                    local skillSlotY = math.floor((skillsHeight - slotSize) / 2)
-                    CreateDropSlot(skillsBox, "Donor_SkillbookSlot", slotSlotX, skillSlotY, slotSize)
-                end
-            end
-
-            local runeY = cursorY + skillsHeight + reducedGap
-            CreateTextElement(panel, cfg.ID .. "_Runes", "Rune Slots:", childPanelX + 4, runeY, childPanelWidth - 8, runeHeight, "Left")
-        end
-    end
+    Columns.Build({
+        ctx = ctx,
+        canvas = canvas,
+        columnConfigs = columnConfigs,
+        contentTop = contentTop,
+        midTopHeight = midTopHeight,
+        infoPanelOffsetY = infoPanelOffsetY,
+        slotPanelHeight = slotPanelHeight,
+        slotPanelOffsetY = slotPanelOffsetY,
+        craftState = craftState,
+        createSkinnedPanel = CreateSkinnedPanel,
+        createTextElement = CreateTextElement,
+        createButtonBox = CreateButtonBox,
+        createPreviewInventoryPanel = CreatePreviewInventoryPanel,
+        createSectionBox = CreateSectionBox,
+        createDropSlot = CreateDropSlot,
+        registerSearchBlur = RegisterSearchBlur,
+        wireButton = WireButton,
+        applyElementSize = ApplyElementSize,
+        scaleX = Layout.ScaleX,
+        scaleY = Layout.ScaleY,
+        vector = V,
+    })
 
     if ctx.USE_SIDE_INVENTORY_PANEL then
-        local inventoryFrame, inventoryPanel, inventoryInnerWidth = CreateFrame(canvas, "InventoryPanel", rightXPos, contentTop, rightWidth, contentHeight, ctx.FILL_COLOR, ctx.FRAME_ALPHA)
-        if RegisterSearchBlur then
-            RegisterSearchBlur(inventoryFrame)
-            RegisterSearchBlur(inventoryPanel)
-        end
-        local inventoryHeaderHeight = 22
-        local _, inventoryHeaderInner, headerInnerWidth, headerInnerHeight = CreateFrame(inventoryPanel, "InventoryHeader", 0, 0, inventoryInnerWidth, inventoryHeaderHeight, ctx.HEADER_FILL_COLOR, 1)
-        CreateTextElement(inventoryHeaderInner, "InventoryLabel", "Inventory", 0, 0, headerInnerWidth - 70, headerInnerHeight, "Center", false, {size = ctx.HEADER_TEXT_SIZE})
-
-        local sortWidth = 70
-        local sortButton = CreateButtonBox(inventoryHeaderInner, "InventorySort", "Sort by", headerInnerWidth - sortWidth, 0, sortWidth, headerInnerHeight)
-        WireButton(sortButton, "InventorySort")
-
-        local grid = inventoryPanel:AddChild("InventoryGrid", "GenericUI_Element_Grid")
-        local gridPadding = 8
-        local gridGap = 1
-        local cols = 6
-        local rows = 7
-        local gridWidth = inventoryInnerWidth - gridPadding * 2
-        local cellSize = math.floor((gridWidth - (cols - 1) * gridGap) / cols)
-        grid:SetGridSize(rows, cols)
-        grid:SetElementSpacing(gridGap, gridGap)
-        grid:SetPosition(gridPadding, inventoryHeaderHeight + gridPadding)
-        grid:SetRepositionAfterAdding(true)
-        for i = 1, rows * cols do
-            local cell = nil
-            if ctx.gridCellTexture then
-                cell = grid:AddChild("InventoryCell_" .. i, "GenericUI_Element_Texture")
-                cell:SetTexture(ctx.gridCellTexture, V(cellSize, cellSize))
-            else
-                cell = grid:AddChild("InventoryCell_" .. i, "GenericUI_Element_Color")
-                cell:SetSize(cellSize, cellSize)
-                cell:SetColor(ctx.GRID_COLOR)
-            end
-        end
-        grid:RepositionElements()
+        SideInventory.Create({
+            ctx = ctx,
+            canvas = canvas,
+            x = rightXPos,
+            y = contentTop,
+            width = rightWidth,
+            height = contentHeight,
+            createFrame = CreateFrame,
+            createTextElement = CreateTextElement,
+            createButtonBox = CreateButtonBox,
+            registerSearchBlur = RegisterSearchBlur,
+            wireButton = WireButton,
+            vector = V,
+        })
     end
 
-    local wikiWidth = math.floor(midWidth * 0.55)
-    local resultWidth = midWidth - wikiWidth - gap
-    local wikiFrame, wikiPanel, wikiInnerWidth, wikiInnerHeight = CreateSkinnedPanel(canvas, "ForgeWiki", midX, midBottomY, wikiWidth, bottomHeight, ctx.wikiPanelTexture, Layout.Scale(10))
-    local resultFrame, resultPanel, resultInnerWidth, resultInnerHeight = CreateSkinnedPanel(canvas, "ForgeResult", midX + wikiWidth + gap, midBottomY, resultWidth, bottomHeight, ctx.resultPanelTexture, Layout.Scale(10))
-    if RegisterSearchBlur then
-        RegisterSearchBlur(wikiFrame)
-        RegisterSearchBlur(wikiPanel)
-        RegisterSearchBlur(resultFrame)
-        RegisterSearchBlur(resultPanel)
-    end
-
-    local wikiEntries = {
-        {Label = "Rarity", Text = "Rarity determines the quality and power of forged equipment."},
-        {Label = "Base Value", Text = "Base Value represents the base worth of an item before modifiers."},
-        {Label = "Weapon Boost", Text = "Weapon Boost increases the base damage or effectiveness of a weapon."},
-        {Label = "Stats Modifiers", Text = "Stats Modifiers add attribute bonuses or penalties to the result."},
-        {Label = "Rune Slots", Text = "Rune Slots determine how many runes can be socketed into the item."},
-    }
-    local wikiLookup = {}
-    for _, entry in ipairs(wikiEntries) do
-        wikiLookup[entry.Label] = entry.Text
-    end
-
-    local dropdownButtonWidth = math.min(Layout.ScaleX(220), wikiInnerWidth - 16)
-    local dropdownButtonHeight = Layout.Clamp(Layout.ScaleY(24), 20, 24)
-    local dropdownStyle = ctx.styleComboBox or ctx.buttonStyle
-    local wikiDropdown = CreateButtonBox(wikiPanel, "ForgeWikiDropdown", "Rarity", 8, 6, dropdownButtonWidth, dropdownButtonHeight, false, dropdownStyle)
-
-    local dropdownHeight = dropdownButtonHeight * #wikiEntries + 12
-    local dropdownFrame, dropdownInner = nil, nil
-    if ctx.dropdownPanelTexture then
-        dropdownFrame, dropdownInner = CreateSkinnedPanel(wikiPanel, "ForgeWikiDropdownPanel", 8, dropdownButtonHeight + 10, dropdownButtonWidth, dropdownHeight, ctx.dropdownPanelTexture, 8)
-        dropdownFrame:SetVisible(false)
-    end
-
-    local wikiTextY = dropdownButtonHeight + 16
-    local wikiText = CreateTextElement(wikiPanel, "ForgeWikiText", wikiLookup["Rarity"], 12, wikiTextY, wikiInnerWidth - 24, wikiInnerHeight - wikiTextY - 12, "Left", true)
-
-    if dropdownInner then
-        local optionY = 6
-        for _, entry in ipairs(wikiEntries) do
-            local optionId = entry.Label:gsub("%s+", "_")
-            local option = CreateButtonBox(dropdownInner, "ForgeWikiOption_" .. optionId, entry.Label, 0, optionY, dropdownButtonWidth - 16, dropdownButtonHeight, false, dropdownStyle)
-            if option.Events and option.Events.Pressed then
-                option.Events.Pressed:Subscribe(function()
-                    wikiDropdown:SetLabel(entry.Label)
-                    wikiText:SetText(wikiLookup[entry.Label] or "")
-                    dropdownFrame:SetVisible(false)
-                end)
-            end
-            optionY = optionY + dropdownButtonHeight
-        end
-    end
-
-    if wikiDropdown.Events and wikiDropdown.Events.Pressed and dropdownFrame then
-        wikiDropdown.Events.Pressed:Subscribe(function()
-            dropdownFrame:SetVisible(not dropdownFrame:IsVisible())
-        end)
-    end
-
-    CreateTextElement(resultPanel, "ForgeResultHeader", "Forge Result", 0, 6, resultInnerWidth, 18, "Center", false, {size = ctx.HEADER_TEXT_SIZE})
-    local primaryStyle = ctx.styleLargeRedWithArrows or ctx.buttonStyle
-    local forgeButtonWidth = 110
-    local forgeButtonHeight = Layout.Clamp(Layout.ScaleY(24), 20, 24)
-    local forgeButtonX = resultInnerWidth - forgeButtonWidth - 12
-    local forgeButtonY = resultInnerHeight - forgeButtonHeight - 6
-    local forgeActionBtn = CreateButtonBox(resultPanel, "ForgeActionButton", "Forge", forgeButtonX, forgeButtonY, forgeButtonWidth, forgeButtonHeight, false, primaryStyle)
-    WireButton(forgeActionBtn, "ForgeAction")
+    BottomPanels.Build({
+        ctx = ctx,
+        canvas = canvas,
+        midX = midX,
+        midBottomY = midBottomY,
+        midWidth = midWidth,
+        bottomHeight = bottomHeight,
+        gap = gap,
+        panelPadding = Layout.Scale(10),
+        createSkinnedPanel = CreateSkinnedPanel,
+        createTextElement = CreateTextElement,
+        createButtonBox = CreateButtonBox,
+        registerSearchBlur = RegisterSearchBlur,
+        wireButton = WireButton,
+        scaleX = Layout.ScaleX,
+        scaleY = Layout.ScaleY,
+        clamp = Layout.Clamp,
+    })
 
     -- Ensure the top bar sits above the panels so its buttons receive input.
     if (layoutTuning == nil or layoutTuning.RaiseTopBarToFront)
