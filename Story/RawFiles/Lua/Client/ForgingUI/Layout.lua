@@ -918,9 +918,11 @@ function Layout.BuildUI()
     local midTopHeight = contentHeight - bottomHeight - gap
     -- Height multiplier for Main/Donor slot panels (1.0 = same as Preview, >1.0 = taller, <1.0 = shorter)
     local slotPanelHeightMultiplier = 1.05
-    local slotPanelHeight = math.floor(midTopHeight * slotPanelHeightMultiplier)
+    local slotPanelHeightBoost = Layout.ScaleY(20)
+    local slotPanelHeight = math.floor(midTopHeight * slotPanelHeightMultiplier) + slotPanelHeightBoost
     -- Vertical offset to move Main/Donor panels up (negative values move up, positive move down)
-    local slotPanelOffsetY = -11
+    -- Keep the bottom edge steady while extending upward to close the top gap.
+    local slotPanelOffsetY = -11 - slotPanelHeightBoost
     -- Vertical offset for Info panel and Preview panel (positive moves down)
     local infoPanelOffsetY = 4
     local midBottomY = contentTop + midTopHeight + gap
@@ -929,12 +931,18 @@ function Layout.BuildUI()
     -- Main and Donor slots share the same width ratio (they use the same template)
     local slotPanelWidthRatio = 0.30
     local slotPanelWidth = math.floor(columnTotal * slotPanelWidthRatio)
-    local mainWidth = slotPanelWidth
-    local donorWidth = slotPanelWidth
-    local previewWidth = columnTotal - mainWidth - donorWidth
-    local mainX = midX
-    local previewX = mainX + mainWidth + columnGap
-    local donorX = previewX + previewWidth + columnGap
+    local previewWidth = columnTotal - slotPanelWidth * 2
+    local baseMainX = midX
+    local basePreviewX = baseMainX + slotPanelWidth + columnGap
+    local baseDonorX = basePreviewX + previewWidth + columnGap
+    local slotPanelWidthBoost = Layout.ScaleX(16)
+    local slotPanelWidthHalf = math.floor(slotPanelWidthBoost / 2)
+    local donorRightEdgeBoost = Layout.ScaleX(9)
+    local mainWidth = slotPanelWidth + slotPanelWidthBoost
+    local donorWidth = slotPanelWidth + slotPanelWidthBoost + donorRightEdgeBoost
+    local mainX = baseMainX - slotPanelWidthHalf
+    local previewX = basePreviewX
+    local donorX = baseDonorX - slotPanelWidthHalf
 
     local craftState = ctx.Craft and ctx.Craft.State or nil
     if craftState then
@@ -1202,6 +1210,12 @@ function Layout.BuildUI()
     local forgeButtonY = resultInnerHeight - forgeButtonHeight - 6
     local forgeActionBtn = CreateButtonBox(resultPanel, "ForgeActionButton", "Forge", forgeButtonX, forgeButtonY, forgeButtonWidth, forgeButtonHeight, false, primaryStyle)
     WireButton(forgeActionBtn, "ForgeAction")
+
+    -- Ensure the top bar sits above the panels so its buttons receive input.
+    if topBar and canvas and canvas.SetChildIndex and canvas.GetChildren then
+        local children = canvas:GetChildren() or {}
+        canvas:SetChildIndex(topBar, math.max(0, #children - 1))
+    end
 
     return true
 end

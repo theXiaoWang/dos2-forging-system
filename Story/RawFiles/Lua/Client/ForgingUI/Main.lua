@@ -332,9 +332,9 @@ local function InitTextureStyles()
         resultPanelTexture = nil
         dropdownPanelTexture = nil
     end
-    if textures.PANELS and textures.PANELS.TALL_PAGE then
-        -- Use the tall page panel for main/donor slot columns (stretched to fit).
-        slotPanelTexture = textures.PANELS.TALL_PAGE
+    if textures.PANELS and (textures.PANELS.CLIPBOARD_THIN or textures.PANELS.TALL_PAGE) then
+        -- Use the clipboard thin panel for main/donor slot columns (stretched to fit).
+        slotPanelTexture = textures.PANELS.CLIPBOARD_THIN or textures.PANELS.TALL_PAGE
     end
 
     if backgroundTextureName then
