@@ -18,6 +18,12 @@ local previewInventory = {
     SearchText = nil,
     SearchHint = nil,
     SearchQuery = nil,
+    SearchFocused = false,
+    SearchHistory = nil,
+    SearchHistoryIndex = 0,
+    SearchHistoryIgnore = false,
+    SearchCtrlHeld = false,
+    SearchClipboard = "",
     Grid = nil,
     ScrollList = nil,
     AutoSortButton = nil,
@@ -53,6 +59,7 @@ local previewInventory = {
     ScrollDragOffset = 0,
 }
 local previewScrollTickRegistered = false
+local previewSearchShortcutsRegistered = false
 
 local function GetUI()
     return ctx and ctx.uiInstance or nil
@@ -123,6 +130,227 @@ local function RegisterSearchBlur(element)
     element.Events.MouseDown:Subscribe(function ()
         UnfocusPreviewSearch()
     end)
+end
+
+local function RegisterPreviewSearchShortcuts()
+    if previewSearchShortcutsRegistered then
+        return
+    end
+    if not Ext or not Ext.Events or not Ext.Events.RawInput then
+        return
+    end
+    previewSearchShortcutsRegistered = true
+
+    local function GetSearchTextField()
+        local searchInput = previewInventory.SearchText
+        local mc = searchInput and searchInput.GetMovieClip and searchInput:GetMovieClip() or nil
+        return mc and mc.text_txt or nil
+    end
+
+    local function GetSearchSelectionRange()
+        local textField = GetSearchTextField()
+        if not textField then
+            return nil, nil
+        end
+        local startIndex = textField.selectionBeginIndex
+        local endIndex = textField.selectionEndIndex
+        if startIndex == nil or endIndex == nil then
+            return nil, nil
+        end
+        if startIndex > endIndex then
+            startIndex, endIndex = endIndex, startIndex
+        end
+        return startIndex, endIndex
+    end
+
+    local function SetSearchSelection(startIndex, endIndex)
+        local textField = GetSearchTextField()
+        if textField and textField.setSelection then
+            textField.setSelection(startIndex, endIndex)
+        end
+    end
+
+    local function SetSearchCaretToEnd(textValue)
+        local value = textValue or previewInventory.SearchQuery or ""
+        SetSearchSelection(#value, #value)
+    end
+
+    local function CopySearchText(textValue)
+        if textValue == nil then
+            return
+        end
+        previewInventory.SearchClipboard = textValue
+
+        if Ext and Ext.UI and Ext.UI.GetByType then
+            local ui = Ext.UI.GetByType(Ext.UI.TypeID.msgBox)
+            if ui and ui.GetRoot and ui.ExternalInterfaceCall and Timer and Timer.Start then
+                local root = ui:GetRoot()
+                if root and root.setInputText then
+                    root.setInputText(textValue)
+                    if root.popup_mc and root.popup_mc.input_mc and root.popup_mc.input_mc.acceptSave then
+                        root.popup_mc.input_mc.acceptSave()
+                    end
+                    if root.focusInputEnabled then
+                        root.focusInputEnabled()
+                    end
+                    local timerID = "ForgingUI_SearchCopy_" .. tostring(Ext.MonotonicTime())
+                    Timer.Start(timerID, 0.2, function ()
+                        ui:ExternalInterfaceCall("copyPressed")
+                    end)
+                    return
+                end
+            end
+        end
+    end
+
+    local function RequestClipboardText(callback)
+        if not callback then
+            return
+        end
+        if Ext and Ext.UI and Ext.UI.GetByType and Timer and Timer.Start then
+            local ui = Ext.UI.GetByType(Ext.UI.TypeID.msgBox)
+            if ui and ui.ExternalInterfaceCall and ui.GetRoot then
+                local timerID = "ForgingUI_SearchPaste_" .. tostring(Ext.MonotonicTime())
+                ui:ExternalInterfaceCall("pastePressed")
+                Timer.Start(timerID, 0.1, function ()
+                    local text = nil
+                    local root = ui:GetRoot()
+                    local inputField = root and root.popup_mc and root.popup_mc.input_mc and root.popup_mc.input_mc.input_txt
+                    if inputField and inputField.text then
+                        text = inputField.text or ""
+                    end
+                    if text == nil or text == "" then
+                        text = previewInventory.SearchClipboard or ""
+                    end
+                    callback(text)
+                end)
+                return
+            end
+        end
+        callback(previewInventory.SearchClipboard or "")
+    end
+
+    local function PasteIntoSearch(pasteText)
+        if pasteText == nil then
+            return
+        end
+        local cleaned = tostring(pasteText):gsub("[\r\n\t]", "")
+        local textValue = previewInventory.SearchQuery or ""
+        local startIndex, endIndex = GetSearchSelectionRange()
+        if startIndex == nil or endIndex == nil then
+            startIndex = #textValue
+            endIndex = #textValue
+        end
+        local before = textValue:sub(1, startIndex)
+        local after = textValue:sub(endIndex + 1)
+        local merged = before .. cleaned .. after
+        local caretIndex = startIndex + #cleaned
+        if previewInventory.ApplySearchText then
+            previewInventory.ApplySearchText(merged, false, false, caretIndex)
+        end
+    end
+
+    Ext.Events.RawInput:Subscribe(function (ev)
+        local inputEvent = ev and ev.Input or nil
+        local input = inputEvent and inputEvent.Input or nil
+        local value = inputEvent and inputEvent.Value or nil
+        if not input or not value then
+            return
+        end
+
+        local id = tostring(input.InputId or "")
+        if id == "" then
+            return
+        end
+
+        local state = value.State
+        if id == "lctrl" or id == "rctrl" then
+            previewInventory.SearchCtrlHeld = state == "Pressed"
+            if state == "Released" then
+                previewInventory.SearchCtrlHeld = false
+            end
+            return
+        end
+
+        if state ~= "Pressed" then
+            return
+        end
+        if not previewInventory.SearchFocused or not previewInventory.SearchCtrlHeld then
+            return
+        end
+
+        local key = string.lower(id)
+        if key == "a" then
+            local textValue = previewInventory.SearchQuery or ""
+            SetSearchSelection(0, #textValue)
+            return
+        end
+
+        if key == "z" then
+            local history = previewInventory.SearchHistory
+            local index = previewInventory.SearchHistoryIndex or 0
+            if history and index > 1 then
+                index = index - 1
+                previewInventory.SearchHistoryIndex = index
+                local text = history[index] or ""
+                if previewInventory.ApplySearchText then
+                    previewInventory.ApplySearchText(text, true, true)
+                end
+            end
+            return
+        end
+
+        if key == "y" then
+            local history = previewInventory.SearchHistory
+            local index = previewInventory.SearchHistoryIndex or 0
+            if history and index < #history then
+                index = index + 1
+                previewInventory.SearchHistoryIndex = index
+                local text = history[index] or ""
+                if previewInventory.ApplySearchText then
+                    previewInventory.ApplySearchText(text, true, true)
+                end
+            end
+            return
+        end
+
+        if key == "c" then
+            local textValue = previewInventory.SearchQuery or ""
+            local startIndex, endIndex = GetSearchSelectionRange()
+            if startIndex ~= nil and endIndex ~= nil and startIndex ~= endIndex then
+                local selection = textValue:sub(startIndex + 1, endIndex)
+                if selection ~= "" then
+                    CopySearchText(selection)
+                end
+            end
+            return
+        end
+
+        if key == "v" then
+            RequestClipboardText(function (text)
+                PasteIntoSearch(text or "")
+            end)
+            return
+        end
+
+        if key == "x" then
+            local textValue = previewInventory.SearchQuery or ""
+            local startIndex, endIndex = GetSearchSelectionRange()
+            if startIndex ~= nil and endIndex ~= nil and startIndex ~= endIndex then
+                local selection = textValue:sub(startIndex + 1, endIndex)
+                if selection ~= "" then
+                    CopySearchText(selection)
+                end
+                local before = textValue:sub(1, startIndex)
+                local after = textValue:sub(endIndex + 1)
+                local merged = before .. after
+                if previewInventory.ApplySearchText then
+                    previewInventory.ApplySearchText(merged, false, false, startIndex)
+                end
+            end
+            return
+        end
+    end, {StringID = "ForgingUI_SearchShortcuts"})
 end
 
 local function GetPreviewScrollBar()
@@ -875,6 +1103,11 @@ function Widgets.ClearPreviewSearch()
     if previewInventory.SearchHint and previewInventory.SearchHint.SetVisible then
         previewInventory.SearchHint:SetVisible(true)
     end
+    previewInventory.SearchFocused = false
+    previewInventory.SearchCtrlHeld = false
+    previewInventory.SearchHistory = {""}
+    previewInventory.SearchHistoryIndex = 1
+    previewInventory.SearchClipboard = ""
     ApplyPreviewSortMode(ResolveDefaultSortMode())
 end
 
@@ -951,6 +1184,13 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
     previewInventory.SearchText = nil
     previewInventory.SearchHint = nil
     previewInventory.SearchQuery = previewInventory.SearchQuery or ""
+    previewInventory.SearchFocused = false
+    previewInventory.SearchHistory = nil
+    previewInventory.SearchHistoryIndex = 0
+    previewInventory.SearchHistoryIgnore = false
+    previewInventory.SearchCtrlHeld = false
+    previewInventory.SearchClipboard = ""
+    previewInventory.ApplySearchText = nil
     previewInventory.Grid = nil
     previewInventory.ScrollList = nil
     previewInventory.AutoSortButton = nil
@@ -1058,7 +1298,7 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         maxSearchWidth = 0
     end
     local minSearchWidth = Clamp(ScaleX(90), 70, 120)
-    local desiredSearchWidth = Clamp(ScaleX(160), minSearchWidth, 240)
+    local desiredSearchWidth = Clamp(ScaleX(210), minSearchWidth, 320)
     local searchWidth = desiredSearchWidth
     if maxSearchWidth <= 0 then
         searchWidth = 0
@@ -1099,27 +1339,10 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         ApplySize(searchRoot, searchWidth, searchHeight)
         NormalizeScale(searchRoot)
 
-        local searchTexture = nil
-        if ctx and ctx.Client and ctx.Client.Textures and ctx.Client.Textures.GenericUI then
-            local textures = ctx.Client.Textures.GenericUI.TEXTURES
-            if textures and textures.FRAMES and textures.FRAMES.ENTRIES then
-                searchTexture = textures.FRAMES.ENTRIES.GRAY
-            end
-        end
-
-        local searchFrame = searchRoot:AddChild("PreviewInventory_Search_Frame", "GenericUI_Element_Texture")
-        if searchTexture then
-            searchFrame:SetTexture(searchTexture, V(searchWidth, searchHeight))
-        end
-        searchFrame:SetPosition(0, 0)
-        searchFrame:SetSize(searchWidth, searchHeight)
-        NormalizeScale(searchFrame)
+        local searchFrame = nil
 
         local textPadding = Clamp(ScaleX(6), 4, 10)
-        local iconPadding = Clamp(ScaleX(6), 4, 10)
-        local iconSize = Clamp(math.floor(searchHeight * 0.6), 10, 16)
-        local iconBlockWidth = iconSize + iconPadding
-        local textWidth = math.max(0, searchWidth - textPadding * 2 - iconBlockWidth)
+        local textWidth = math.max(0, searchWidth - textPadding * 2)
         local inputTextSize = Clamp(math.floor(searchHeight * 0.6), 11, 14)
         local hintTextSize = Clamp(inputTextSize + 2, 12, 15)
         local inputTextLiftY = Clamp(ScaleY(7), 6, 8)
@@ -1127,29 +1350,6 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         local inputTextOffsetY = math.floor((searchHeight - inputTextSize) / 2) - inputTextLiftY
         local hintTextOffsetY = math.floor((searchHeight - hintTextSize) / 2) - hintTextLiftY
         local textHeight = searchHeight
-
-        local inputBGPadX = Clamp(ScaleX(1), 1, 3)
-        local inputBGPadY = Clamp(ScaleY(2), 1, 4)
-        local inputBGX = textPadding - inputBGPadX
-        local inputBGY = inputBGPadY
-        local inputBGWidth = math.max(0, textWidth + inputBGPadX * 2)
-        local inputBGHeight = math.max(0, searchHeight - inputBGPadY * 2)
-        local searchInputBG = searchRoot:AddChild("PreviewInventory_Search_InputBG", "GenericUI_Element_Color")
-        searchInputBG:SetPosition(inputBGX, inputBGY)
-        searchInputBG:SetSize(inputBGWidth, inputBGHeight)
-        local inputBGColor = (ctx and ctx.PREVIEW_FILL_COLOR) or (Color and Color.CreateFromHex and Color.CreateFromHex("000000")) or (ctx and ctx.FILL_COLOR)
-        if inputBGColor and searchInputBG.SetColor then
-            searchInputBG:SetColor(inputBGColor)
-        end
-        if searchInputBG.SetAlpha then
-            searchInputBG:SetAlpha(0.85)
-        end
-        if searchInputBG.SetMouseEnabled then
-            searchInputBG:SetMouseEnabled(false)
-        end
-        if searchInputBG.SetMouseChildren then
-            searchInputBG:SetMouseChildren(false)
-        end
 
         local searchInput = searchRoot:AddChild("PreviewInventory_Search_Input", "GenericUI_Element_Text")
         searchInput:SetPosition(textPadding, 0)
@@ -1169,12 +1369,20 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         if searchInput.SetTextFormat then
             searchInput:SetTextFormat({color = 0xFFFFFF, size = inputTextSize})
         end
+        local inputMC = searchInput.GetMovieClip and searchInput:GetMovieClip() or nil
+        if inputMC and inputMC.text_txt then
+            inputMC.text_txt.type = "input"
+            inputMC.text_txt.selectable = true
+            inputMC.text_txt.alwaysShowSelection = true
+            inputMC.text_txt.multiline = false
+            inputMC.text_txt.wordWrap = false
+        end
 
         local searchHint = searchRoot:AddChild("PreviewInventory_Search_Hint", "GenericUI_Element_Text")
         searchHint:SetPosition(textPadding, 0)
         searchHint:SetSize(textWidth, textHeight)
         searchHint:SetType("Left")
-        searchHint:SetText("Search...")
+        searchHint:SetText("Type to search...")
         if searchHint.SetTextFormat then
             searchHint:SetTextFormat({color = 0xB0B0B0, size = hintTextSize})
         end
@@ -1192,21 +1400,6 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         CenterSearchText(searchInput, inputTextOffsetY)
         CenterSearchText(searchHint, hintTextOffsetY)
 
-        local iconId = "magnifier-searchbar-2"
-        local iconOffsetX = searchWidth - iconBlockWidth + math.floor((iconBlockWidth - iconSize) / 2)
-        local iconOffsetY = math.floor((searchHeight - iconSize) / 2)
-        if iconId then
-            local searchIcon = searchRoot:AddChild("PreviewInventory_Search_Icon", "GenericUI_Element_IggyIcon")
-            searchIcon:SetPosition(iconOffsetX, iconOffsetY)
-            searchIcon:SetIcon(iconId, iconSize, iconSize)
-            if searchIcon.SetAlpha then
-                searchIcon:SetAlpha(0.9)
-            end
-            if searchIcon.SetMouseEnabled then
-                searchIcon:SetMouseEnabled(false)
-            end
-        end
-
         local function UpdateSearchHint(rawText)
             local hasText = NormalizeSearchQuery(rawText) ~= nil
             local isFocused = searchInput.IsFocused and searchInput:IsFocused()
@@ -1215,12 +1408,89 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
             end
         end
 
+        local function QueueSearchCaret(targetIndex)
+            local function ApplyCaret()
+                local mc = searchInput and searchInput.GetMovieClip and searchInput:GetMovieClip() or nil
+                if mc and mc.text_txt and mc.text_txt.setSelection then
+                    local textValue = previewInventory.SearchQuery or ""
+                    local index = targetIndex
+                    if index == nil or index > #textValue then
+                        index = #textValue
+                    end
+                    if index < 0 then
+                        index = 0
+                    end
+                    mc.text_txt.setSelection(index, index)
+                end
+            end
+
+            ApplyCaret()
+            if Timer and Timer.Start then
+                Timer.Start("ForgingUI_SearchCaret", 0.01, ApplyCaret)
+            end
+        end
+
+        local function RecordSearchHistory(nextText)
+            if previewInventory.SearchHistoryIgnore then
+                return
+            end
+            local history = previewInventory.SearchHistory or {}
+            local index = previewInventory.SearchHistoryIndex or #history
+            if index <= 0 then
+                index = #history
+            end
+            local current = history[index] or ""
+            if nextText == current then
+                return
+            end
+            for i = #history, index + 1, -1 do
+                history[i] = nil
+            end
+            history[#history + 1] = nextText
+            previewInventory.SearchHistory = history
+            previewInventory.SearchHistoryIndex = #history
+            local maxHistory = 50
+            if #history > maxHistory then
+                local overflow = #history - maxHistory
+                for _ = 1, overflow do
+                    table.remove(history, 1)
+                end
+                previewInventory.SearchHistoryIndex = math.max(1, previewInventory.SearchHistoryIndex - overflow)
+            end
+        end
+
+        local function ApplySearchText(nextText, ignoreHistory, keepCaretEnd, caretIndex)
+            local nextValue = nextText or ""
+            if not ignoreHistory then
+                RecordSearchHistory(nextValue)
+            end
+            previewInventory.SearchHistoryIgnore = true
+            previewInventory.SearchQuery = nextValue
+            if searchInput.SetText then
+                searchInput:SetText(previewInventory.SearchQuery)
+            end
+            previewInventory.SearchHistoryIgnore = false
+            UpdateSearchHint(previewInventory.SearchQuery)
+            RenderPreviewInventory()
+            if keepCaretEnd then
+                QueueSearchCaret(#previewInventory.SearchQuery)
+            elseif caretIndex ~= nil then
+                QueueSearchCaret(caretIndex)
+            end
+        end
+
+        previewInventory.ApplySearchText = ApplySearchText
+        previewInventory.SearchHistory = {previewInventory.SearchQuery or ""}
+        previewInventory.SearchHistoryIndex = #previewInventory.SearchHistory
+
         UpdateSearchHint(previewInventory.SearchQuery or "")
 
         if searchInput.Events and searchInput.Events.Changed then
             searchInput.Events.Changed:Subscribe(function (ev)
+                local nextText = ev and ev.Text or ""
+                RecordSearchHistory(nextText)
                 local previousActive = NormalizeSearchQuery(previewInventory.SearchQuery) ~= nil
-                previewInventory.SearchQuery = ev and ev.Text or ""
+                previewInventory.SearchQuery = nextText
                 local nextActive = NormalizeSearchQuery(previewInventory.SearchQuery) ~= nil
                 UpdateSearchHint(previewInventory.SearchQuery)
                 if previousActive and not nextActive then
@@ -1232,6 +1502,8 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         end
         if searchInput.Events and searchInput.Events.Focused then
             searchInput.Events.Focused:Subscribe(function ()
+                previewInventory.SearchFocused = true
+                RegisterPreviewSearchShortcuts()
                 if searchHint.SetVisible then
                     searchHint:SetVisible(false)
                 end
@@ -1239,6 +1511,8 @@ function Widgets.CreatePreviewInventoryPanel(parent, width, height, offsetX, off
         end
         if searchInput.Events and searchInput.Events.Unfocused then
             searchInput.Events.Unfocused:Subscribe(function ()
+                previewInventory.SearchFocused = false
+                previewInventory.SearchCtrlHeld = false
                 UpdateSearchHint(previewInventory.SearchQuery)
             end)
         end
