@@ -468,21 +468,8 @@ function Layout.BuildUI()
 
     local layout = GetLayoutState()
     local borderSize = ctx.BORDER_SIZE or 0
-    local base = Base.Build({
-        ctx = ctx,
-        layout = layout,
-        borderSize = borderSize,
-        createFrame = CreateFrame,
-        scale = Layout.Scale,
-        vector = V,
-    })
-    if not base then
-        return false
-    end
-    local root = base.Root
-    local canvas = base.Canvas
-    local canvasWidth = base.CanvasWidth
-    local canvasHeight = base.CanvasHeight
+    local canvasWidth = layout.Width - borderSize * 2
+    local canvasHeight = layout.Height - borderSize * 2
 
     local geometry = Geometry.Compute({
         ctx = ctx,
@@ -496,6 +483,120 @@ function Layout.BuildUI()
     if not geometry then
         return false
     end
+
+    local layoutTuning = geometry.layoutTuning
+
+    -- Trim the base frame to the lowest child panel edge.
+    local baseFrameHeight = nil
+    local baseFramePadding = 0
+    local slotPanelExtraBottom = 0
+    if layoutTuning and layoutTuning.BaseFrameBottomPaddingY then
+        baseFramePadding = Layout.ScaleY(layoutTuning.BaseFrameBottomPaddingY)
+    end
+    if layoutTuning and layoutTuning.SlotPanelExtraBottomY then
+        slotPanelExtraBottom = Layout.ScaleY(layoutTuning.SlotPanelExtraBottomY)
+    end
+    local infoBottom = geometry.contentTop + geometry.midTopHeight
+    local slotBottom = geometry.contentTop + Layout.ScaleY(geometry.slotPanelOffsetY) + geometry.slotPanelHeight
+    local panelBottom = math.max(infoBottom, slotBottom)
+    local infoExtraBottom = baseFramePadding + (panelBottom - infoBottom)
+    local slotExtraBottom = baseFramePadding + (panelBottom - slotBottom) + slotPanelExtraBottom
+    if infoExtraBottom < 0 then
+        infoExtraBottom = 0
+    end
+    if slotExtraBottom < 0 then
+        slotExtraBottom = 0
+    end
+    baseFrameHeight = math.min(layout.Height, math.max(0, borderSize + panelBottom + baseFramePadding))
+    local baseFrameX = 0
+    local baseFrameY = 0
+    local baseFrameWidth = math.min(layout.Width, math.max(0, (geometry.canvasWidth or canvasWidth) + borderSize * 2))
+    do
+        local minX = nil
+        local maxX = nil
+        local function consider(x, width)
+            if not width or width <= 0 then
+                return
+            end
+            if minX == nil or x < minX then
+                minX = x
+            end
+            local right = x + width
+            if maxX == nil or right > maxX then
+                maxX = right
+            end
+        end
+        consider(geometry.margin, geometry.topBarWidth)
+        consider(geometry.leftX, geometry.leftWidth)
+        for _, cfg in ipairs(geometry.columnConfigs or {}) do
+            consider(cfg.X, cfg.Width)
+        end
+        if ctx.USE_SIDE_INVENTORY_PANEL then
+            consider(geometry.rightXPos, geometry.rightWidth)
+        end
+        if minX ~= nil and maxX ~= nil then
+            baseFrameX = borderSize + minX
+            baseFrameWidth = math.max(0, maxX - minX)
+            if baseFrameX < 0 then
+                baseFrameWidth = math.max(0, baseFrameWidth + baseFrameX)
+                baseFrameX = 0
+            end
+            if baseFrameX + baseFrameWidth > layout.Width then
+                baseFrameWidth = math.max(0, layout.Width - baseFrameX)
+            end
+        end
+    end
+    if layoutTuning and layoutTuning.BaseFrameTrimX then
+        local trimX = Layout.ScaleX(layoutTuning.BaseFrameTrimX)
+        if trimX ~= 0 then
+            baseFrameX = baseFrameX + trimX
+            baseFrameWidth = math.max(0, baseFrameWidth - trimX * 2)
+        end
+    end
+    if layoutTuning and layoutTuning.BaseFrameScale and layoutTuning.BaseFrameScale ~= 1 then
+        local baseScale = layoutTuning.BaseFrameScale
+        local newWidth = math.floor(baseFrameWidth * baseScale + 0.5)
+        local newHeight = math.floor(baseFrameHeight * baseScale + 0.5)
+        local dx = math.floor((newWidth - baseFrameWidth) / 2 + 0.5)
+        local dy = math.floor((newHeight - baseFrameHeight) / 2 + 0.5)
+        baseFrameX = baseFrameX - dx
+        baseFrameY = baseFrameY - dy
+        baseFrameWidth = newWidth
+        baseFrameHeight = newHeight
+        if baseFrameX < 0 then
+            baseFrameWidth = math.max(0, baseFrameWidth + baseFrameX)
+            baseFrameX = 0
+        end
+        if baseFrameY < 0 then
+            baseFrameHeight = math.max(0, baseFrameHeight + baseFrameY)
+            baseFrameY = 0
+        end
+        if baseFrameX + baseFrameWidth > layout.Width then
+            baseFrameWidth = math.max(0, layout.Width - baseFrameX)
+        end
+        if baseFrameY + baseFrameHeight > layout.Height then
+            baseFrameHeight = math.max(0, layout.Height - baseFrameY)
+        end
+    end
+
+    local base = Base.Build({
+        ctx = ctx,
+        layout = layout,
+        borderSize = borderSize,
+        createFrame = CreateFrame,
+        scale = Layout.Scale,
+        vector = V,
+        baseFrameHeight = baseFrameHeight,
+        baseFrameWidth = baseFrameWidth,
+        baseFrameX = baseFrameX,
+        baseFrameY = baseFrameY,
+        basePanelTexture = ctx.basePanelTexture,
+    })
+    if not base then
+        return false
+    end
+    local root = base.Root
+    local canvas = base.Canvas
     local margin = geometry.margin
     local gap = geometry.gap
     local topBarHeight = geometry.topBarHeight
@@ -548,7 +649,6 @@ function Layout.BuildUI()
     local midX = geometry.midX
     local midWidth = geometry.midWidth
     local midTopHeight = geometry.midTopHeight
-    local layoutTuning = geometry.layoutTuning
     local slotPanelHeight = geometry.slotPanelHeight
     local slotPanelOffsetY = geometry.slotPanelOffsetY
     local infoPanelOffsetY = geometry.infoPanelOffsetY
@@ -561,35 +661,40 @@ function Layout.BuildUI()
         craftState.PreviewArea = nil
     end
 
-    local infoHeight = contentHeight - Layout.ScaleY(infoPanelOffsetY)
-    local infoPanelY = contentTop + Layout.ScaleY(infoPanelOffsetY)
-    LeftInfo.Create({
-        canvas = canvas,
-        x = leftX,
-        y = infoPanelY,
-        width = leftWidth,
-        height = infoHeight,
-        texture = ctx.introPanelTexture,
-        padding = Layout.Scale(10),
-        headerText = "Forge / Unique Forge",
-        headerStyle = {size = ctx.HEADER_TEXT_SIZE},
-        bodyText = table.concat({
-            "Only the items that are at or greater than",
-            "the player's level can be used for forge.",
-            "",
-            "Higher quality materials yield better",
-            "results.",
-            "",
-            "Combine different materials to create",
-            "unique properties and enchantments.",
-            "",
-            "Use materials and items to craft powerful",
-            "equipment.",
-        }, "\n"),
-        createSkinnedPanel = CreateSkinnedPanel,
-        createTextElement = CreateTextElement,
-        registerSearchBlur = RegisterSearchBlur,
-    })
+    if not (layoutTuning and layoutTuning.HideInfoPanel) then
+        local infoHeight = midTopHeight - Layout.ScaleY(infoPanelOffsetY) + infoExtraBottom
+        if infoHeight < 0 then
+            infoHeight = 0
+        end
+        local infoPanelY = contentTop + Layout.ScaleY(infoPanelOffsetY)
+        LeftInfo.Create({
+            canvas = canvas,
+            x = leftX,
+            y = infoPanelY,
+            width = leftWidth,
+            height = infoHeight,
+            texture = ctx.introPanelTexture,
+            padding = Layout.Scale(10),
+            headerText = "Forge / Unique Forge",
+            headerStyle = {size = ctx.HEADER_TEXT_SIZE},
+            bodyText = table.concat({
+                "Only the items that are at or greater than",
+                "the player's level can be used for forge.",
+                "",
+                "Higher quality materials yield better",
+                "results.",
+                "",
+                "Combine different materials to create",
+                "unique properties and enchantments.",
+                "",
+                "Use materials and items to craft powerful",
+                "equipment.",
+            }, "\n"),
+            createSkinnedPanel = CreateSkinnedPanel,
+            createTextElement = CreateTextElement,
+            registerSearchBlur = RegisterSearchBlur,
+        })
+    end
 
     local columnConfigs = geometry.columnConfigs
 
@@ -602,6 +707,8 @@ function Layout.BuildUI()
         infoPanelOffsetY = infoPanelOffsetY,
         slotPanelHeight = slotPanelHeight,
         slotPanelOffsetY = slotPanelOffsetY,
+        extraInfoBottomHeight = infoExtraBottom,
+        extraSlotBottomHeight = slotExtraBottom,
         craftState = craftState,
         createSkinnedPanel = CreateSkinnedPanel,
         createTextElement = CreateTextElement,
@@ -618,13 +725,20 @@ function Layout.BuildUI()
     })
 
     if ctx.USE_SIDE_INVENTORY_PANEL then
+        local sideInventoryHeight = contentHeight
+        if panelBottom then
+            sideInventoryHeight = panelBottom - contentTop + baseFramePadding
+        end
+        if sideInventoryHeight < 0 then
+            sideInventoryHeight = 0
+        end
         SideInventory.Create({
             ctx = ctx,
             canvas = canvas,
             x = rightXPos,
             y = contentTop,
             width = rightWidth,
-            height = contentHeight,
+            height = sideInventoryHeight,
             createFrame = CreateFrame,
             createTextElement = CreateTextElement,
             createButtonBox = CreateButtonBox,

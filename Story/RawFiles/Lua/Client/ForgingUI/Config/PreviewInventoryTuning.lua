@@ -8,7 +8,7 @@
 local PreviewInventoryTuning = {
     -- Grid layout
     -- Increase this to 10 if you want 10 slots per row.
-    GridColumns = 9,
+    GridColumns = 10,
 
     -- Search bar
     SearchPlaceholderText = "Type to search...",

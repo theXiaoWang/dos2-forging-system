@@ -20,6 +20,9 @@ function TopBar.Create(options)
     local wireButton = opts.wireButton
     local scaleX = opts.scaleX or function(value) return value end
     local scaleY = opts.scaleY or function(value) return value end
+    local layoutTuning = ctx.LayoutTuning or nil
+    local useTransparentButtons = layoutTuning and layoutTuning.TopBarTransparentButtons
+    local transparentStyle = useTransparentButtons and ctx.styleTransparentLong or nil
     local clamp = opts.clamp or function(value, minValue, maxValue)
         if value < minValue then
             return minValue
@@ -38,8 +41,12 @@ function TopBar.Create(options)
 
     local dragArea = topBar:AddChild("ForgeUIDragArea", "GenericUI_Element_Color")
     dragArea:SetSize(topBarWidth, topBarHeight)
-    dragArea:SetColor(ctx.HEADER_FILL_COLOR)
-    dragArea:SetAlpha(0)
+    dragArea:SetColor(ctx.topBarBackgroundColor or ctx.HEADER_FILL_COLOR)
+    local topBarAlpha = 0
+    if layoutTuning and layoutTuning.TopBarBackgroundAlpha ~= nil then
+        topBarAlpha = clamp(layoutTuning.TopBarBackgroundAlpha, 0, 1)
+    end
+    dragArea:SetAlpha(topBarAlpha)
     dragArea:SetAsDraggableArea()
     if registerSearchBlur then
         registerSearchBlur(dragArea)
@@ -48,11 +55,12 @@ function TopBar.Create(options)
     local topButtonHeight = clamp(scaleY(32), 40, 50)
     local topButtonY = math.floor((topBarHeight - topButtonHeight) / 2)
     local topBarPaddingX = scaleX(8)
-    local forgeTabBtn = createButtonBox(topBar, "Btn_ForgeTab", "Forge", topBarPaddingX, topButtonY, 100, topButtonHeight, false, ctx.styleDOS1Blue or ctx.styleLargeRed)
+    local leftButtonStyle = transparentStyle or ctx.styleDOS1Blue or ctx.styleLargeRed
+    local forgeTabBtn = createButtonBox(topBar, "Btn_ForgeTab", "Forge", topBarPaddingX, topButtonY, 100, topButtonHeight, false, leftButtonStyle)
     if wireButton then
         wireButton(forgeTabBtn, "ForgeTab")
     end
-    local uniqueTabBtn = createButtonBox(topBar, "Btn_UniqueTab", "Unique Forge", topBarPaddingX + 100, topButtonY, 175, topButtonHeight, false, ctx.styleDOS1Blue or ctx.styleLargeRed)
+    local uniqueTabBtn = createButtonBox(topBar, "Btn_UniqueTab", "Unique Forge", topBarPaddingX + 100, topButtonY, 175, topButtonHeight, false, leftButtonStyle)
     if wireButton then
         wireButton(uniqueTabBtn, "UniqueForgeTab")
     end
@@ -77,7 +85,8 @@ function TopBar.Create(options)
     for i = #rightButtons, 1, -1 do
         local button = rightButtons[i]
         rightX = rightX - button.Width
-        local topBtn = createButtonBox(topBar, "Btn_TopRight_" .. i, button.Label, rightX, topButtonY, button.Width, topButtonHeight, button.Wrap, ctx.styleTabCharacterSheetWide)
+        local rightButtonStyle = transparentStyle or ctx.styleTabCharacterSheetWide
+        local topBtn = createButtonBox(topBar, "Btn_TopRight_" .. i, button.Label, rightX, topButtonY, button.Width, topButtonHeight, button.Wrap, rightButtonStyle)
         if wireButton then
             wireButton(topBtn, button.Label)
         end

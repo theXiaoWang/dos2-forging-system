@@ -140,6 +140,10 @@ Button.STYLES = {
         HighlightedTexture = ButtonTextures.ARROWS.DOWN_BROWN_SMALL.HIGHLIGHTED,
         PressedTexture = ButtonTextures.ARROWS.DOWN_BROWN_SMALL.PRESSED,
     },
+    Transparent = CreateStyle(ButtonTextures.TRANSPARENT),
+    TransparentMedium = CreateStyle(ButtonTextures.TRANSPARENT_MEDIUM),
+    TransparentLong = CreateStyle(ButtonTextures.TRANSPARENT_LONG),
+    TransparentLargeDark = CreateStyle(ButtonTextures.TRANSPARENT_LARGE_DARK),
     SettingsRed = {
         IdleTexture = ButtonTextures.SETTINGS.RED.IDLE,
         HighlightedTexture = ButtonTextures.SETTINGS.RED.HIGHLIGHTED,

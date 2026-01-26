@@ -37,12 +37,15 @@ local styleGreenMediumTextured = nil
 local styleSquareStone = nil
 local styleComboBox = nil
 local styleDOS1Blue = nil
+local styleTransparentLong = nil
 local styleClose = nil
 local styleCloseDOS1Square = nil
+local topBarBackgroundColor = nil
 local panelFrameStyle = nil
 local sectionFrameStyle = nil
 local backgroundTexture = nil
 local backgroundTextureName = nil
+local basePanelTexture = nil
 local introPanelTexture = nil
 local wikiPanelTexture = nil
 local slotPanelTexture = nil
@@ -163,12 +166,14 @@ local function RefreshContext()
     Context.styleSquareStone = styleSquareStone
     Context.styleComboBox = styleComboBox
     Context.styleDOS1Blue = styleDOS1Blue
+    Context.styleTransparentLong = styleTransparentLong
     Context.styleClose = styleClose
     Context.styleCloseDOS1Square = styleCloseDOS1Square
     Context.panelFrameStyle = panelFrameStyle
     Context.sectionFrameStyle = sectionFrameStyle
     Context.backgroundTexture = backgroundTexture
     Context.backgroundTextureName = backgroundTextureName
+    Context.basePanelTexture = basePanelTexture
     Context.introPanelTexture = introPanelTexture
     Context.wikiPanelTexture = wikiPanelTexture
     Context.slotPanelTexture = slotPanelTexture
@@ -208,6 +213,12 @@ local function RefreshContext()
     Context.HEADER_FILL_COLOR = HEADER_FILL_COLOR
     Context.GRID_COLOR = GRID_COLOR
     Context.PREVIEW_FILL_COLOR = PREVIEW_FILL_COLOR
+    if LayoutTuning and LayoutTuning.TopBarBackgroundColorHex then
+        topBarBackgroundColor = Color.CreateFromHex(LayoutTuning.TopBarBackgroundColorHex)
+    else
+        topBarBackgroundColor = nil
+    end
+    Context.topBarBackgroundColor = topBarBackgroundColor
     Context.USE_TEXTURE_BACKGROUND = USE_TEXTURE_BACKGROUND
     Context.USE_BASE_BACKGROUND = USE_BASE_BACKGROUND
     Context.USE_SLICED_BASE = USE_SLICED_BASE
@@ -338,6 +349,9 @@ local function InitTextureStyles()
         previewPanelTexture = nil
         resultPanelTexture = nil
         dropdownPanelTexture = nil
+    end
+    if textures.PANELS and LayoutTuning and LayoutTuning.BasePanelTexture then
+        basePanelTexture = textures.PANELS[LayoutTuning.BasePanelTexture]
     end
     if textures.PANELS and (textures.PANELS.CLIPBOARD_THIN or textures.PANELS.TALL_PAGE) then
         -- Use the clipboard thin panel for main/donor slot columns (stretched to fit).
@@ -545,6 +559,7 @@ function ForgingUI.InitializeWithGenericUI(generic)
     styleSquareStone = buttonPrefab and buttonPrefab.STYLES and (buttonPrefab.STYLES.SquareStone or buttonStyle) or buttonStyle
     styleComboBox = buttonPrefab and buttonPrefab.STYLES and (buttonPrefab.STYLES.ComboBox or buttonStyle) or buttonStyle
     styleDOS1Blue = buttonPrefab and buttonPrefab.STYLES and (buttonPrefab.STYLES.DOS1Blue or buttonStyle) or buttonStyle
+    styleTransparentLong = buttonPrefab and buttonPrefab.STYLES and buttonPrefab.STYLES.TransparentLong or nil
     primaryButtonStyle = styleLargeRed
     closeButtonPrefab = genericUI.GetPrefab and genericUI.GetPrefab("GenericUI_Prefab_CloseButton") or nil
     styleClose = buttonPrefab and buttonPrefab.STYLES and (buttonPrefab.STYLES.Close or buttonPrefab.STYLES.CloseStone or buttonPrefab.STYLES.CloseSlate) or nil

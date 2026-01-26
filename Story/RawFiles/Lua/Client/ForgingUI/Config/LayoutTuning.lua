@@ -26,16 +26,58 @@ local LayoutTuning = {
     -- Negative values move panels upward.
     SlotPanelOffsetYBase = -11,
 
+    -- Hide the left info panel and collapse its space.
+    HideInfoPanel = true,
+
+    -- Adjust the left info panel width to free space for Main/Donor panels (scaled by ScaleX).
+    -- Negative values make the info panel narrower.
+    InfoPanelWidthAdjustX = -120,
+
+    -- Width ratio for Main/Donor slot panels within the mid column (unitless).
+    SlotPanelWidthRatio = 0.28,
+
+    -- Horizontal gap between Main/Preview/Donor panels (scaled by ScaleX).
+    -- Negative values overlap panels to remove seams.
+    ColumnGapX = -20,
+
     -- Main/Donor panel width expansion (scaled by ScaleX).
     -- This expands both sides by default to close the gaps between panels.
-    SlotPanelWidthBoostX = 16,
+    SlotPanelWidthBoostX = 8,
 
     -- Extra width applied to the Donor panel only, on its outer (right) edge (scaled by ScaleX).
     -- Use this to close any remaining gap against the right-side container border.
-    DonorRightEdgeBoostX = 9,
+    DonorRightEdgeBoostX = 4,
 
     -- Keep TopBar above other panels so buttons always receive input.
     RaiseTopBarToFront = true,
+
+    -- Extra padding added below the lowest child panel when sizing the base frame (scaled by ScaleY).
+    BaseFrameBottomPaddingY = 100,
+
+    -- Extra height added to Main/Donor panels only (scaled by ScaleY).
+    SlotPanelExtraBottomY = 20,
+
+    -- Shrink (positive) or expand (negative) the base frame horizontally (scaled by ScaleX).
+    BaseFrameTrimX = 0,
+
+    -- Base panel texture key from Client.Textures.GenericUI.TEXTURES.PANELS.
+    BasePanelTexture = "SETTINGS_RIGHT",
+
+    -- Original SETTINGS_RIGHT texture aspect ratio (width / height).
+    BasePanelAspectRatio = 988 / 1008,
+
+    -- Hide the base panel/background entirely without changing child layout.
+    HideBasePanel = true,
+
+    -- Uniform scale applied to the base frame size (unitless).
+    BaseFrameScale = 1.03,
+
+    -- Use transparent button textures for the top bar (navbar).
+    TopBarTransparentButtons = false,
+
+    -- Top bar background fill (navbar). Set alpha to 0 to disable.
+    TopBarBackgroundColorHex = "000000",
+    TopBarBackgroundAlpha = 0.6,
 }
 
 return LayoutTuning

@@ -18,6 +18,8 @@ function Columns.Build(options)
     local infoPanelOffsetY = opts.infoPanelOffsetY or 0
     local slotPanelHeight = opts.slotPanelHeight or 0
     local slotPanelOffsetY = opts.slotPanelOffsetY or 0
+    local extraInfoBottomHeight = opts.extraInfoBottomHeight or 0
+    local extraSlotBottomHeight = opts.extraSlotBottomHeight or 0
     local craftState = opts.craftState
 
     local createSkinnedPanel = opts.createSkinnedPanel
@@ -35,7 +37,15 @@ function Columns.Build(options)
 
     for _, cfg in ipairs(columnConfigs) do
         -- Use separate height for Main/Donor panels, standard height for Preview
-        local panelHeight = (cfg.Mode == "Main" or cfg.Mode == "Donor") and slotPanelHeight or (midTopHeight - scaleY(infoPanelOffsetY))
+        local panelHeight = 0
+        if cfg.Mode == "Main" or cfg.Mode == "Donor" then
+            panelHeight = slotPanelHeight + extraSlotBottomHeight
+        else
+            panelHeight = (midTopHeight - scaleY(infoPanelOffsetY)) + extraInfoBottomHeight
+        end
+        if panelHeight < 0 then
+            panelHeight = 0
+        end
         -- Apply vertical offset: Main/Donor move up, Preview moves down
         local panelY = contentTop
         if cfg.Mode == "Main" or cfg.Mode == "Donor" then

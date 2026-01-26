@@ -31,13 +31,28 @@ function Geometry.Compute(options)
     -- Allow negative gap to close gaps between panels.
     local gapX = gap
     local topBarHeight = scaleY(40)
-    local leftWidth = scaleX(400)
+    local layoutTuning = ctx and ctx.LayoutTuning or nil
+    local hideInfoPanel = layoutTuning and layoutTuning.HideInfoPanel
+    local leftWidthBase = 400 + ((layoutTuning and layoutTuning.InfoPanelWidthAdjustX) or 0)
+    if leftWidthBase < 0 then
+        leftWidthBase = 0
+    end
+    local leftWidth = scaleX(leftWidthBase)
+    local effectiveCanvasWidth = canvasWidth
+    if hideInfoPanel then
+        effectiveCanvasWidth = canvasWidth - leftWidth - gapX
+        if effectiveCanvasWidth < 0 then
+            effectiveCanvasWidth = 0
+        end
+        leftWidth = 0
+        gapX = 0
+    end
     local rightWidth = ctx.USE_SIDE_INVENTORY_PANEL and scaleX(480) or 0
     -- Height for Wiki + Result panels (positive increases height).
     local wikiResultHeightOffset = -30
     local bottomHeight = scaleY(260 + wikiResultHeightOffset)
 
-    local topBarWidth = canvasWidth - margin * 2
+    local topBarWidth = effectiveCanvasWidth - margin * 2
     local contentTop = margin + topBarHeight + gap
     local contentHeight = canvasHeight - margin - contentTop
     local warningHeight = clamp(scaleY(24), 20, 28)
@@ -46,16 +61,15 @@ function Geometry.Compute(options)
         warningY = margin + topBarHeight + scaleY(2)
     end
     local warningX = margin
-    local warningWidth = canvasWidth - margin * 2
+    local warningWidth = effectiveCanvasWidth - margin * 2
 
     local contentInsetX = scale(ctx.UI_CONTENT_INSET_X or 0)
-    local rightXPos = canvasWidth - margin - rightWidth - contentInsetX
+    local rightXPos = effectiveCanvasWidth - margin - rightWidth - contentInsetX
     local leftX = margin
     local midX = leftX + leftWidth + gapX + contentInsetX
     -- Don't subtract gapX from midWidth - already accounted for in midX.
     local midWidth = rightXPos - midX
     local midTopHeight = contentHeight - bottomHeight - gap
-    local layoutTuning = ctx and ctx.LayoutTuning or nil
     -- Height multiplier for Main/Donor slot panels (1.0 = same as Preview, >1.0 = taller, <1.0 = shorter).
     local slotPanelHeightMultiplier = (layoutTuning and layoutTuning.SlotPanelHeightMultiplier) or 1.05
     local slotPanelHeightBoost = scaleY((layoutTuning and layoutTuning.SlotPanelHeightBoostY) or 20)
@@ -67,9 +81,12 @@ function Geometry.Compute(options)
     local infoPanelOffsetY = 4
     local midBottomY = contentTop + midTopHeight + gap
     local columnGap = scale(ctx.UI_COLUMN_GAP or 0)
+    if layoutTuning and layoutTuning.ColumnGapX ~= nil then
+        columnGap = scaleX(layoutTuning.ColumnGapX)
+    end
     local columnTotal = midWidth - columnGap * 2
     -- Main and Donor slots share the same width ratio (they use the same template).
-    local slotPanelWidthRatio = 0.30
+    local slotPanelWidthRatio = (layoutTuning and layoutTuning.SlotPanelWidthRatio) or 0.30
     local slotPanelWidth = math.floor(columnTotal * slotPanelWidthRatio)
     local previewWidth = columnTotal - slotPanelWidth * 2
     local baseMainX = midX
@@ -91,6 +108,7 @@ function Geometry.Compute(options)
     }
 
     return {
+        canvasWidth = effectiveCanvasWidth,
         margin = margin,
         gap = gap,
         topBarHeight = topBarHeight,
