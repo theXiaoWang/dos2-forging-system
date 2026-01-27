@@ -17,7 +17,7 @@ local UIConstants = {
     TargetHeightRatio = 0.95,
 
     -- Global spacing.
-    OuterMargin = 8,
+    OuterMargin = 0,
     PanelGap = -10,
     ColumnGap = -10,
     ContentInsetX = 0,
@@ -40,7 +40,7 @@ local UIConstants = {
     PreviewRefreshInterval = 0.5,
 
     -- Visual tuning.
-    BorderSize = 1,
+    BorderSize = 0,
     FrameAlpha = 1,
     FrameTextureAlpha = 1,
     FrameTextureCenterAlpha = 0.85,

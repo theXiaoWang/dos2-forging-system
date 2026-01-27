@@ -17,6 +17,8 @@ function UIState.Create()
         LastGameState = nil,
         WarningLabel = nil,
         WarningBackground = nil,
+        DragBoundsWidth = 0,
+        DragBoundsHeight = 0,
     }
 end
 

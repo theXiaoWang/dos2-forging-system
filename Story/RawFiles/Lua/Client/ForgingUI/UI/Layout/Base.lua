@@ -92,8 +92,16 @@ function Base.Build(options)
     local canvasWidth = layout.Width - borderSize * 2
     local canvasHeight = layout.Height - borderSize * 2
 
+    local canvasOffsetX = 0
+    local canvasOffsetY = 0
+    if layoutTuning and layoutTuning.CanvasOffsetX then
+        canvasOffsetX = scale(layoutTuning.CanvasOffsetX)
+    end
+    if layoutTuning and layoutTuning.CanvasOffsetY then
+        canvasOffsetY = scale(layoutTuning.CanvasOffsetY)
+    end
     local canvas = root:AddChild("ForgingUI_Content", "GenericUI_Element_Empty")
-    canvas:SetPosition(borderSize, borderSize)
+    canvas:SetPosition(borderSize + canvasOffsetX, borderSize + canvasOffsetY)
     -- Only create opaque canvas background if not using sliced base (which has its own transparency)
     if not (ctx.USE_TEXTURE_BACKGROUND and ctx.backgroundTexture)
         and not ctx.USE_SLICED_BASE

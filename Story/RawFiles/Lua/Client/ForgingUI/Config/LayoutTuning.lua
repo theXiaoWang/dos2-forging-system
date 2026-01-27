@@ -24,7 +24,7 @@ local LayoutTuning = {
 
     -- Base vertical offset for Main/Donor panels (scaled by ScaleY).
     -- Negative values move panels upward.
-    SlotPanelOffsetYBase = -11,
+    SlotPanelOffsetYBase = 0,
 
     -- Hide the left info panel and collapse its space.
     HideInfoPanel = true,
@@ -77,7 +77,22 @@ local LayoutTuning = {
 
     -- Top bar background fill (navbar). Set alpha to 0 to disable.
     TopBarBackgroundColorHex = "000000",
-    TopBarBackgroundAlpha = 0.6,
+    TopBarBackgroundAlpha = 0,
+
+    -- Top bar sliced frame alpha (border/corners). Set alpha to 0 to hide the frame.
+    TopBarFrameAlpha = 1,
+
+    -- Top bar sliced frame center alpha. Set to 0 to make the center transparent.
+    TopBarFrameCenterAlpha = 1,
+
+    -- Trim the top bar width on both sides (scaled by ScaleX).
+    TopBarTrimX = 17,
+
+    -- Shrink the draggable bounds horizontally (scaled by ScaleX).
+    DragBoundsTrimX = 10,
+
+    -- Offset the full canvas horizontally (scaled by ScaleX).
+    CanvasOffsetX = -14,
 }
 
 return LayoutTuning

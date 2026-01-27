@@ -91,11 +91,22 @@ function Layout.PositionUI()
     end
 
     local state = GetLayoutState()
+    local uiState = GetUIState()
+    local dragWidth = uiState and uiState.DragBoundsWidth or nil
+    local dragHeight = uiState and uiState.DragBoundsHeight or nil
     if ctx.uiInstance.SetPanelSize and state then
-        ctx.uiInstance:SetPanelSize(V(state.Width, state.Height))
+        local width = state.Width
+        local height = state.Height
+        if dragWidth and dragWidth > 0 then
+            width = dragWidth
+        end
+        if dragHeight and dragHeight > 0 then
+            height = dragHeight
+        end
+        ctx.uiInstance:SetPanelSize(V(width, height))
     end
     if ctx.uiInstance.SetPositionRelativeToViewport then
-        ctx.uiInstance:SetPositionRelativeToViewport("center", "center", "screen", 0.1)
+        ctx.uiInstance:SetPositionRelativeToViewport("center", "center", "screen", 0)
     elseif ctx.uiInstance.ExternalInterfaceCall then
         ctx.uiInstance:ExternalInterfaceCall("setPosition", "center", "screen", "center")
     elseif ctx.uiInstance.SetPosition then
@@ -485,6 +496,42 @@ function Layout.BuildUI()
     end
 
     local layoutTuning = geometry.layoutTuning
+    local topBarX = geometry.margin
+    local topBarWidth = geometry.topBarWidth
+    do
+        local minX = nil
+        local maxX = nil
+        local function consider(x, width)
+            if not width or width <= 0 then
+                return
+            end
+            if minX == nil or x < minX then
+                minX = x
+            end
+            local right = x + width
+            if maxX == nil or right > maxX then
+                maxX = right
+            end
+        end
+        consider(geometry.leftX, geometry.leftWidth)
+        for _, cfg in ipairs(geometry.columnConfigs or {}) do
+            consider(cfg.X, cfg.Width)
+        end
+        if ctx.USE_SIDE_INVENTORY_PANEL then
+            consider(geometry.rightXPos, geometry.rightWidth)
+        end
+        if minX ~= nil and maxX ~= nil then
+            topBarX = minX
+            topBarWidth = math.max(0, maxX - minX)
+        end
+    end
+    if layoutTuning and layoutTuning.TopBarTrimX then
+        local trimX = Layout.ScaleX(layoutTuning.TopBarTrimX)
+        if trimX ~= 0 then
+            topBarX = topBarX + trimX
+            topBarWidth = math.max(0, topBarWidth - trimX * 2)
+        end
+    end
 
     -- Trim the base frame to the lowest child panel edge.
     local baseFrameHeight = nil
@@ -526,7 +573,7 @@ function Layout.BuildUI()
                 maxX = right
             end
         end
-        consider(geometry.margin, geometry.topBarWidth)
+        consider(topBarX, topBarWidth)
         consider(geometry.leftX, geometry.leftWidth)
         for _, cfg in ipairs(geometry.columnConfigs or {}) do
             consider(cfg.X, cfg.Width)
@@ -551,6 +598,14 @@ function Layout.BuildUI()
         if trimX ~= 0 then
             baseFrameX = baseFrameX + trimX
             baseFrameWidth = math.max(0, baseFrameWidth - trimX * 2)
+        end
+    end
+    local dragBoundsWidth = baseFrameWidth
+    local dragBoundsHeight = baseFrameHeight
+    if layoutTuning and layoutTuning.DragBoundsTrimX then
+        local trimX = Layout.ScaleX(layoutTuning.DragBoundsTrimX)
+        if trimX ~= 0 then
+            dragBoundsWidth = math.max(0, dragBoundsWidth - trimX * 2)
         end
     end
     if layoutTuning and layoutTuning.BaseFrameScale and layoutTuning.BaseFrameScale ~= 1 then
@@ -579,6 +634,18 @@ function Layout.BuildUI()
         end
     end
 
+    local uiState = GetUIState()
+    if uiState then
+        if not dragBoundsWidth or dragBoundsWidth <= 0 then
+            dragBoundsWidth = baseFrameWidth
+        end
+        if not dragBoundsHeight or dragBoundsHeight <= 0 then
+            dragBoundsHeight = baseFrameHeight
+        end
+        uiState.DragBoundsWidth = dragBoundsWidth
+        uiState.DragBoundsHeight = dragBoundsHeight
+    end
+
     local base = Base.Build({
         ctx = ctx,
         layout = layout,
@@ -603,14 +670,15 @@ function Layout.BuildUI()
     local leftWidth = geometry.leftWidth
     local rightWidth = geometry.rightWidth
     local bottomHeight = geometry.bottomHeight
-    local topBarWidth = geometry.topBarWidth
     local topBar = TopBar.Create({
         ctx = ctx,
         canvas = canvas,
         margin = margin,
+        topBarX = topBarX,
         topBarHeight = topBarHeight,
         topBarWidth = topBarWidth,
         registerSearchBlur = RegisterSearchBlur,
+        createFrame = CreateFrame,
         createButtonBox = CreateButtonBox,
         wireButton = WireButton,
         scaleX = Layout.ScaleX,
@@ -639,7 +707,6 @@ function Layout.BuildUI()
     })
     local warningBG = warningElements and warningElements.Background or nil
     local warningLabel = warningElements and warningElements.Label or nil
-    local uiState = GetUIState()
     if uiState then
         uiState.WarningLabel = warningLabel
         uiState.WarningBackground = warningBG
