@@ -86,7 +86,7 @@ local LayoutTuning = {
     TopBarFrameCenterAlpha = 1,
 
     -- Trim the top bar width on both sides (scaled by ScaleX).
-    TopBarTrimX = 17,
+    TopBarTrimX = 18,
 
     -- Shrink the draggable bounds horizontally (scaled by ScaleX).
     DragBoundsTrimX = 10,
