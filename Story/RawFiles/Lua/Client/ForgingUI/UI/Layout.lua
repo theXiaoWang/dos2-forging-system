@@ -537,6 +537,7 @@ function Layout.BuildUI()
     local baseFrameHeight = nil
     local baseFramePadding = 0
     local slotPanelExtraBottom = 0
+    local alignBaseToSlots = layoutTuning and layoutTuning.BaseFrameAlignToSlotPanels
     if layoutTuning and layoutTuning.BaseFrameBottomPaddingY then
         baseFramePadding = Layout.ScaleY(layoutTuning.BaseFrameBottomPaddingY)
     end
@@ -545,7 +546,7 @@ function Layout.BuildUI()
     end
     local infoBottom = geometry.contentTop + geometry.midTopHeight
     local slotBottom = geometry.contentTop + Layout.ScaleY(geometry.slotPanelOffsetY) + geometry.slotPanelHeight
-    local panelBottom = math.max(infoBottom, slotBottom)
+    local panelBottom = alignBaseToSlots and slotBottom or math.max(infoBottom, slotBottom)
     local infoExtraBottom = baseFramePadding + (panelBottom - infoBottom)
     local slotExtraBottom = baseFramePadding + (panelBottom - slotBottom) + slotPanelExtraBottom
     if infoExtraBottom < 0 then

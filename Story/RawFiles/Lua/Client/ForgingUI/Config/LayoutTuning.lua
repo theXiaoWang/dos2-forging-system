@@ -17,7 +17,7 @@
 local LayoutTuning = {
     -- Main/Donor panel height behavior:
     -- 1.0 = same height as Preview panel (before boost).
-    SlotPanelHeightMultiplier = 1.05,
+    SlotPanelHeightMultiplier = 1.1,
 
     -- Extra height added to Main/Donor panels (scaled by ScaleY).
     SlotPanelHeightBoostY = 20,
@@ -59,7 +59,11 @@ local LayoutTuning = {
     RaiseTopBarToFront = true,
 
     -- Extra padding added below the lowest child panel when sizing the base frame (scaled by ScaleY).
-    BaseFrameBottomPaddingY = 100,
+    -- Negative values lift the bottom edge upward.
+    BaseFrameBottomPaddingY = -25,
+
+    -- Align the base frame bottom to the Main/Donor panels (padding still applies).
+    BaseFrameAlignToSlotPanels = true,
 
     -- Extra height added to Main/Donor panels only (scaled by ScaleY).
     SlotPanelExtraBottomY = 20,
