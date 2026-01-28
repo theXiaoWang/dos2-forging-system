@@ -303,8 +303,14 @@ function Slot:SetRarityIcon(rarity)
 
     if icon then
         element:SetIcon(icon, Slot.ICON_SIZE:unpack())
+        if element.SetVisible then
+            element:SetVisible(true)
+        end
     else
         element:SetIcon("", 1, 1)
+        if element.SetVisible then
+            element:SetVisible(false)
+        end
     end
 end
 

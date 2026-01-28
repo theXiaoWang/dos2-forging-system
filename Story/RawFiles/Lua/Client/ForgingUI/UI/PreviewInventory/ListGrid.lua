@@ -53,8 +53,17 @@ function ListGrid.Build(options)
         gridSpacing = scale(previewTuning.GridSpacingX)
     elseif columns > 1 then
         gridSpacing = math.floor((gridWidth - slotSize * columns) / (columns - 1))
+        if gridSpacing < 0 then
+            gridSpacing = 0
+        end
     else
         gridSpacing = 0
+    end
+    if previewTuning.GridSpacingMaxX ~= nil then
+        local maxSpacing = scale(previewTuning.GridSpacingMaxX)
+        if gridSpacing > maxSpacing then
+            gridSpacing = maxSpacing
+        end
     end
     previewInventory.GridSpacing = gridSpacing
 

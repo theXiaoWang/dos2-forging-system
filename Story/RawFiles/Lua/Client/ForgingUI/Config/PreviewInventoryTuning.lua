@@ -9,6 +9,9 @@ local PreviewInventoryTuning = {
     -- Grid layout
     -- Increase this to 10 if you want 10 slots per row.
     GridColumns = 10,
+    -- Cap the auto-fit spacing between slots (scaled via Layout.Scale).
+    -- This keeps gaps small without allowing overlap.
+    GridSpacingMaxX = -11,
     -- Grid spacing between slots (scaled via Layout.Scale).
     -- Leave nil to auto-fit based on panel width.
 
