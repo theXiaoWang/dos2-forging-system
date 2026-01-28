@@ -77,8 +77,10 @@ function Geometry.Compute(options)
     -- Vertical offset to move Main/Donor panels up (negative values move up, positive move down).
     -- Keep the bottom edge steady while extending upward to close the top gap.
     local slotPanelOffsetY = ((layoutTuning and layoutTuning.SlotPanelOffsetYBase) or -11) - slotPanelHeightBoost
-    -- Vertical offset for Info panel and Preview panel (positive moves down).
+    -- Vertical offset for Info panel (positive moves down).
     local infoPanelOffsetY = 4
+    -- Vertical offset for Preview panel (positive moves down).
+    local previewPanelOffsetY = (layoutTuning and layoutTuning.PreviewPanelOffsetY) or infoPanelOffsetY
     local midBottomY = contentTop + midTopHeight + gap
     local columnGap = scale(ctx.UI_COLUMN_GAP or 0)
     if layoutTuning and layoutTuning.ColumnGapX ~= nil then
@@ -131,6 +133,7 @@ function Geometry.Compute(options)
         slotPanelHeight = slotPanelHeight,
         slotPanelOffsetY = slotPanelOffsetY,
         infoPanelOffsetY = infoPanelOffsetY,
+        previewPanelOffsetY = previewPanelOffsetY,
         midBottomY = midBottomY,
         columnConfigs = columnConfigs,
     }

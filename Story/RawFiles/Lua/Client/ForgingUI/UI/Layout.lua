@@ -719,6 +719,7 @@ function Layout.BuildUI()
     local slotPanelHeight = geometry.slotPanelHeight
     local slotPanelOffsetY = geometry.slotPanelOffsetY
     local infoPanelOffsetY = geometry.infoPanelOffsetY
+    local previewPanelOffsetY = geometry.previewPanelOffsetY
     local midBottomY = geometry.midBottomY
 
     local craftState = ctx.Craft and ctx.Craft.State or nil
@@ -772,6 +773,7 @@ function Layout.BuildUI()
         contentTop = contentTop,
         midTopHeight = midTopHeight,
         infoPanelOffsetY = infoPanelOffsetY,
+        previewPanelOffsetY = previewPanelOffsetY,
         slotPanelHeight = slotPanelHeight,
         slotPanelOffsetY = slotPanelOffsetY,
         extraInfoBottomHeight = infoExtraBottom,

@@ -16,6 +16,10 @@ function Columns.Build(options)
     local contentTop = opts.contentTop or 0
     local midTopHeight = opts.midTopHeight or 0
     local infoPanelOffsetY = opts.infoPanelOffsetY or 0
+    local previewPanelOffsetY = opts.previewPanelOffsetY
+    if previewPanelOffsetY == nil then
+        previewPanelOffsetY = infoPanelOffsetY
+    end
     local slotPanelHeight = opts.slotPanelHeight or 0
     local slotPanelOffsetY = opts.slotPanelOffsetY or 0
     local extraInfoBottomHeight = opts.extraInfoBottomHeight or 0
@@ -41,7 +45,7 @@ function Columns.Build(options)
         if cfg.Mode == "Main" or cfg.Mode == "Donor" then
             panelHeight = slotPanelHeight + extraSlotBottomHeight
         else
-            panelHeight = (midTopHeight - scaleY(infoPanelOffsetY)) + extraInfoBottomHeight
+            panelHeight = (midTopHeight - scaleY(previewPanelOffsetY)) + extraInfoBottomHeight
         end
         if panelHeight < 0 then
             panelHeight = 0
@@ -51,7 +55,7 @@ function Columns.Build(options)
         if cfg.Mode == "Main" or cfg.Mode == "Donor" then
             panelY = contentTop + scaleY(slotPanelOffsetY)
         elseif cfg.Mode == "Preview" then
-            panelY = contentTop + scaleY(infoPanelOffsetY)
+            panelY = contentTop + scaleY(previewPanelOffsetY)
         end
         local panelFrame, panel, panelInnerWidth, panelInnerHeight = createSkinnedPanel(
             canvas,

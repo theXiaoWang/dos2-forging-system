@@ -9,6 +9,8 @@ local PreviewInventoryTuning = {
     -- Grid layout
     -- Increase this to 10 if you want 10 slots per row.
     GridColumns = 10,
+    -- Grid spacing between slots (scaled via Layout.Scale).
+    -- Leave nil to auto-fit based on panel width.
 
     -- Search bar
     SearchPlaceholderText = "Type to search...",

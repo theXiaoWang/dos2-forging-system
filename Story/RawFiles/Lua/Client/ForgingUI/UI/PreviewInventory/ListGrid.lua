@@ -43,12 +43,23 @@ function ListGrid.Build(options)
     local columns = math.max(1, math.floor(tonumber(previewTuning.GridColumns) or 8))
     previewInventory.Columns = columns
     local gridWidth = math.max(0, width - padding * 2)
-    local maxSlot = math.floor((gridWidth - previewInventory.GridSpacing * (columns - 1)) / columns)
-    -- Use larger minimum (48) to ensure icons are fully visible
-    previewInventory.SlotSize = math.max(48, math.min(previewInventory.SlotSize, maxSlot))
+    local slotSize = previewInventory.SlotSize or 66
+    if slotSize < 48 then
+        slotSize = 48
+    end
+    previewInventory.SlotSize = slotSize
+    local gridSpacing = previewInventory.GridSpacing or 0
+    if previewTuning.GridSpacingX ~= nil then
+        gridSpacing = scale(previewTuning.GridSpacingX)
+    elseif columns > 1 then
+        gridSpacing = math.floor((gridWidth - slotSize * columns) / (columns - 1))
+    else
+        gridSpacing = 0
+    end
+    previewInventory.GridSpacing = gridSpacing
 
     -- Calculate actual grid content width and center it
-    local gridContentWidth = columns * previewInventory.SlotSize + (columns - 1) * previewInventory.GridSpacing
+    local gridContentWidth = columns * slotSize + (columns - 1) * gridSpacing
     local gridX = math.floor((width - gridContentWidth) / 2)
     local gridY = padding
 
