@@ -73,12 +73,19 @@ function Columns.Build(options)
         end
         local headerHeight = 0
         -- Vertical offset to push header and slot lower in Main/Donor panels
-        local headerOffsetY = (cfg.Mode == "Main" or cfg.Mode == "Donor") and 47 or 0
+        local headerOffsetY = 0
+        if cfg.Mode == "Main" or cfg.Mode == "Donor" then
+            local tuningOffset = ctx and ctx.LayoutTuning and ctx.LayoutTuning.SlotPanelHeaderOffsetY
+            if tuningOffset == nil then
+                tuningOffset = 47
+            end
+            headerOffsetY = scaleY(tuningOffset)
+        end
         if cfg.Title and cfg.Title ~= "" then
             local headerFormat = {size = ctx.HEADER_TEXT_SIZE}
-            -- Make Main/Donor titles larger, black, and use bold font
+            -- Make Main/Donor titles larger, white, and use bold font
             if cfg.Mode == "Main" or cfg.Mode == "Donor" then
-                headerFormat = {Size = 14, Color = "000000", FontType = Text.FONTS.BOLD}
+                headerFormat = {Size = 14, Color = "FFFFFF", FontType = Text.FONTS.BOLD}
             end
             createTextElement(panel, cfg.ID .. "_HeaderText", cfg.Title, 0, headerOffsetY, panelInnerWidth, 26, "Center", false, headerFormat)
             headerHeight = 26 + headerOffsetY

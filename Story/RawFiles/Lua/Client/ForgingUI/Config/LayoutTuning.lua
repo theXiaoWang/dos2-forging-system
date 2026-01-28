@@ -26,6 +26,10 @@ local LayoutTuning = {
     -- Negative values move panels upward.
     SlotPanelOffsetYBase = 0,
 
+    -- Vertical offset for Main/Donor header text (scaled by ScaleY).
+    -- Smaller values move the label upward.
+    SlotPanelHeaderOffsetY = 25,
+
     -- Base vertical offset for the Preview panel (scaled by ScaleY).
     -- Positive values move the Preview panel downward.
     PreviewPanelOffsetY = 6,
