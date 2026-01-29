@@ -37,6 +37,7 @@ local styleGreenMediumTextured = nil
 local styleSquareStone = nil
 local styleComboBox = nil
 local styleDOS1Blue = nil
+local styleLargeNotch = nil
 local styleTransparentLong = nil
 local styleClose = nil
 local styleCloseDOS1Square = nil
@@ -166,6 +167,7 @@ local function RefreshContext()
     Context.styleSquareStone = styleSquareStone
     Context.styleComboBox = styleComboBox
     Context.styleDOS1Blue = styleDOS1Blue
+    Context.styleLargeNotch = styleLargeNotch
     Context.styleTransparentLong = styleTransparentLong
     Context.styleClose = styleClose
     Context.styleCloseDOS1Square = styleCloseDOS1Square
@@ -559,6 +561,7 @@ function ForgingUI.InitializeWithGenericUI(generic)
     styleSquareStone = buttonPrefab and buttonPrefab.STYLES and (buttonPrefab.STYLES.SquareStone or buttonStyle) or buttonStyle
     styleComboBox = buttonPrefab and buttonPrefab.STYLES and (buttonPrefab.STYLES.ComboBox or buttonStyle) or buttonStyle
     styleDOS1Blue = buttonPrefab and buttonPrefab.STYLES and (buttonPrefab.STYLES.DOS1Blue or buttonStyle) or buttonStyle
+    styleLargeNotch = buttonPrefab and buttonPrefab.STYLES and (buttonPrefab.STYLES.LargeNotch or buttonStyle) or buttonStyle
     styleTransparentLong = buttonPrefab and buttonPrefab.STYLES and buttonPrefab.STYLES.TransparentLong or nil
     primaryButtonStyle = styleLargeRed
     closeButtonPrefab = genericUI.GetPrefab and genericUI.GetPrefab("GenericUI_Prefab_CloseButton") or nil

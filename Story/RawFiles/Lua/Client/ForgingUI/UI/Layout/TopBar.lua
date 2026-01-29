@@ -278,7 +278,7 @@ function TopBar.Create(options)
     if layoutTuning and layoutTuning.TopBarButtonPaddingX ~= nil then
         topBarPaddingX = scaleX(layoutTuning.TopBarButtonPaddingX)
     end
-    local leftButtonStyle = transparentStyle or ctx.styleDOS1Blue or ctx.styleLargeRed
+    local leftButtonStyle = transparentStyle or ctx.styleLargeRed or ctx.styleDOS1Blue or ctx.styleLargeNotch
     local forgeTabBtn = createButtonBox(topBar, "Btn_ForgeTab", "Forge", topBarPaddingX, topButtonY, 100, topButtonHeight, false, leftButtonStyle)
     if wireButton then
         wireButton(forgeTabBtn, "ForgeTab")
@@ -294,7 +294,7 @@ function TopBar.Create(options)
     end
     local rightX = topBarWidth - closePaddingX
     local closeSize = topButtonHeight
-    local closeBtn = createButtonBox(topBar, "Btn_Close", "", topBarWidth - closeSize - closePaddingX, topButtonY, closeSize, closeSize, false, ctx.styleCloseDOS1Square or ctx.styleClose)
+    local closeBtn = createButtonBox(topBar, "Btn_Close", "", topBarWidth - closeSize - closePaddingX, topButtonY, closeSize, closeSize, false, ctx.styleClose or ctx.styleCloseDOS1Square)
     if closeBtn and closeBtn.Events and closeBtn.Events.Pressed then
         closeBtn.Events.Pressed:Subscribe(function()
             if ctx.ForgingUI and ctx.ForgingUI.Hide then
