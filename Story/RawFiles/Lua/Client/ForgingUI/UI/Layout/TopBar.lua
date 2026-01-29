@@ -27,6 +27,12 @@ function TopBar.Create(options)
     local layoutTuning = ctx.LayoutTuning or nil
     local useTransparentButtons = layoutTuning and layoutTuning.TopBarTransparentButtons
     local transparentStyle = useTransparentButtons and ctx.styleTransparentLong or nil
+    local topBarDebug = layoutTuning and layoutTuning.TopBarDebug
+    local function DebugPrint(message)
+        if topBarDebug and ctx and ctx.Ext and ctx.Ext.Print then
+            ctx.Ext.Print(message)
+        end
+    end
     local clamp = opts.clamp or function(value, minValue, maxValue)
         if value < minValue then
             return minValue
@@ -59,9 +65,67 @@ function TopBar.Create(options)
         end
     end
 
-    local topBarFrameStyle = ctx and ctx.slicedTexturePrefab and ctx.slicedTexturePrefab.STYLES
-        and (ctx.slicedTexturePrefab.STYLES.SimpleTooltip or ctx.slicedTexturePrefab.STYLES.ContextMenu)
-        or nil
+    local topBarBackground = topBar:AddChild("TopBar_Background", "GenericUI_Element_Color")
+    topBarBackground:SetSize(topBarWidth, topBarHeight)
+    topBarBackground:SetColor(ctx.topBarBackgroundColor or ctx.HEADER_FILL_COLOR)
+    topBarBackground:SetAlpha(topBarAlpha)
+    if topBarBackground.SetMouseEnabled then
+        topBarBackground:SetMouseEnabled(false)
+    end
+    if topBarBackground.SetMouseChildren then
+        topBarBackground:SetMouseChildren(false)
+    end
+
+    local function ApplyFrameAlphas(frameTex, frameAlpha, centerAlpha)
+        if not frameTex then
+            return
+        end
+        if frameTex.SetAlpha then
+            frameTex:SetAlpha(frameAlpha)
+        end
+        if frameTex.Root and frameTex.Root.SetAlpha then
+            frameTex.Root:SetAlpha(frameAlpha)
+        end
+        local children = nil
+        if frameTex.Root and frameTex.Root.GetChildren then
+            children = frameTex.Root:GetChildren()
+        elseif frameTex.GetChildren then
+            children = frameTex:GetChildren()
+        end
+        for _, child in ipairs(children or {}) do
+            local id = child and child.ID or ""
+            local isCenter = id == "Center" or (id ~= "" and id:find("Center", 1, true) ~= nil)
+            local alpha = isCenter and centerAlpha or frameAlpha
+            if child.SetAlpha then
+                child:SetAlpha(alpha)
+            end
+            if isCenter and child.SetVisible then
+                child:SetVisible(alpha > 0)
+            end
+        end
+    end
+
+    local topBarFrameStyle = nil
+    if ctx and ctx.slicedTexturePrefab and ctx.slicedTexturePrefab.STYLES then
+        local styleName = layoutTuning and layoutTuning.TopBarFrameStyle
+        if styleName and ctx.slicedTexturePrefab.STYLES[styleName] then
+            topBarFrameStyle = ctx.slicedTexturePrefab.STYLES[styleName]
+        else
+            topBarFrameStyle = ctx.slicedTexturePrefab.STYLES.SimpleTooltip
+                or ctx.slicedTexturePrefab.STYLES.ContextMenu
+        end
+    end
+    DebugPrint(string.format(
+        "[ForgingUI] TopBar: size=%sx%s useSliced=%s hasPrefab=%s style=%s frameAlpha=%.2f centerAlpha=%.2f bgAlpha=%.2f",
+        tostring(topBarWidth),
+        tostring(topBarHeight),
+        tostring(ctx and ctx.USE_SLICED_FRAMES),
+        tostring(ctx and ctx.slicedTexturePrefab ~= nil),
+        tostring(layoutTuning and layoutTuning.TopBarFrameStyle),
+        tonumber(topBarFrameAlpha) or 0,
+        tonumber(topBarFrameCenterAlpha) or 0,
+        tonumber(topBarAlpha) or 0
+    ))
     local topBarFrameTex = nil
     if createFrame and topBarFrameStyle then
         local frame, inner, _, _, frameTex = createFrame(
@@ -94,9 +158,8 @@ function TopBar.Create(options)
         if inner and inner.SetMouseChildren then
             inner:SetMouseChildren(false)
         end
-        if topBar.SetChildIndex and frame then
-            topBar:SetChildIndex(frame, 0)
-        end
+        ApplyFrameAlphas(topBarFrameTex, topBarFrameAlpha, topBarFrameCenterAlpha)
+        DebugPrint(string.format("[ForgingUI] TopBar: frame via CreateFrame=%s", tostring(topBarFrameTex ~= nil)))
     end
     if not topBarFrameTex and topBarFrameStyle and ctx and ctx.slicedTexturePrefab and ctx.uiInstance then
         local frameTex = ctx.slicedTexturePrefab.Create(ctx.uiInstance, "TopBar_ContextMenu_Frame", topBar, topBarFrameStyle, vector(topBarWidth, topBarHeight))
@@ -139,24 +202,67 @@ function TopBar.Create(options)
                 end
             end
         end
-        if topBar.SetChildIndex and frameTex and frameTex.Root then
-            topBar:SetChildIndex(frameTex.Root, 0)
-        end
         topBarFrameTex = frameTex
+        ApplyFrameAlphas(topBarFrameTex, topBarFrameAlpha, topBarFrameCenterAlpha)
+        DebugPrint(string.format("[ForgingUI] TopBar: frame via direct prefab=%s", tostring(topBarFrameTex ~= nil)))
+    end
+    if topBar.SetChildIndex and topBarBackground then
+        topBar:SetChildIndex(topBarBackground, 0)
+    end
+    if topBarFrameTex and topBarFrameTex.Root and topBarFrameTex.Root.GetChildren then
+        local childIds = {}
+        for _, child in ipairs(topBarFrameTex.Root:GetChildren() or {}) do
+            table.insert(childIds, tostring(child and child.ID))
+        end
+        DebugPrint(string.format("[ForgingUI] TopBar: frame children=%s", table.concat(childIds, ", ")))
     end
 
-    local dragArea = topBar:AddChild("ForgeUIDragArea", "GenericUI_Element_Color")
-    dragArea:SetSize(topBarWidth, topBarHeight)
-    dragArea:SetColor(ctx.topBarBackgroundColor or ctx.HEADER_FILL_COLOR)
-    if topBarFrameTex then
-        dragArea:SetAlpha(0)
+    local dragArea = nil
+    local dragAreaType = "GenericUI_Prefab_DraggingArea"
+    local dragAreaAlpha = 0
+    local draggingAreaPrefab = ctx and ctx.genericUI and ctx.genericUI.GetPrefab
+        and ctx.genericUI.GetPrefab("GenericUI_Prefab_DraggingArea") or nil
+    if draggingAreaPrefab and ctx.uiInstance then
+        local dragInstance = draggingAreaPrefab.Create(
+            ctx.uiInstance,
+            "ForgeUIDragArea",
+            topBar,
+            vector(topBarWidth, topBarHeight),
+            dragAreaAlpha
+        )
+        dragArea = dragInstance and dragInstance.Background or nil
     else
-        dragArea:SetAlpha(topBarAlpha)
+        dragAreaType = "GenericUI_Element_TiledBackground"
+        dragArea = topBar:AddChild("ForgeUIDragArea", dragAreaType)
+        if dragArea.SetBackground then
+            dragArea:SetBackground("Black", topBarWidth, topBarHeight)
+        else
+            dragArea:SetSize(topBarWidth, topBarHeight)
+        end
+        if dragArea.SetAsDraggableArea then
+            dragArea:SetAsDraggableArea()
+        end
     end
-    dragArea:SetAsDraggableArea()
-    if registerSearchBlur then
-        registerSearchBlur(dragArea)
+    if dragArea then
+        if dragArea.SetMouseEnabled then
+            dragArea:SetMouseEnabled(true)
+        end
+        if dragArea.SetMouseChildren then
+            dragArea:SetMouseChildren(true)
+        end
+        if dragArea.SetAlpha then
+            dragArea:SetAlpha(dragAreaAlpha)
+        end
+        if registerSearchBlur then
+            registerSearchBlur(dragArea)
+        end
     end
+    DebugPrint(string.format(
+        "[ForgingUI] TopBar: dragAreaAlpha=%.2f framePresent=%s type=%s",
+        dragArea and dragArea.GetAlpha and dragArea:GetAlpha() or dragAreaAlpha,
+        tostring(topBarFrameTex ~= nil),
+        tostring(dragAreaType)
+    ))
 
     local topButtonHeight = clamp(scaleY(32), 40, 50)
     local topButtonY = math.floor((topBarHeight - topButtonHeight) / 2)

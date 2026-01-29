@@ -41,6 +41,16 @@ Ext.RegisterConsoleCommand("toggleforgeui", function()
     ForgingUI.Toggle()
 end)
 
+Ext.RegisterConsoleCommand("forgeuirebuild", function()
+    local ForgingUI = RequireForgingUI("forgeuirebuild")
+    if not ForgingUI or not ForgingUI.Rebuild then
+        Ext.Print("[ForgingUI] forgeuirebuild: UI not initialized")
+        return
+    end
+    ForgingUI.Rebuild()
+    Ext.Print("[ForgingUI] forgeuirebuild: UI rebuilt")
+end)
+
 Ext.RegisterConsoleCommand("forgeuistatus", function()
     local ForgingUI = GetForgingUI()
     if not ForgingUI or not ForgingUI.Debug then

@@ -90,6 +90,12 @@ local LayoutTuning = {
     -- Use transparent button textures for the top bar (navbar).
     TopBarTransparentButtons = false,
 
+    -- Sliced frame style for the top bar (see SlicedTexture.STYLES).
+    TopBarFrameStyle = "SimpleTooltip",
+
+    -- Debug logging for top bar frame construction.
+    TopBarDebug = true,
+
     -- Top bar background fill (navbar). Set alpha to 0 to disable.
     TopBarBackgroundColorHex = "000000",
     TopBarBackgroundAlpha = 0,
@@ -98,7 +104,7 @@ local LayoutTuning = {
     TopBarFrameAlpha = 1,
 
     -- Top bar sliced frame center alpha. Set to 0 to make the center transparent.
-    TopBarFrameCenterAlpha = 1,
+    TopBarFrameCenterAlpha = 0,
 
     -- Trim the top bar width on both sides (scaled by ScaleX).
     TopBarTrimX = 18,
