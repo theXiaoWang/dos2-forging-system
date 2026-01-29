@@ -31,8 +31,8 @@ local LayoutTuning = {
     SlotPanelHeaderOffsetY = 25,
 
     -- Base vertical offset for the Preview panel (scaled by ScaleY).
-    -- Positive values move the Preview panel downward.
-    PreviewPanelOffsetY = 6,
+    -- Positive values move the Preview panel downward; negative values move it up.
+    PreviewPanelOffsetY = 0,
 
     -- Override UI target width ratio (0-1). Lower values shrink the overall forge panel width.
     TargetWidthRatioOverride = 0.83,
