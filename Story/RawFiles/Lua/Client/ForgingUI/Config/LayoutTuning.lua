@@ -119,7 +119,7 @@ local LayoutTuning = {
     TopBarClosePaddingX = 10,
 
     -- Trim the top bar width on both sides (scaled by ScaleX).
-    TopBarTrimX = 18,
+    TopBarTrimX = 16,
 
     -- Shrink the draggable bounds horizontally (scaled by ScaleX).
     DragBoundsTrimX = 10,
