@@ -40,6 +40,8 @@ local PreviewInventoryTuning = {
     ScrollBarPaddingX = 6,
     ScrollBarPaddingMin = 4,
     ScrollBarPaddingMax = 10,
+    -- Positive pushes the scrollbar right; negative pulls it closer to the grid.
+    ScrollBarOffsetX = -16,
     ScrollHandleWidthX = 12,
     ScrollHandleWidthMin = 10,
     ScrollHandleWidthMax = 16,
