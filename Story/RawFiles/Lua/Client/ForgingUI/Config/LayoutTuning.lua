@@ -106,6 +106,18 @@ local LayoutTuning = {
     -- Top bar sliced frame center alpha. Set to 0 to make the center transparent.
     TopBarFrameCenterAlpha = 0,
 
+    -- Top bar height (scaled by ScaleY).
+    TopBarHeight = 55,
+
+    -- Top bar button height (scaled by ScaleY).
+    TopBarButtonHeight = 40,
+
+    -- Top bar button padding from left/right edges (scaled by ScaleX).
+    TopBarButtonPaddingX = 80,
+
+    -- Extra inset for the close button (scaled by ScaleX). Defaults to TopBarButtonPaddingX.
+    TopBarClosePaddingX = 10,
+
     -- Trim the top bar width on both sides (scaled by ScaleX).
     TopBarTrimX = 18,
 

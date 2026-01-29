@@ -30,8 +30,9 @@ function Geometry.Compute(options)
     local gap = scale(ctx.UI_PANEL_GAP or 0)
     -- Allow negative gap to close gaps between panels.
     local gapX = gap
-    local topBarHeight = scaleY(40)
     local layoutTuning = ctx and ctx.LayoutTuning or nil
+    local topBarHeightBase = (layoutTuning and layoutTuning.TopBarHeight) or 40
+    local topBarHeight = scaleY(topBarHeightBase)
     local hideInfoPanel = layoutTuning and layoutTuning.HideInfoPanel
     local leftWidthBase = 400 + ((layoutTuning and layoutTuning.InfoPanelWidthAdjustX) or 0)
     if leftWidthBase < 0 then
