@@ -35,7 +35,7 @@ local LayoutTuning = {
     PreviewPanelOffsetY = 0,
 
     -- Override UI target width ratio (0-1). Lower values shrink the overall forge panel width.
-    TargetWidthRatioOverride = 0.83,
+    TargetWidthRatioOverride = 0.76,
 
     -- Hide the left info panel and collapse its space.
     HideInfoPanel = true,

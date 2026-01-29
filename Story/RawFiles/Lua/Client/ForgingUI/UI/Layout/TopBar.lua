@@ -278,7 +278,7 @@ function TopBar.Create(options)
     if layoutTuning and layoutTuning.TopBarButtonPaddingX ~= nil then
         topBarPaddingX = scaleX(layoutTuning.TopBarButtonPaddingX)
     end
-    local leftButtonStyle = transparentStyle or ctx.styleDOS1Blue or ctx.styleLargeRed
+    local leftButtonStyle = transparentStyle or ctx.styleLargeRed or ctx.styleDOS1Blue
     local forgeTabBtn = createButtonBox(topBar, "Btn_ForgeTab", "Forge", topBarPaddingX, topButtonY, 100, topButtonHeight, false, leftButtonStyle)
     if wireButton then
         wireButton(forgeTabBtn, "ForgeTab")
