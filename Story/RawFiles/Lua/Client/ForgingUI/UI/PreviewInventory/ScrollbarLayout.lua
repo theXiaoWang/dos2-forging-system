@@ -43,7 +43,6 @@ function ScrollbarLayout.Build(options)
     local listHeight = listMetrics.listHeight or previewInventory.ListHeight or 0
     local listOffsetY = listMetrics.listOffsetY or previewInventory.ListOffsetY or 0
     local previewTuning = ctx and ctx.PreviewInventoryTuning or nil
-    local scrollBarOffsetX = (previewTuning and previewTuning.ScrollBarOffsetX) or 0
 
     if useBuiltinScrollbar then
         local scrollBarPaddingBase = (previewTuning and previewTuning.ScrollBarPaddingX) or 6
@@ -51,7 +50,7 @@ function ScrollbarLayout.Build(options)
         local scrollBarPaddingMax = (previewTuning and previewTuning.ScrollBarPaddingMax) or 10
         local scrollBarPadding = clamp(scaleX(scrollBarPaddingBase), scrollBarPaddingMin, scrollBarPaddingMax)
         local desiredScrollbarX = gridX + gridContentWidth + scrollBarPadding
-        local scrollbarSpacing = desiredScrollbarX - width + scaleX(scrollBarOffsetX)
+        local scrollbarSpacing = desiredScrollbarX - width
         list:SetScrollbarSpacing(scrollbarSpacing)
         list:SetFrame(width, listHeight)
         return
@@ -104,7 +103,7 @@ function ScrollbarLayout.Build(options)
     local scrollTrackPadding = clamp(scaleX(scrollTrackPaddingBase), scrollTrackPaddingMin, scrollTrackPaddingMax)
     local desiredTrackX = gridX + gridContentWidth + scrollTrackPadding
     local maxTrackX = width - scrollHandleWidth - scrollTrackPadding
-    local scrollTrackX = math.min(desiredTrackX, maxTrackX) + scaleX(scrollBarOffsetX)
+    local scrollTrackX = math.min(desiredTrackX, maxTrackX)
     if scrollTrackX < 0 then
         scrollTrackX = 0
     end
