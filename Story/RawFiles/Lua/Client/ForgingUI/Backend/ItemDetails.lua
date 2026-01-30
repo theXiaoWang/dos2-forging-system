@@ -857,6 +857,28 @@ function ItemDetails.Create(options)
         return name
     end
 
+    local function NormalizeStatusChance(chance)
+        local num = tonumber(chance)
+        if not num then
+            return chance
+        end
+        if num > 0 and num <= 1 then
+            return num * 100
+        end
+        return num
+    end
+
+    local function NormalizeStatusTurns(turns)
+        local num = tonumber(turns)
+        if not num then
+            return turns
+        end
+        if num > 0 and num >= 6 and math.abs(num % 6) < 0.001 then
+            return num / 6
+        end
+        return num
+    end
+
     local function FormatStatusProperty(statusId, chance, turns)
         if not statusId or statusId == "" then
             return nil
@@ -1061,6 +1083,8 @@ function ItemDetails.Create(options)
                 local turns = SafePropertyField(prop, "Duration")
                     or SafePropertyField(prop, "Turns")
                     or SafePropertyField(prop, "StatusDuration")
+                chance = NormalizeStatusChance(chance)
+                turns = NormalizeStatusTurns(turns)
                 AppendLine(lines, seen, FormatStatusProperty(statusId, chance, turns))
             elseif IsSurfaceProperty(prop, typeId) then
                 local surfaceId = SafePropertyField(prop, "SurfaceType")
@@ -1068,6 +1092,7 @@ function ItemDetails.Create(options)
                     or SafePropertyField(prop, "SurfaceName")
                 local chance = SafePropertyField(prop, "Chance")
                     or SafePropertyField(prop, "Probability")
+                chance = NormalizeStatusChance(chance)
                 local surfaceLabel = surfaceId and tostring(surfaceId) or "surface"
                 local line = chance and string.format("Create %s surface. %s%% chance to succeed.", surfaceLabel, FormatNumber(tonumber(chance)) or tostring(chance))
                     or string.format("Create %s surface.", surfaceLabel)
@@ -1087,6 +1112,8 @@ function ItemDetails.Create(options)
                     local turns = SafePropertyField(prop, "Duration")
                         or SafePropertyField(prop, "Turns")
                         or SafePropertyField(prop, "StatusDuration")
+                    chance = NormalizeStatusChance(chance)
+                    turns = NormalizeStatusTurns(turns)
                     AppendLine(lines, seen, FormatStatusProperty(statusId, chance, turns))
                 elseif IsSurfaceProperty(prop, typeId) then
                     local surfaceId = SafePropertyField(prop, "SurfaceType")
@@ -1094,6 +1121,7 @@ function ItemDetails.Create(options)
                         or SafePropertyField(prop, "SurfaceName")
                     local chance = SafePropertyField(prop, "Chance")
                         or SafePropertyField(prop, "Probability")
+                    chance = NormalizeStatusChance(chance)
                     local surfaceLabel = surfaceId and tostring(surfaceId) or "surface"
                     local line = chance and string.format("Create %s surface. %s%% chance to succeed.", surfaceLabel, FormatNumber(tonumber(chance)) or tostring(chance))
                         or string.format("Create %s surface.", surfaceLabel)
@@ -1199,22 +1227,34 @@ function ItemDetails.Create(options)
         local lines = {}
         local seen = {}
         CollectExtraPropertyLinesFromValue(SafeStatsField(stats, "ExtraProperties"), lines, seen)
-        local propertyLists = SafeStatsField(stats, "PropertyLists")
-        if propertyLists then
-            local extraProps = SafePropertyField(propertyLists, "ExtraProperties")
-            CollectExtraPropertyLinesFromPropertyList(extraProps, lines, seen)
-        end
         if stats.DynamicStats then
             for _, dyn in pairs(stats.DynamicStats) do
                 CollectExtraPropertyLinesFromValue(SafeStatsField(dyn, "ExtraProperties"), lines, seen)
-                local dynLists = SafeStatsField(dyn, "PropertyLists")
-                if dynLists then
-                    local dynExtra = SafePropertyField(dynLists, "ExtraProperties")
-                    CollectExtraPropertyLinesFromPropertyList(dynExtra, lines, seen)
-                end
             end
         end
         CollectExtraPropertyLinesFromBoosts(stats, lines, seen)
+        local propertyLists = nil
+        local listRaw = nil
+        if #lines == 0 then
+            propertyLists = SafeStatsField(stats, "PropertyLists")
+            if propertyLists then
+                local extraProps = SafePropertyField(propertyLists, "ExtraProperties")
+                CollectExtraPropertyLinesFromPropertyList(extraProps, lines, seen)
+                listRaw = extraProps
+            end
+            if stats.DynamicStats then
+                for _, dyn in pairs(stats.DynamicStats) do
+                    local dynLists = SafeStatsField(dyn, "PropertyLists")
+                    if dynLists then
+                        local dynExtra = SafePropertyField(dynLists, "ExtraProperties")
+                        CollectExtraPropertyLinesFromPropertyList(dynExtra, lines, seen)
+                        if listRaw == nil then
+                            listRaw = dynExtra
+                        end
+                    end
+                end
+            end
+        end
         if ShouldDebug() and Ext and Ext.Print and #lines == 0 then
             local statsId = SafeStatsField(stats, "Name")
                 or SafeStatsField(stats, "StatsId")
@@ -1223,7 +1263,6 @@ function ItemDetails.Create(options)
             if statsId and not state._ExtraPropsLogged[statsId] then
                 state._ExtraPropsLogged[statsId] = true
                 local extraRaw = SafeStatsField(stats, "ExtraProperties")
-                local listRaw = propertyLists and SafePropertyField(propertyLists, "ExtraProperties") or nil
                 Ext.Print(string.format(
                     "[ForgingUI][ItemDetails] ExtraProperties empty stats=%s extraType=%s listType=%s",
                     tostring(statsId),
