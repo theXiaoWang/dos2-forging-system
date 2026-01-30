@@ -717,6 +717,35 @@ function ItemDetails.Create(options)
         return tostring(statusId)
     end
 
+    local function FormatStatusProperty(statusId, chance, turns)
+        if not statusId or statusId == "" then
+            return nil
+        end
+        local statusName = ResolveStatusName(statusId)
+        local turnsText = turns ~= nil and (FormatNumber(tonumber(turns)) or tostring(turns)) or nil
+        local chanceText = chance ~= nil and (FormatNumber(tonumber(chance)) or tostring(chance)) or nil
+        if turnsText and chanceText then
+            return string.format("Set %s for %s turn(s). %s%% chance to succeed.", statusName, turnsText, chanceText)
+        elseif turnsText then
+            return string.format("Set %s for %s turn(s).", statusName, turnsText)
+        elseif chanceText then
+            return string.format("Set %s. %s%% chance to succeed.", statusName, chanceText)
+        end
+        return string.format("Set %s.", statusName)
+    end
+
+    local function ExtractStatusId(raw)
+        if not raw then
+            return nil
+        end
+        local trimmed = tostring(raw):match("^%s*(.-)%s*$")
+        if trimmed == "" then
+            return nil
+        end
+        local last = trimmed:match("([^:]+)$")
+        return last or trimmed
+    end
+
     local function FormatExtraProperty(token)
         if not token or token == "" then
             return nil
@@ -726,14 +755,11 @@ function ItemDetails.Create(options)
             table.insert(parts, part:match("^%s*(.-)%s*$"))
         end
         if #parts >= 3 then
-            local statusId = parts[1]
+            local statusId = ExtractStatusId(parts[1])
             local chance = tonumber(parts[2])
             local turns = tonumber(parts[3])
             if statusId and chance and turns then
-                local statusName = ResolveStatusName(statusId)
-                local chanceText = FormatNumber(chance) or tostring(chance)
-                local turnsText = FormatNumber(turns) or tostring(turns)
-                return string.format("Set %s for %s turn(s). %s%% chance to succeed.", statusName, turnsText, chanceText)
+                return FormatStatusProperty(statusId, chance, turns)
             end
         end
         local cleaned = tostring(token):gsub("_", " ")
@@ -741,26 +767,329 @@ function ItemDetails.Create(options)
         return cleaned
     end
 
+    local function SafePropertyField(prop, field)
+        if not prop then
+            return nil
+        end
+        local ok, value = pcall(function()
+            return prop[field]
+        end)
+        if ok then
+            return value
+        end
+        return nil
+    end
+
+    local function NormalizePropertyType(prop)
+        local typeId = SafePropertyField(prop, "TypeId")
+            or SafePropertyField(prop, "Type")
+            or SafePropertyField(prop, "TypeID")
+            or SafePropertyField(prop, "PropertyType")
+        if typeId == nil then
+            return nil
+        end
+        return string.lower(tostring(typeId))
+    end
+
+    local function EnumeratePropertyElements(extraProps)
+        local props = SafePropertyField(extraProps, "Properties") or extraProps
+        local elements = SafePropertyField(props, "Elements")
+            or SafePropertyField(extraProps, "Elements")
+            or props
+        return elements
+    end
+
+    local function ForEachPropertyElement(elements, callback)
+        if not elements or not callback then
+            return false
+        end
+        local didIterate = false
+        local function handle(prop)
+            didIterate = true
+            callback(prop)
+        end
+        pcall(function()
+            for _, prop in ipairs(elements) do
+                handle(prop)
+            end
+        end)
+        if didIterate then
+            return true
+        end
+        local elementType = type(elements)
+        if elementType == "table" then
+            for _, prop in pairs(elements) do
+                handle(prop)
+            end
+            return didIterate
+        end
+        if elementType == "userdata" then
+            if elements.Iterator then
+                local okIter = pcall(function()
+                    for prop in elements:Iterator() do
+                        handle(prop)
+                    end
+                end)
+                if okIter and didIterate then
+                    return true
+                end
+            end
+            local okLen, len = pcall(function()
+                return #elements
+            end)
+            if okLen and type(len) == "number" then
+                for i = 1, len do
+                    local okVal, prop = pcall(function()
+                        return elements[i]
+                    end)
+                    if okVal then
+                        handle(prop)
+                    end
+                end
+                if didIterate then
+                    return true
+                end
+            end
+            local okPairs, iter, state, var = pcall(pairs, elements)
+            if okPairs then
+                for _, prop in iter, state, var do
+                    handle(prop)
+                end
+                if didIterate then
+                    return true
+                end
+            end
+        end
+        return didIterate
+    end
+
+    local function IsStatusProperty(prop, typeId)
+        if typeId then
+            if typeId == "status" or typeId == "applystatus" or typeId:find("status", 1, true) then
+                return true
+            end
+        end
+        return SafePropertyField(prop, "Status") ~= nil
+            or SafePropertyField(prop, "StatusId") ~= nil
+            or SafePropertyField(prop, "StatusID") ~= nil
+    end
+
+    local function IsSurfaceProperty(prop, typeId)
+        if typeId then
+            if typeId == "surface"
+                or typeId == "createsurface"
+                or typeId == "targetcreatesurface"
+                or typeId:find("surface", 1, true) then
+                return true
+            end
+        end
+        return SafePropertyField(prop, "SurfaceType") ~= nil
+            or SafePropertyField(prop, "Surface") ~= nil
+            or SafePropertyField(prop, "SurfaceName") ~= nil
+    end
+
+    local function AppendLine(lines, seen, line)
+        if not line or line == "" then
+            return
+        end
+        if seen and seen[line] then
+            return
+        end
+        if seen then
+            seen[line] = true
+        end
+        table.insert(lines, line)
+    end
+
+    local function CollectExtraPropertyLinesFromPropertyList(extraProps, lines, seen)
+        if not extraProps then
+            return
+        end
+        local elements = EnumeratePropertyElements(extraProps)
+        if not elements then
+            return
+        end
+        local didIterate = ForEachPropertyElement(elements, function(prop)
+            local typeId = NormalizePropertyType(prop)
+            if IsStatusProperty(prop, typeId) then
+                local statusId = ExtractStatusId(SafePropertyField(prop, "Status")
+                    or SafePropertyField(prop, "StatusId")
+                    or SafePropertyField(prop, "StatusID"))
+                local chance = SafePropertyField(prop, "Chance")
+                    or SafePropertyField(prop, "StatusChance")
+                    or SafePropertyField(prop, "Probability")
+                local turns = SafePropertyField(prop, "Duration")
+                    or SafePropertyField(prop, "Turns")
+                    or SafePropertyField(prop, "StatusDuration")
+                AppendLine(lines, seen, FormatStatusProperty(statusId, chance, turns))
+            elseif IsSurfaceProperty(prop, typeId) then
+                local surfaceId = SafePropertyField(prop, "SurfaceType")
+                    or SafePropertyField(prop, "Surface")
+                    or SafePropertyField(prop, "SurfaceName")
+                local chance = SafePropertyField(prop, "Chance")
+                    or SafePropertyField(prop, "Probability")
+                local surfaceLabel = surfaceId and tostring(surfaceId) or "surface"
+                local line = chance and string.format("Create %s surface. %s%% chance to succeed.", surfaceLabel, FormatNumber(tonumber(chance)) or tostring(chance))
+                    or string.format("Create %s surface.", surfaceLabel)
+                AppendLine(lines, seen, line)
+            end
+        end)
+        if not didIterate and type(elements) == "table" then
+            for _, prop in ipairs(elements) do
+                local typeId = NormalizePropertyType(prop)
+                if IsStatusProperty(prop, typeId) then
+                    local statusId = ExtractStatusId(SafePropertyField(prop, "Status")
+                        or SafePropertyField(prop, "StatusId")
+                        or SafePropertyField(prop, "StatusID"))
+                    local chance = SafePropertyField(prop, "Chance")
+                        or SafePropertyField(prop, "StatusChance")
+                        or SafePropertyField(prop, "Probability")
+                    local turns = SafePropertyField(prop, "Duration")
+                        or SafePropertyField(prop, "Turns")
+                        or SafePropertyField(prop, "StatusDuration")
+                    AppendLine(lines, seen, FormatStatusProperty(statusId, chance, turns))
+                elseif IsSurfaceProperty(prop, typeId) then
+                    local surfaceId = SafePropertyField(prop, "SurfaceType")
+                        or SafePropertyField(prop, "Surface")
+                        or SafePropertyField(prop, "SurfaceName")
+                    local chance = SafePropertyField(prop, "Chance")
+                        or SafePropertyField(prop, "Probability")
+                    local surfaceLabel = surfaceId and tostring(surfaceId) or "surface"
+                    local line = chance and string.format("Create %s surface. %s%% chance to succeed.", surfaceLabel, FormatNumber(tonumber(chance)) or tostring(chance))
+                        or string.format("Create %s surface.", surfaceLabel)
+                    AppendLine(lines, seen, line)
+                end
+            end
+        end
+    end
+
+    local function CollectExtraPropertyLinesFromValue(extra, lines, seen)
+        if extra == nil then
+            return
+        end
+        if type(extra) == "string" then
+            for token in string.gmatch(extra, "([^;]+)") do
+                local trimmed = token:match("^%s*(.-)%s*$")
+                if trimmed and trimmed ~= "" then
+                    AppendLine(lines, seen, FormatExtraProperty(trimmed))
+                end
+            end
+            return
+        end
+        if type(extra) == "table" then
+            for _, entry in pairs(extra) do
+                if type(entry) == "string" then
+                    AppendLine(lines, seen, FormatExtraProperty(entry))
+                end
+            end
+        end
+        if type(extra) == "userdata" then
+            local label = SafePropertyField(extra, "Label")
+                or SafePropertyField(extra, "LabelText")
+                or SafePropertyField(extra, "Text")
+                or SafePropertyField(extra, "Value")
+            if type(label) == "string" and label ~= "" then
+                CollectExtraPropertyLinesFromValue(label, lines, seen)
+            end
+        end
+        CollectExtraPropertyLinesFromPropertyList(extra, lines, seen)
+    end
+
+    local function ResolveStatsEntry(statsId)
+        if not statsId or statsId == "" then
+            return nil
+        end
+        if Ext and Ext.Stats and Ext.Stats.Get then
+            local ok, stat = pcall(Ext.Stats.Get, statsId)
+            if ok then
+                return stat
+            end
+        end
+        return nil
+    end
+
+    local function CollectExtraPropertyLinesFromBoosts(stats, lines, seen)
+        if not stats then
+            return
+        end
+        local boosts = SafeStatsField(stats, "Boosts")
+        if not boosts then
+            return
+        end
+        local function HandleBoostId(boostId)
+            if not boostId or boostId == "" then
+                return
+            end
+            local boostStats = ResolveStatsEntry(boostId)
+            if not boostStats then
+                return
+            end
+            CollectExtraPropertyLinesFromValue(SafeStatsField(boostStats, "ExtraProperties"), lines, seen)
+            local boostLists = SafeStatsField(boostStats, "PropertyLists")
+            if boostLists then
+                local boostExtra = SafePropertyField(boostLists, "ExtraProperties")
+                CollectExtraPropertyLinesFromPropertyList(boostExtra, lines, seen)
+            end
+        end
+        if type(boosts) == "string" then
+            for token in string.gmatch(boosts, "([^;]+)") do
+                local trimmed = token:match("^%s*(.-)%s*$")
+                if trimmed and trimmed ~= "" then
+                    HandleBoostId(trimmed)
+                end
+            end
+        elseif type(boosts) == "table" then
+            for _, entry in pairs(boosts) do
+                if type(entry) == "string" then
+                    HandleBoostId(entry)
+                elseif type(entry) == "table" then
+                    local id = entry.Name or entry.StatsId or entry.StatsID
+                    if id then
+                        HandleBoostId(id)
+                    end
+                end
+            end
+        end
+    end
+
     local function GetExtraPropertyLines(stats)
         if not stats then
             return {}
         end
-        local extra = SafeStatsField(stats, "ExtraProperties")
-        if not extra or extra == "" then
-            return {}
+        local lines = {}
+        local seen = {}
+        CollectExtraPropertyLinesFromValue(SafeStatsField(stats, "ExtraProperties"), lines, seen)
+        local propertyLists = SafeStatsField(stats, "PropertyLists")
+        if propertyLists then
+            local extraProps = SafePropertyField(propertyLists, "ExtraProperties")
+            CollectExtraPropertyLinesFromPropertyList(extraProps, lines, seen)
         end
-        local tokens = {}
-        for token in string.gmatch(tostring(extra), "([^;]+)") do
-            local trimmed = token:match("^%s*(.-)%s*$")
-            if trimmed and trimmed ~= "" then
-                table.insert(tokens, trimmed)
+        if stats.DynamicStats then
+            for _, dyn in pairs(stats.DynamicStats) do
+                CollectExtraPropertyLinesFromValue(SafeStatsField(dyn, "ExtraProperties"), lines, seen)
+                local dynLists = SafeStatsField(dyn, "PropertyLists")
+                if dynLists then
+                    local dynExtra = SafePropertyField(dynLists, "ExtraProperties")
+                    CollectExtraPropertyLinesFromPropertyList(dynExtra, lines, seen)
+                end
             end
         end
-        local lines = {}
-        for _, token in ipairs(tokens) do
-            local formatted = FormatExtraProperty(token)
-            if formatted and formatted ~= "" then
-                table.insert(lines, formatted)
+        CollectExtraPropertyLinesFromBoosts(stats, lines, seen)
+        if ShouldDebug() and Ext and Ext.Print and #lines == 0 then
+            local statsId = SafeStatsField(stats, "Name")
+                or SafeStatsField(stats, "StatsId")
+                or SafeStatsField(stats, "StatsID")
+            state._ExtraPropsLogged = state._ExtraPropsLogged or {}
+            if statsId and not state._ExtraPropsLogged[statsId] then
+                state._ExtraPropsLogged[statsId] = true
+                local extraRaw = SafeStatsField(stats, "ExtraProperties")
+                local listRaw = propertyLists and SafePropertyField(propertyLists, "ExtraProperties") or nil
+                Ext.Print(string.format(
+                    "[ForgingUI][ItemDetails] ExtraProperties empty stats=%s extraType=%s listType=%s",
+                    tostring(statsId),
+                    tostring(type(extraRaw)),
+                    tostring(type(listRaw))
+                ))
             end
         end
         return lines
