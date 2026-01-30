@@ -19,22 +19,37 @@ function SlotDetails.Create(options)
         return tuning and tuning.DebugSlotDetails == true
     end
 
-    local function FormatText(text, size)
+    local function ParseHexColor(value, fallback)
+        if not value then
+            return fallback
+        end
+        if type(value) == "number" then
+            return value
+        end
+        local hex = tostring(value):gsub("#", "")
+        local num = tonumber("0x" .. hex)
+        if num then
+            return num
+        end
+        return fallback
+    end
+
+    local function FormatText(text, size, colorOverride)
         local ctx = GetContext()
         if Text and Text.Format then
             return Text.Format(text or "", {
-                Color = ctx and ctx.TEXT_COLOR or 0xFFFFFF,
+                Color = colorOverride or (ctx and ctx.TEXT_COLOR) or 0xFFFFFF,
                 Size = size or (ctx and ctx.BODY_TEXT_SIZE) or 12,
             })
         end
         return text or ""
     end
 
-    local function SetLabelText(label, text, size)
+    local function SetLabelText(label, text, size, colorOverride)
         if not label or not label.SetText then
             return
         end
-        label:SetText(FormatText(text, size))
+        label:SetText(FormatText(text, size, colorOverride))
     end
 
     local function EstimateLineCount(lines, bodyWidth, textSize)
@@ -61,8 +76,11 @@ function SlotDetails.Create(options)
         local bodyHeight = section.BodyHeight or 0
         local list = section.List
         local text = section.Text
+        local tuning = ctx and ctx.LayoutTuning or nil
+        local sectionColor = tuning and tuning.InnerSectionTextColorHex or nil
+        local colorOverride = ParseHexColor(sectionColor, ctx and ctx.TEXT_COLOR or 0xFFFFFF)
         local content = table.concat(lines or {}, "\n")
-        SetLabelText(text, content, textSize)
+        SetLabelText(text, content, textSize, colorOverride)
 
         local lineCount = EstimateLineCount(lines or {}, bodyWidth, textSize)
         local lineHeight = math.max(12, textSize + 3)

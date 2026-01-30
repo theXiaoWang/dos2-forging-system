@@ -110,6 +110,10 @@ local LayoutTuning = {
     -- Debug logging for slot details updates (item name/sections).
     DebugSlotDetails = true,
 
+    -- Text color for inner section bodies (Base/Stats/Extra/Skills).
+    -- Hex string without alpha; e.g. "000000" for black.
+    InnerSectionTextColorHex = "000000",
+
     -- Top bar background fill (navbar). Set alpha to 0 to disable.
     TopBarBackgroundColorHex = "000000",
     TopBarBackgroundAlpha = 0,

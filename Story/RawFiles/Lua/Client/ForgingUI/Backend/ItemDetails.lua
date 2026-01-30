@@ -74,10 +74,40 @@ function ItemDetails.Create(options)
         end
         return nil
     end
-    local function GetStatsItemType(stats)
-        if helpers and helpers.GetStatsItemType then
-            return helpers.GetStatsItemType(stats)
+    local function GetStatsIdKey(stats)
+        local statsId = SafeStatsField(stats, "Name")
+            or SafeStatsField(stats, "StatsId")
+            or SafeStatsField(stats, "StatsID")
+        if statsId then
+            return string.upper(tostring(statsId))
         end
+        return nil
+    end
+    local function IsShieldStats(stats)
+        if not stats then
+            return false
+        end
+        if Stats and Stats.GetType then
+            local ok, statsType = pcall(Stats.GetType, stats)
+            if ok and statsType then
+                local normalized = string.lower(tostring(statsType))
+                if normalized == "shield" then
+                    return true
+                end
+            end
+        end
+        local key = GetStatsIdKey(stats)
+        if key then
+            if key:find("^WPN_SHIELD") ~= nil
+                or key:find("^WPN_SHD") ~= nil
+                or key:find("^SHD_") ~= nil
+                or key:find("^SHIELD_") ~= nil then
+                return true
+            end
+        end
+        return false
+    end
+    local function GetStatsItemType(stats)
         if not stats then
             return nil
         end
@@ -85,7 +115,10 @@ function ItemDetails.Create(options)
             local ok, statsType = pcall(Stats.GetType, stats)
             if ok and statsType then
                 local normalized = string.lower(tostring(statsType))
-                if normalized == "weapon" or normalized == "armor" or normalized == "shield" or normalized == "equipment" then
+                if normalized == "weapon"
+                    or normalized == "armor"
+                    or normalized == "shield"
+                    or normalized == "equipment" then
                     return normalized
                 end
                 if normalized == "skilldata" or normalized == "skillbook" then
@@ -93,17 +126,18 @@ function ItemDetails.Create(options)
                 end
             end
         end
-        local statsId = SafeStatsField(stats, "Name")
-            or SafeStatsField(stats, "StatsId")
-            or SafeStatsField(stats, "StatsID")
-        if statsId then
-            local key = string.upper(tostring(statsId))
-            if key:find("^WPN_") ~= nil
-                or key:find("^ARM_") ~= nil
-                or key:find("^ARMOR_") ~= nil
-                or key:find("^SHD_") ~= nil
-                or key:find("^SHIELD_") ~= nil
-                or key:find("^EQP_") ~= nil
+        if IsShieldStats(stats) then
+            return "shield"
+        end
+        local key = GetStatsIdKey(stats)
+        if key then
+            if key:find("^WPN_") ~= nil then
+                return "weapon"
+            end
+            if key:find("^ARM_") ~= nil or key:find("^ARMOR_") ~= nil then
+                return "armor"
+            end
+            if key:find("^EQP_") ~= nil
                 or key:find("^RING_") ~= nil
                 or key:find("^AMULET_") ~= nil
                 or key:find("^BELT_") ~= nil then
@@ -503,6 +537,9 @@ function ItemDetails.Create(options)
     end
 
     local function GetWeaponDamageLines(stats)
+        if IsShieldStats(stats) then
+            return {}
+        end
         local totals = {}
         local order = {}
         local found = CollectDamageFromDynamicStats(stats, totals, order)
@@ -520,16 +557,7 @@ function ItemDetails.Create(options)
             return {}
         end
         local lines = {}
-        local statsType = nil
-        if Stats and Stats.GetType then
-            local ok, statsTypeValue = pcall(Stats.GetType, stats)
-            if ok and statsTypeValue then
-                statsType = string.lower(tostring(statsTypeValue))
-            end
-        end
-        if not statsType then
-            statsType = GetStatsItemType(stats)
-        end
+        local statsType = GetStatsItemType(stats)
 
         if statsType == "weapon" then
             local damageLines = GetWeaponDamageLines(stats)
@@ -549,7 +577,7 @@ function ItemDetails.Create(options)
             if blocking and blocking ~= 0 then
                 table.insert(lines, string.format("Block Chance: %s%%", FormatNumber(blocking)))
             end
-        elseif statsType == "armor" or statsType == "equipment" then
+        elseif statsType == "armor" then
             local armor = SafeStatsField(stats, "Armor Defense Value") or 0
             local magic = SafeStatsField(stats, "Magic Armor Value") or 0
             if armor > 0 then
