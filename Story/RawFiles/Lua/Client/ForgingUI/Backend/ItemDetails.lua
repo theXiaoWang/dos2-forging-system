@@ -724,30 +724,92 @@ function ItemDetails.Create(options)
         return nil
     end
 
+    -- Build cache from game data (dynamic). Prefer Ext.Stats-only so we don't depend on Stats lib.
+    local function GetDisplayFromStat(stat)
+        if not stat then
+            return nil
+        end
+        if stat.DisplayName and Ext and Ext.L10N then
+            local ok, translated = pcall(Ext.L10N.GetTranslatedStringFromKey, stat.DisplayName)
+            if ok and translated and translated ~= "" then
+                return translated
+            end
+        end
+        if stat.DisplayNameRef and stat.DisplayNameRef ~= "" then
+            return stat.DisplayNameRef
+        end
+        if stat.DisplayName and stat.DisplayName ~= "" then
+            local s = tostring(stat.DisplayName):gsub("^|(.-)|$", "%1")
+            if s ~= "" then
+                return s
+            end
+        end
+        return nil
+    end
+
+    local function AddStatusDisplayName(key, display)
+        if not key or key == "" or not display or display == "" then
+            return
+        end
+        local cacheKey = tostring(key):upper()
+        if statusTypeNameCache[cacheKey] == nil then
+            statusTypeNameCache[cacheKey] = display
+        end
+    end
+
     local function BuildStatusTypeNameCache()
         if statusTypeNameCacheBuilt then
             return
         end
-        statusTypeNameCacheBuilt = true
         statusTypeNameCache = {}
-        if not Ext or not Ext.Stats or not Ext.Stats.GetStats or not Stats or not Stats.Get then
-            return
-        end
-        local ok, ids = pcall(Ext.Stats.GetStats, "StatusData")
-        if not ok or type(ids) ~= "table" then
-            return
-        end
-        for _, statId in ipairs(ids) do
-            local stat = Stats.Get("StatsLib_StatsEntry_StatusData", statId)
-            if stat and stat.StatusType and stat.StatusType ~= "" then
-                local key = tostring(stat.StatusType)
-                if statusTypeNameCache[key] == nil then
-                    local display = TranslateStatusDisplayName(stat)
-                    if display and display ~= "" then
-                        statusTypeNameCache[key] = display
+
+        -- Path 1: Ext.Stats only (no Stats lib). Works in-game when SE is available.
+        if Ext and Ext.Stats and Ext.Stats.GetStats and Ext.Stats.Get then
+            local ok, ids = pcall(Ext.Stats.GetStats, "StatusData")
+            if ok and type(ids) == "table" then
+                for _, statId in ipairs(ids) do
+                    local pok, stat = pcall(Ext.Stats.Get, statId)
+                    if pok and stat then
+                        local display = GetDisplayFromStat(stat)
+                        AddStatusDisplayName(stat.StatusType, display)
+                        AddStatusDisplayName(stat.Name, display)
+                        AddStatusDisplayName(stat.StatsId, display)
+                        AddStatusDisplayName(statId, display)
+                        -- Some StatusData files have multiple entries (e.g. ENRAGED + MUTED in one file).
+                        if stat.StatObjects and type(stat.StatObjects) == "table" then
+                            for _, sub in ipairs(stat.StatObjects) do
+                                if sub then
+                                    local subDisplay = GetDisplayFromStat(sub)
+                                    AddStatusDisplayName(sub.StatusType, subDisplay)
+                                    AddStatusDisplayName(sub.Name, subDisplay)
+                                    AddStatusDisplayName(sub.StatsId, subDisplay)
+                                end
+                            end
+                        end
                     end
                 end
             end
+        end
+
+        -- Path 2: Stats lib (Epic Encounters / StatsEntryAnnotations) if available.
+        if (not statusTypeNameCache or next(statusTypeNameCache) == nil) and Stats and Stats.Get then
+            local ok, ids = pcall(Ext.Stats.GetStats, "StatusData")
+            if ok and type(ids) == "table" and Ext and Ext.Stats then
+                for _, statId in ipairs(ids) do
+                    local stat = Stats.Get("StatsLib_StatsEntry_StatusData", statId)
+                    if stat then
+                        local display = TranslateStatusDisplayName(stat)
+                        AddStatusDisplayName(stat.StatusType, display)
+                        AddStatusDisplayName(stat.Name, display)
+                        AddStatusDisplayName(stat.StatsId, display)
+                        AddStatusDisplayName(statId, display)
+                    end
+                end
+            end
+        end
+
+        if statusTypeNameCache and next(statusTypeNameCache) ~= nil then
+            statusTypeNameCacheBuilt = true
         end
     end
 
@@ -755,33 +817,43 @@ function ItemDetails.Create(options)
         if not statusId then
             return ""
         end
-        local key = tostring(statusId)
-        if statusNameCache[key] then
-            return statusNameCache[key]
+        local keyRaw = tostring(statusId)
+        local keyUpper = keyRaw:upper()
+        local cached = statusNameCache[keyRaw] or statusNameCache[keyUpper]
+        if cached then
+            return cached
         end
         local name = nil
 
         if Stats and Stats.GetStatusName then
-            local ok, result = pcall(Stats.GetStatusName, {StatusId = key, StatusType = key})
-            if ok and result and result ~= "" and result ~= key then
-                name = result
+            local ok, result = pcall(Stats.GetStatusName, {StatusId = keyRaw, StatusType = keyUpper})
+            local resultText = ok and result and tostring(result) or ""
+            if resultText ~= "" and resultText:upper() ~= keyUpper then
+                name = resultText
             end
         end
 
         if not name and Stats and Stats.Get then
-            local stat = Stats.Get("StatsLib_StatsEntry_StatusData", key)
+            local stat = Stats.Get("StatsLib_StatsEntry_StatusData", keyRaw)
             name = TranslateStatusDisplayName(stat)
+            if not name and stat and stat.StatusType then
+                BuildStatusTypeNameCache()
+                if statusTypeNameCache then
+                    name = statusTypeNameCache[tostring(stat.StatusType):upper()]
+                end
+            end
         end
 
         if not name then
             BuildStatusTypeNameCache()
             if statusTypeNameCache then
-                name = statusTypeNameCache[key]
+                name = statusTypeNameCache[keyUpper]
             end
         end
 
-        name = name or key
-        statusNameCache[key] = name
+        name = name or keyRaw
+        statusNameCache[keyRaw] = name
+        statusNameCache[keyUpper] = name
         return name
     end
 
