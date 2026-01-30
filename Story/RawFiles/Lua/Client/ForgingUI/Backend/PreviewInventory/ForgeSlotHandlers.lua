@@ -27,6 +27,7 @@ function ForgeSlotHandlers.Create(options)
     local validateForgeSlotDrop = opts.validateForgeSlotDrop
     local playSound = opts.playSound
     local defaultDropSound = opts.defaultDropSound
+    local updateSlotDetails = opts.updateSlotDetails
 
     local function HandleForgeSlotDrop(slotId, slot, ev)
         slotId = resolveForgeSlotId and resolveForgeSlotId(slotId, slot) or slotId
@@ -58,6 +59,7 @@ function ForgeSlotHandlers.Create(options)
                     resetSlotVisualState(slot)
                 end
             end
+            local restored = false
             if previousHandle and (not isValidHandle or isValidHandle(previousHandle)) and slot and slot.SetItem then
                 local previousItem = getItemFromHandle and getItemFromHandle(previousHandle) or nil
                 if previousItem then
@@ -66,7 +68,14 @@ function ForgeSlotHandlers.Create(options)
                     if assignSlotItem then
                         assignSlotItem(slotId, slot, previousItem)
                     end
+                    if updateSlotDetails then
+                        updateSlotDetails(slotId, previousItem)
+                    end
+                    restored = true
                 end
+            end
+            if updateSlotDetails and not restored then
+                updateSlotDetails(slotId, nil)
             end
             if refreshInventoryHighlights then
                 refreshInventoryHighlights()
@@ -106,6 +115,7 @@ function ForgeSlotHandlers.Create(options)
                         resetSlotVisualState(slot)
                     end
                 end
+                local restored = false
                 if previousHandle and (not isValidHandle or isValidHandle(previousHandle)) and slot and slot.SetItem then
                     local previousItem = getItemFromHandle and getItemFromHandle(previousHandle) or nil
                     if previousItem then
@@ -114,7 +124,14 @@ function ForgeSlotHandlers.Create(options)
                         if assignSlotItem then
                             assignSlotItem(slotId, slot, previousItem)
                         end
+                        if updateSlotDetails then
+                            updateSlotDetails(slotId, previousItem)
+                        end
+                        restored = true
                     end
+                end
+                if updateSlotDetails and not restored then
+                    updateSlotDetails(slotId, nil)
                 end
                 if refreshInventoryHighlights then
                     refreshInventoryHighlights()
@@ -139,6 +156,9 @@ function ForgeSlotHandlers.Create(options)
             slot:SetEnabled(true)
             if assignSlotItem then
                 assignSlotItem(slotId, slot, item)
+            end
+            if updateSlotDetails then
+                updateSlotDetails(slotId, item)
             end
         elseif dropHandle then
             if assignSlotItem then
@@ -165,6 +185,9 @@ function ForgeSlotHandlers.Create(options)
         slotId = resolveForgeSlotId and resolveForgeSlotId(slotId, state and state.ForgeSlots and state.ForgeSlots[slotId]) or slotId
         if clearSlotMapping then
             clearSlotMapping(slotId)
+        end
+        if updateSlotDetails then
+            updateSlotDetails(slotId, nil)
         end
         if slotId and state and state.ForgeSlots and state.ForgeSlots[slotId] and state.ForgeSlots[slotId].SetEnabled then
             state.ForgeSlots[slotId]:SetEnabled(true)
@@ -196,6 +219,9 @@ function ForgeSlotHandlers.Create(options)
         end
         if clearSlotMapping then
             clearSlotMapping(slotId)
+        end
+        if updateSlotDetails then
+            updateSlotDetails(slotId, nil)
         end
         if clearSlotHighlight then
             clearSlotHighlight(slot)

@@ -789,6 +789,7 @@ function Layout.BuildUI()
         registerSearchBlur = RegisterSearchBlur,
         wireButton = WireButton,
         applyElementSize = ApplyElementSize,
+        slotDetailsUI = ctx and ctx.SlotDetailsUI or nil,
         scaleX = Layout.ScaleX,
         scaleY = Layout.ScaleY,
         vector = V,

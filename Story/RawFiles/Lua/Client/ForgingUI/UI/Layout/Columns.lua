@@ -35,6 +35,7 @@ function Columns.Build(options)
     local registerSearchBlur = opts.registerSearchBlur
     local wireButton = opts.wireButton
     local applyElementSize = opts.applyElementSize
+    local slotDetailsUI = opts.slotDetailsUI
     local scaleX = opts.scaleX or function(value) return value end
     local scaleY = opts.scaleY or function(value) return value end
     local vector = opts.vector or function(...) return Vector.Create(...) end
@@ -134,36 +135,104 @@ function Columns.Build(options)
             end
         else
             local runeHeight = 18
-            local available = panelInnerHeight - headerHeight - runeHeight - columnGap * 4
-            local itemHeight = math.floor(available * 0.28)
-            local statsHeight = math.floor(available * 0.32)
-            local extraHeight = math.floor(available * 0.28)
-            local skillsHeight = available - itemHeight - statsHeight - extraHeight
+            local reducedGap = math.max(2, math.floor(columnGap * 0.5))
+            local layoutTuning = ctx and ctx.LayoutTuning or nil
+            if layoutTuning and layoutTuning.SlotSectionGapY ~= nil then
+                reducedGap = scaleY(layoutTuning.SlotSectionGapY)
+            end
 
             -- Width reduction for child panels (Stats, Extra Properties, Skills, Rune Slots)
             -- Positive values make panels narrower by reducing width from both sides
             local childPanelWidthReduction = scaleX(60)
+            if layoutTuning and layoutTuning.SlotSectionWidthReductionX ~= nil then
+                childPanelWidthReduction = scaleX(layoutTuning.SlotSectionWidthReductionX)
+            end
             local childPanelWidth = panelInnerWidth - 12 - childPanelWidthReduction
             local childPanelX = 6 + math.floor(childPanelWidthReduction / 2)
 
             local cursorY = headerHeight + columnGap
-            local socketSize = math.min(56, itemHeight - 8)
+            local socketSize = math.min(56, math.max(32, math.floor((panelInnerHeight - headerHeight) * 0.18)))
             local slotX = math.floor((panelInnerWidth - socketSize) / 2)
             local slotY = cursorY + 4
             createDropSlot(panel, cfg.ID .. "_ItemSlot", slotX, slotY, socketSize)
             local slotBottom = slotY + socketSize
-            local slotToPanelGap = 60
-            local reducedGap = math.max(2, math.floor(columnGap * 0.5))
-            cursorY = slotBottom + slotToPanelGap
+            local infoGap = scaleY(4)
+            local infoLineHeight = scaleY(16)
+            local infoBlockHeight = infoLineHeight * 3 + infoGap * 2
+            local infoY = slotBottom + scaleY(6)
+            local itemNameLabel = createTextElement(panel, cfg.ID .. "_ItemName", "", childPanelX, infoY, childPanelWidth, infoLineHeight, "Center", true, {Size = ctx.HEADER_TEXT_SIZE})
+            local rarityY = infoY + infoLineHeight + infoGap
+            local itemRarityLabel = createTextElement(panel, cfg.ID .. "_ItemRarity", "", childPanelX, rarityY, childPanelWidth, infoLineHeight, "Center", false, {Size = ctx.BODY_TEXT_SIZE})
+            local levelY = rarityY + infoLineHeight + infoGap
+            local itemLevelLabel = createTextElement(panel, cfg.ID .. "_ItemLevel", "", childPanelX, levelY, childPanelWidth, infoLineHeight, "Center", false, {Size = ctx.BODY_TEXT_SIZE})
 
-            createSectionBox(panel, cfg.ID .. "_Stats", childPanelX, cursorY, childPanelWidth, statsHeight, "Stats", "", "")
+            cursorY = infoY + infoBlockHeight + reducedGap
+
+            local sectionHeightTrim = 0
+            if layoutTuning and layoutTuning.SlotSectionHeightTrimY ~= nil then
+                sectionHeightTrim = scaleY(layoutTuning.SlotSectionHeightTrimY)
+            end
+            local sectionAvailable = panelInnerHeight - cursorY - runeHeight - reducedGap * 4 - sectionHeightTrim
+            if sectionAvailable < 0 then
+                sectionAvailable = 0
+            end
+            local baseRatio = 2 / 3
+            local statsRatio = 4 / 3
+            local extraRatio = 4 / 3
+            local skillsRatio = baseRatio
+            local ratioSum = baseRatio + statsRatio + extraRatio + skillsRatio
+            local baseHeight = math.floor(sectionAvailable * (baseRatio / ratioSum))
+            local statsHeight = math.floor(sectionAvailable * (statsRatio / ratioSum))
+            local extraHeight = math.floor(sectionAvailable * (extraRatio / ratioSum))
+            local skillsHeight = sectionAvailable - baseHeight - statsHeight - extraHeight
+
+            local function CreateScrollableSection(sectionId, sectionInner, innerWidth, innerHeight, bodyX, bodyWidth)
+                if not sectionInner then
+                    return nil
+                end
+                local bodyY = 16
+                local bodyHeight = innerHeight - 32
+                if bodyHeight < 0 then
+                    bodyHeight = 0
+                end
+                local list = sectionInner:AddChild(sectionId .. "_ScrollList", "GenericUI_Element_ScrollList")
+                list:SetPosition(bodyX or 0, bodyY)
+                if applyElementSize then
+                    applyElementSize(list, bodyWidth or innerWidth, bodyHeight)
+                end
+                if list.SetMouseWheelEnabled then
+                    list:SetMouseWheelEnabled(true)
+                end
+                if list.SetFrame then
+                    list:SetFrame(bodyWidth or innerWidth, bodyHeight)
+                end
+                if list.SetScrollbarSpacing then
+                    list:SetScrollbarSpacing(0)
+                end
+                local text = createTextElement(list, sectionId .. "_BodyText", "", 0, 0, bodyWidth or innerWidth, bodyHeight, "Left", true, {Size = ctx.BODY_TEXT_SIZE})
+                return {
+                    List = list,
+                    Text = text,
+                    BodyWidth = bodyWidth or innerWidth,
+                    BodyHeight = bodyHeight,
+                }
+            end
+
+            local baseBox, baseInnerW, baseInnerH = createSectionBox(panel, cfg.ID .. "_Base", childPanelX, cursorY, childPanelWidth, baseHeight, "Base Value", "", "")
+            local baseSection = CreateScrollableSection(cfg.ID .. "_Base", baseBox, baseInnerW or childPanelWidth, baseInnerH or baseHeight)
+            cursorY = cursorY + baseHeight + reducedGap
+
+            local statsBox, statsInnerW, statsInnerH = createSectionBox(panel, cfg.ID .. "_Stats", childPanelX, cursorY, childPanelWidth, statsHeight, "Stats", "", "")
+            local statsSection = CreateScrollableSection(cfg.ID .. "_Stats", statsBox, statsInnerW or childPanelWidth, statsInnerH or statsHeight)
             cursorY = cursorY + statsHeight + reducedGap
 
-            createSectionBox(panel, cfg.ID .. "_Extra", childPanelX, cursorY, childPanelWidth, extraHeight, "Extra Properties", "", "")
+            local extraBox, extraInnerW, extraInnerH = createSectionBox(panel, cfg.ID .. "_Extra", childPanelX, cursorY, childPanelWidth, extraHeight, "Extra Properties", "", "")
+            local extraSection = CreateScrollableSection(cfg.ID .. "_Extra", extraBox, extraInnerW or childPanelWidth, extraInnerH or extraHeight)
             cursorY = cursorY + extraHeight + reducedGap
 
             local skillsTitle = cfg.Mode == "Donor" and "Granted Skill / Skillbook Protect" or "Granted Skills"
-            local skillsBox = createSectionBox(panel, cfg.ID .. "_Skills", childPanelX, cursorY, childPanelWidth, skillsHeight, skillsTitle, "", "")
+            local skillsBox, skillsInnerW, skillsInnerH = createSectionBox(panel, cfg.ID .. "_Skills", childPanelX, cursorY, childPanelWidth, skillsHeight, skillsTitle, "", "")
+            local reservedWidth = 0
             if cfg.Mode == "Donor" then
                 local slotSize = math.min(50, skillsHeight - 30)
                 if slotSize > 0 then
@@ -171,11 +240,33 @@ function Columns.Build(options)
                     local slotSlotX = skillsBoxWidth - slotSize - 8
                     local skillSlotY = math.floor((skillsHeight - slotSize) / 2)
                     createDropSlot(skillsBox, "Donor_SkillbookSlot", slotSlotX, skillSlotY, slotSize)
+                    reservedWidth = slotSize + 12
                 end
             end
+            local skillsBodyWidth = (skillsInnerW or childPanelWidth) - reservedWidth
+            if skillsBodyWidth < 0 then
+                skillsBodyWidth = 0
+            end
+            local skillsSection = CreateScrollableSection(cfg.ID .. "_Skills", skillsBox, skillsInnerW or childPanelWidth, skillsInnerH or skillsHeight, 0, skillsBodyWidth)
 
             local runeY = cursorY + skillsHeight + reducedGap
-            createTextElement(panel, cfg.ID .. "_Runes", "Rune Slots:", childPanelX + 4, runeY, childPanelWidth - 8, runeHeight, "Left")
+            local runeLabel = createTextElement(panel, cfg.ID .. "_Runes", "Rune Slots:", childPanelX + 4, runeY, childPanelWidth - 8, runeHeight, "Left")
+
+            if slotDetailsUI and slotDetailsUI.RegisterSlot then
+                slotDetailsUI.RegisterSlot({
+                    SlotId = cfg.ID .. "_ItemSlot",
+                    NameLabel = itemNameLabel,
+                    RarityLabel = itemRarityLabel,
+                    LevelLabel = itemLevelLabel,
+                    RuneLabel = runeLabel,
+                    Sections = {
+                        Base = baseSection,
+                        Stats = statsSection,
+                        Extra = extraSection,
+                        Skills = skillsSection,
+                    },
+                })
+            end
         end
     end
 end

@@ -47,6 +47,17 @@ local LayoutTuning = {
     -- Width ratio for Main/Donor slot panels within the mid column (unitless).
     SlotPanelWidthRatio = 0.28,
 
+    -- Gap between the inner sections inside Main/Donor panels (scaled by ScaleY).
+    SlotSectionGapY = 6,
+
+    -- Width reduction applied to inner sections inside Main/Donor panels (scaled by ScaleX).
+    -- Positive values make sections narrower by reducing width from both sides.
+    SlotSectionWidthReductionX = 70,
+
+    -- Trim applied to the total height budget for the four inner sections (scaled by ScaleY).
+    -- Positive values make all four sections shorter.
+    SlotSectionHeightTrimY = 80,
+
     -- Horizontal gap between Main/Preview/Donor panels (scaled by ScaleX).
     -- Negative values overlap panels to remove seams.
     ColumnGapX = -20,

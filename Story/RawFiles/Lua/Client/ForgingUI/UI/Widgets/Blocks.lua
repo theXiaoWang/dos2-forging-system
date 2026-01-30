@@ -37,7 +37,7 @@ function Blocks.Create(options)
             createTextElement(inner, id .. "_Body", bodyText or "", 0, 16, innerWidth, innerHeight - 32, "Left", true, {size = ctx.BODY_TEXT_SIZE})
             createTextElement(inner, id .. "_Footer", footerText or "", 0, innerHeight - 16, innerWidth, 16, "Left", false, {size = ctx.BODY_TEXT_SIZE})
         end
-        return inner or frame
+        return inner or frame, innerWidth, innerHeight
     end
 
     local function CreateItemCard(parent, id, x, y, width, height, iconLabel, bodyText, levelText)

@@ -6,8 +6,20 @@ Client = Client or {}
 Client.ForgingUI = ForgingUI
 Ext.Require("Client/ForgingUI/Backend/InventoryService.lua")
 Ext.Require("Client/ForgingUI/Backend/PreviewInventory/Logic.lua")
+local function SafeRequire(path)
+    local ok, module = pcall(Ext.Require, path)
+    if ok then
+        return module
+    end
+    if Ext and Ext.Print then
+        Ext.Print(string.format("[ForgingUI] Require failed: %s", tostring(module)))
+    end
+    return nil
+end
+local ItemDetailsModule = SafeRequire("Client/ForgingUI/Backend/ItemDetails.lua")
 Ext.Require("Client/ForgingUI/UI/Widgets.lua")
 Ext.Require("Client/ForgingUI/UI/Layout.lua")
+local SlotDetailsModule = SafeRequire("Client/ForgingUI/UI/SlotDetails.lua")
 Ext.Require("Client/ForgingUI/Backend/CraftDocking.lua")
 local LayoutTuning = Ext.Require("Client/ForgingUI/Config/LayoutTuning.lua")
 local UIConstants = Ext.Require("Client/ForgingUI/Config/UIConstants.lua")
@@ -20,6 +32,8 @@ local Widgets = ForgingUI.Widgets or {}
 local Layout = ForgingUI.Layout or {}
 local Craft = ForgingUI.Craft or {}
 local CraftState = Craft.State or {}
+local ItemDetails = nil
+local SlotDetailsUI = nil
 ForgingUI.Slots = {}
 ForgingUI.Buttons = {}
 local uiInstance = nil
@@ -150,6 +164,27 @@ local Context = {
     CRAFT_FILTER_TIMER_ID = CRAFT_FILTER_TIMER_ID,
 }
 
+local function SafeCreate(module, name)
+    if not module or not module.Create then
+        return nil
+    end
+    local ok, result = pcall(module.Create, {
+        getContext = function()
+            return Context
+        end,
+    })
+    if not ok then
+        if Ext and Ext.Print then
+            Ext.Print(string.format("[ForgingUI] %s init failed: %s", tostring(name), tostring(result)))
+        end
+        return nil
+    end
+    return result
+end
+
+ItemDetails = SafeCreate(ItemDetailsModule, "ItemDetails")
+SlotDetailsUI = SafeCreate(SlotDetailsModule, "SlotDetailsUI")
+
 local function RefreshContext()
     Context.uiInstance = uiInstance
     Context.genericUI = genericUI
@@ -201,6 +236,8 @@ local function RefreshContext()
     Context.mainSlotIconScale = MAIN_SLOT_ICON_SCALE
     Context.mainSlotIconOffsetX = MAIN_SLOT_ICON_OFFSET_X
     Context.mainSlotIconOffsetY = MAIN_SLOT_ICON_OFFSET_Y
+    Context.ItemDetails = ItemDetails
+    Context.SlotDetailsUI = SlotDetailsUI
     Context.BASE_PANEL_ALPHA = BASE_PANEL_ALPHA
     Context.SECTION_FRAME_ALPHA = SECTION_FRAME_ALPHA
     Context.SECTION_TEXTURE_CENTER_ALPHA = SECTION_TEXTURE_CENTER_ALPHA

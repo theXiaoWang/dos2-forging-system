@@ -24,6 +24,7 @@ local State = {
     LastWarningTime = nil,
     LastPreviewHoverSlot = nil,
     LastForgeHoverSlot = nil,
+    SlotDetailHandles = {},
     EquipmentSlotNames = nil,
     PreviewSortMode = "Default",
     ItemAcquireOrder = {},
@@ -271,6 +272,26 @@ function PreviewLogic.ShowDropWarning(slotId, item)
     ShowDropWarning(slotId, item)
 end
 
+local function UpdateSlotDetails(slotId, item)
+    local currentCtx = ctx
+    if not currentCtx then
+        return
+    end
+    local detailsUI = currentCtx.SlotDetailsUI
+    local detailsProvider = currentCtx.ItemDetails
+    if not detailsUI or not detailsUI.UpdateSlot or not detailsProvider or not detailsProvider.GetItemDetails then
+        return
+    end
+    local handle = item and item.Handle or nil
+    if State.SlotDetailHandles[slotId] == handle then
+        return
+    end
+    State.SlotDetailHandles[slotId] = handle
+    local details = item and detailsProvider.GetItemDetails(item) or nil
+    detailsUI.UpdateSlot(slotId, details)
+end
+PreviewLogic.UpdateSlotDetails = UpdateSlotDetails
+
 function PreviewLogic.CanAcceptItem(slotId, item, obj)
     local itemType, isEquipment, isSkillbook = GetDropClassification(item, obj)
 
@@ -332,7 +353,17 @@ local ForgeSlotMapping = Ext.Require("Client/ForgingUI/Backend/PreviewInventory/
     clearStaleHighlights = ClearStaleHighlights,
 })
 local ClearSlotMapping = ForgeSlotMapping.ClearSlotMapping
-PreviewLogic.SyncForgeSlots = ForgeSlotMapping.SyncForgeSlots
+local SyncForgeSlots = ForgeSlotMapping.SyncForgeSlots
+PreviewLogic.SyncForgeSlots = function()
+    SyncForgeSlots()
+    if State and State.ForgeSlots then
+        for slotId, _ in pairs(State.ForgeSlots) do
+            local handle = State.SlotItems and State.SlotItems[slotId] or nil
+            local item = handle and GetItemFromHandle and GetItemFromHandle(handle) or nil
+            UpdateSlotDetails(slotId, item)
+        end
+    end
+end
 PreviewLogic.AssignSlotItem = ForgeSlotMapping.AssignSlotItem
 PreviewLogic.ClearForgeSlot = ForgeSlotMapping.ClearForgeSlot
 
@@ -394,6 +425,7 @@ local ForgeSlotHandlers = Ext.Require("Client/ForgingUI/Backend/PreviewInventory
     validateForgeSlotDrop = ValidateForgeSlotDrop,
     playSound = PlaySound,
     defaultDropSound = DEFAULT_DROP_SOUND,
+    updateSlotDetails = UpdateSlotDetails,
 })
 PreviewLogic.HandleForgeSlotDrop = ForgeSlotHandlers.HandleForgeSlotDrop
 PreviewLogic.HandleForgeSlotDragStarted = ForgeSlotHandlers.HandleForgeSlotDragStarted
@@ -441,9 +473,13 @@ function PreviewLogic.Bind(slots, previewInventory)
         State.CurrentPreviewFilter = nil
         State.PreviewDragItemHandle = nil
         State.PreviewDragSourceIndex = nil
+        State.SlotDetailHandles = {}
     end
     State.PreviewInventory = previewInventory
     PreviewLogic.RegisterForgeSlots(slots)
+    if PreviewLogic.SyncForgeSlots then
+        PreviewLogic.SyncForgeSlots()
+    end
     PreviewLogic.EnsureForgeSlotValidator()
 end
 
