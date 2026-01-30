@@ -34,12 +34,14 @@ function DragDrop.Create(options)
     end
 
     local function GetItemFromHandle(handle)
-        if not handle or not Item or not Item.Get then
+        if not handle then
             return nil
         end
-        local ok, item = pcall(Item.Get, handle)
-        if ok and item then
-            return item
+        if Item and Item.Get then
+            local ok, item = pcall(Item.Get, handle)
+            if ok and item then
+                return item
+            end
         end
         if Ext and Ext.Entity and Ext.Entity.GetItem then
             local okEntity, entity = pcall(Ext.Entity.GetItem, handle)
@@ -86,15 +88,24 @@ function DragDrop.Create(options)
             return nil
         end
         local obj = slot.Object
-        if obj.Type == "Item" and obj.ItemHandle and IsValidHandle(obj.ItemHandle) then
+        if obj.Type == "Item" and obj.ItemHandle then
+            if (not IsValidHandle) or IsValidHandle(obj.ItemHandle) then
+                return obj.ItemHandle
+            end
             return obj.ItemHandle
         end
-        if obj.ItemHandle and IsValidHandle(obj.ItemHandle) then
+        if obj.ItemHandle then
+            if (not IsValidHandle) or IsValidHandle(obj.ItemHandle) then
+                return obj.ItemHandle
+            end
             return obj.ItemHandle
         end
         if obj.GetEntity then
             local entity = obj:GetEntity()
-            if entity and entity.Handle and IsValidHandle(entity.Handle) then
+            if entity and entity.Handle then
+                if (not IsValidHandle) or IsValidHandle(entity.Handle) then
+                    return entity.Handle
+                end
                 return entity.Handle
             end
         end

@@ -184,6 +184,14 @@ end
 
 ItemDetails = SafeCreate(ItemDetailsModule, "ItemDetails")
 SlotDetailsUI = SafeCreate(SlotDetailsModule, "SlotDetailsUI")
+if Ext and Ext.Print then
+    if not ItemDetails then
+        Ext.Print("[ForgingUI] ItemDetails unavailable; slot details will not populate.")
+    end
+    if not SlotDetailsUI then
+        Ext.Print("[ForgingUI] SlotDetailsUI unavailable; slot details will not populate.")
+    end
+end
 
 local function RefreshContext()
     Context.uiInstance = uiInstance

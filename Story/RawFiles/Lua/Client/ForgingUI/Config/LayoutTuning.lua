@@ -107,6 +107,9 @@ local LayoutTuning = {
     -- Debug logging for top bar frame construction.
     TopBarDebug = true,
 
+    -- Debug logging for slot details updates (item name/sections).
+    DebugSlotDetails = true,
+
     -- Top bar background fill (navbar). Set alpha to 0 to disable.
     TopBarBackgroundColorHex = "000000",
     TopBarBackgroundAlpha = 0,

@@ -14,6 +14,11 @@ function SlotDetails.Create(options)
         return getContext and getContext() or nil
     end
 
+    local function ShouldDebugSlotDetails(ctx)
+        local tuning = ctx and ctx.LayoutTuning or nil
+        return tuning and tuning.DebugSlotDetails == true
+    end
+
     local function FormatText(text, size)
         local ctx = GetContext()
         if Text and Text.Format then
@@ -83,9 +88,14 @@ function SlotDetails.Create(options)
     local function UpdateSlot(slotId, details)
         local slot = slots[slotId]
         if not slot then
+            local ctx = GetContext()
+            if ShouldDebugSlotDetails(ctx) and Ext and Ext.Print then
+                Ext.Print(string.format("[ForgingUI][SlotDetailsUI] Slot not registered: %s", tostring(slotId)))
+            end
             return
         end
         local ctx = GetContext()
+        local debug = ShouldDebugSlotDetails(ctx)
         local headerSize = ctx and ctx.HEADER_TEXT_SIZE or 13
         local bodySize = ctx and ctx.BODY_TEXT_SIZE or 11
         local name = details and details.Name or ""
@@ -94,6 +104,23 @@ function SlotDetails.Create(options)
         local levelText = level and ("Level " .. tostring(level)) or ""
         local runeSlots = details and details.RuneSlots or nil
         local runeText = runeSlots and ("Rune Slots: " .. tostring(runeSlots)) or "Rune Slots:"
+        if debug and Ext and Ext.Print then
+            local baseCount = details and details.BaseValues and #details.BaseValues or 0
+            local statCount = details and details.Stats and #details.Stats or 0
+            local extraCount = details and details.ExtraProperties and #details.ExtraProperties or 0
+            local skillCount = details and details.Skills and #details.Skills or 0
+            Ext.Print(string.format(
+                "[ForgingUI][SlotDetailsUI] slot=%s name='%s' rarity='%s' level='%s' base=%s stats=%s extra=%s skills=%s",
+                tostring(slotId),
+                tostring(name),
+                tostring(rarity),
+                tostring(levelText),
+                tostring(baseCount),
+                tostring(statCount),
+                tostring(extraCount),
+                tostring(skillCount)
+            ))
+        end
 
         SetLabelText(slot.NameLabel, name, headerSize)
         SetLabelText(slot.RarityLabel, rarity, bodySize)

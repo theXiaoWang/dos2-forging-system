@@ -61,6 +61,11 @@ local function V(...)
     return ctx and ctx.V and ctx.V(...) or Vector.Create(...)
 end
 
+local function ShouldDebugSlotDetails(currentCtx)
+    local tuning = currentCtx and currentCtx.LayoutTuning or nil
+    return tuning and tuning.DebugSlotDetails == true
+end
+
 function PreviewLogic.SetContext(nextCtx)
     ctx = nextCtx
 end
@@ -277,17 +282,109 @@ local function UpdateSlotDetails(slotId, item)
     if not currentCtx then
         return
     end
+    local slotKey = tostring(slotId or ""):lower()
+    if slotKey ~= "" and slotKey:find("skillbook", 1, true) then
+        return
+    end
+    local debug = ShouldDebugSlotDetails(currentCtx)
     local detailsUI = currentCtx.SlotDetailsUI
     local detailsProvider = currentCtx.ItemDetails
     if not detailsUI or not detailsUI.UpdateSlot or not detailsProvider or not detailsProvider.GetItemDetails then
+        if debug and Ext and Ext.Print then
+            Ext.Print(string.format(
+                "[ForgingUI][SlotDetails] Update skipped slot=%s detailsUI=%s provider=%s",
+                tostring(slotId),
+                tostring(detailsUI ~= nil),
+                tostring(detailsProvider ~= nil)
+            ))
+        end
         return
     end
-    local handle = item and item.Handle or nil
-    if State.SlotDetailHandles[slotId] == handle then
+    local slotMap = currentCtx.ForgingUI and currentCtx.ForgingUI.Slots or nil
+    local slot = slotMap and slotMap[slotId] or nil
+    local obj = slot and slot.Object or nil
+    if item and not item.Handle and item.ItemHandle and GetItemFromHandle then
+        local resolved = GetItemFromHandle(item.ItemHandle)
+        if resolved then
+            item = resolved
+        end
+    end
+    if not item or not item.Handle then
+        if obj then
+            if obj.GetEntity then
+                local ok, entity = pcall(obj.GetEntity, obj)
+                if ok and entity then
+                    item = entity
+                end
+            end
+            if (not item or not item.Handle) and obj.ItemHandle and GetItemFromHandle then
+                item = GetItemFromHandle(obj.ItemHandle)
+            end
+            if (not item or not item.Handle) and obj.TemplateID and currentCtx.Inventory and currentCtx.Inventory.GetInventoryItems then
+                for _, entry in ipairs(currentCtx.Inventory.GetInventoryItems() or {}) do
+                    local entity = entry.Item or entry.Entity
+                    if entity and entity.RootTemplate and entity.RootTemplate.Id == obj.TemplateID then
+                        item = entity
+                        break
+                    end
+                end
+            end
+        end
+    end
+    local handle = item and (item.Handle or item.ItemHandle) or nil
+    local previousHandle = State.SlotDetailHandles[slotId]
+    local hasSlotObject = obj and ((obj.Type and obj.Type ~= "None") or obj.Type == nil)
+    if handle == nil and previousHandle == nil and not hasSlotObject then
+        return
+    end
+    if handle ~= nil and previousHandle == handle then
         return
     end
     State.SlotDetailHandles[slotId] = handle
-    local details = item and detailsProvider.GetItemDetails(item) or nil
+    if debug and Ext and Ext.Print then
+        Ext.Print(string.format(
+            "[ForgingUI][SlotDetails] Update request slot=%s handle=%s hasItem=%s",
+            tostring(slotId),
+            tostring(handle),
+            tostring(item ~= nil)
+        ))
+        if not item and hasSlotObject and obj then
+            State.SlotDetailDebug = State.SlotDetailDebug or {}
+            local signature = table.concat({
+                tostring(obj.Type),
+                tostring(obj.ItemHandle),
+                tostring(obj.TemplateID),
+                tostring(obj.StatsID)
+            }, "|")
+            if State.SlotDetailDebug[slotId] ~= signature then
+                State.SlotDetailDebug[slotId] = signature
+                Ext.Print(string.format(
+                    "[ForgingUI][SlotDetails] slot=%s objType=%s itemHandle=%s template=%s stats=%s",
+                    tostring(slotId),
+                    tostring(obj.Type),
+                    tostring(obj.ItemHandle),
+                    tostring(obj.TemplateID),
+                    tostring(obj.StatsID)
+                ))
+            end
+        end
+    end
+    local details = nil
+    if item then
+        local ok, result = pcall(detailsProvider.GetItemDetails, item)
+        if ok then
+            details = result
+        elseif Ext and Ext.Print then
+            Ext.Print(string.format("[ForgingUI] ItemDetails.GetItemDetails failed: %s", tostring(result)))
+        end
+    end
+    if debug and Ext and Ext.Print then
+        Ext.Print(string.format(
+            "[ForgingUI][SlotDetails] Update apply slot=%s details=%s",
+            tostring(slotId),
+            tostring(details ~= nil)
+        ))
+    end
     detailsUI.UpdateSlot(slotId, details)
 end
 PreviewLogic.UpdateSlotDetails = UpdateSlotDetails
