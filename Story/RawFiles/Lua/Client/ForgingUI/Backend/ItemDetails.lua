@@ -624,7 +624,9 @@ function ItemDetails.Create(options)
         {Keys = {"Persuasion"}, Label = ResolveAbilityLabel("Persuasion"), Canonical = "Persuasion"},
         {Keys = {"Luck"}, Label = ResolveAbilityLabel("Luck"), Canonical = "Luck"},
         {Keys = {"CriticalChance"}, Label = "Critical Chance", Percent = true, Canonical = "CriticalChance"},
-        {Keys = {"CriticalDamage"}, Label = "Critical Damage", Percent = true, Canonical = "CriticalDamage"},
+        -- CriticalDamage is a base weapon stat (often 150%) shown in the tooltip header, not as a blue stat.
+        -- It can look doubled when base + dynamic stats are summed, so keep it out of the blue stats section.
+        {Keys = {"CriticalDamage"}, Label = "Critical Damage", Percent = true, Canonical = "CriticalDamage", HideInStatsSection = true},
         {Keys = {"AccuracyBoost", "ChanceToHitBoost"}, Label = "Accuracy", Percent = true, Canonical = "Accuracy"},
         {Keys = {"DodgeBoost"}, Label = "Dodge", Percent = true, Canonical = "Dodge"},
         {Keys = {"LifeSteal"}, Label = "Life Steal", Percent = true, Canonical = "LifeSteal"},
@@ -637,7 +639,9 @@ function ItemDetails.Create(options)
         {Keys = {"APRecovery"}, Label = "AP Recovery", Canonical = "APRecovery"},
         {Keys = {"ArmorBoost"}, Label = "Physical Armour", Canonical = "ArmorBoost"},
         {Keys = {"MagicArmorBoost"}, Label = "Magic Armour", Canonical = "MagicArmorBoost"},
-        {Keys = {"DamageBoost"}, Label = "Damage", Percent = true, Canonical = "DamageBoost"},
+        -- DamageBoost is hidden base scaling and varies by rarity (e.g. 10/12/15% in Shared Weapon.stats).
+        -- Tooltip does not show it as a blue stat, so keep it out of the blue stats section.
+        {Keys = {"DamageBoost"}, Label = "Damage", Percent = true, Canonical = "DamageBoost", HideInStatsSection = true},
         {Keys = {"Reflection"}, Label = "Reflection", Percent = true, Canonical = "Reflection"},
     }
 
@@ -654,6 +658,18 @@ function ItemDetails.Create(options)
             })
         end
     end
+
+    local function BuildHiddenStatLabelSet()
+        local hidden = {}
+        for _, field in ipairs(STAT_FIELDS) do
+            if field.HideInStatsSection and field.Label then
+                hidden[field.Label] = true
+            end
+        end
+        return hidden
+    end
+
+    local HIDDEN_STAT_LABELS = BuildHiddenStatLabelSet()
 
     local function GetStatLines(stats)
         if not stats then
@@ -1329,6 +1345,44 @@ function ItemDetails.Create(options)
         return lines
     end
 
+    local function BuildRawSectionLists(stats)
+        return {
+            Base = GetBaseValueLines(stats),
+            Stats = GetStatLines(stats),
+            Extra = GetExtraPropertyLines(stats),
+            Skills = GetSkillLines(stats),
+        }
+    end
+
+    local function CleanSectionLines(sectionId, lines, stats)
+        if sectionId == "Stats" then
+            local cleaned = {}
+            for _, line in ipairs(lines or {}) do
+                local keep = true
+                for label, _ in pairs(HIDDEN_STAT_LABELS) do
+                    if line:sub(-#label) == label then
+                        keep = false
+                        break
+                    end
+                end
+                if keep then
+                    table.insert(cleaned, line)
+                end
+            end
+            return cleaned
+        end
+        return lines or {}
+    end
+
+    local function BuildSectionLists(stats)
+        local raw = BuildRawSectionLists(stats)
+        local clean = {}
+        for sectionId, lines in pairs(raw) do
+            clean[sectionId] = CleanSectionLines(sectionId, lines, stats)
+        end
+        return raw, clean
+    end
+
     local function GetItemDetails(item)
         if not item then
             return nil
@@ -1350,16 +1404,21 @@ function ItemDetails.Create(options)
                 end
             end
         end
+        local rawSections, cleanSections = BuildSectionLists(stats)
         local details = {
             Handle = item.Handle,
             Name = GetItemName(item, stats),
             Rarity = GetItemRarity(item, stats),
             Level = GetItemLevel(item, stats),
             RuneSlots = GetRuneSlots(item, stats),
-            BaseValues = GetBaseValueLines(stats),
-            Stats = GetStatLines(stats),
-            ExtraProperties = GetExtraPropertyLines(stats),
-            Skills = GetSkillLines(stats),
+            SectionLists = {
+                Raw = rawSections,
+                Clean = cleanSections,
+            },
+            BaseValues = cleanSections.Base or {},
+            Stats = cleanSections.Stats or {},
+            ExtraProperties = cleanSections.Extra or {},
+            Skills = cleanSections.Skills or {},
         }
         return details
     end
