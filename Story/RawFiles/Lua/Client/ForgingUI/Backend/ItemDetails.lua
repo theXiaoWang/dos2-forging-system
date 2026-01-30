@@ -592,54 +592,53 @@ function ItemDetails.Create(options)
     end
 
     local STAT_FIELDS = {
-        {Key = "Strength", Label = "Strength", Canonical = "Strength"},
-        {Key = "Finesse", Label = "Finesse", Canonical = "Finesse"},
-        {Key = "Intelligence", Label = "Intelligence", Canonical = "Intelligence"},
-        {Key = "Constitution", Label = "Constitution", Canonical = "Constitution"},
-        {Key = "Memory", Label = "Memory", Canonical = "Memory"},
-        {Key = "Wits", Label = "Wits", Canonical = "Wits"},
-        {Key = "SingleHanded", Label = ResolveAbilityLabel("SingleHanded"), Canonical = "SingleHanded"},
-        {Key = "TwoHanded", Label = ResolveAbilityLabel("TwoHanded"), Canonical = "TwoHanded"},
-        {Key = "Ranged", Label = ResolveAbilityLabel("Ranged"), Canonical = "Ranged"},
-        {Key = "DualWielding", Label = ResolveAbilityLabel("DualWielding"), Canonical = "DualWielding"},
-        {Key = "WarriorLore", Label = ResolveAbilityLabel("WarriorLore"), Canonical = "WarriorLore"},
-        {Key = "RangerLore", Label = ResolveAbilityLabel("RangerLore"), Canonical = "RangerLore"},
-        {Key = "RogueLore", Label = ResolveAbilityLabel("RogueLore"), Canonical = "RogueLore"},
-        {Key = "FireSpecialist", Label = ResolveAbilityLabel("FireSpecialist"), Canonical = "FireSpecialist"},
-        {Key = "WaterSpecialist", Label = ResolveAbilityLabel("WaterSpecialist"), Canonical = "WaterSpecialist"},
-        {Key = "AirSpecialist", Label = ResolveAbilityLabel("AirSpecialist"), Canonical = "AirSpecialist"},
-        {Key = "EarthSpecialist", Label = ResolveAbilityLabel("EarthSpecialist"), Canonical = "EarthSpecialist"},
-        {Key = "Necromancy", Label = ResolveAbilityLabel("Necromancy"), Canonical = "Necromancy"},
-        {Key = "Summoning", Label = ResolveAbilityLabel("Summoning"), Canonical = "Summoning"},
-        {Key = "Polymorph", Label = ResolveAbilityLabel("Polymorph"), Canonical = "Polymorph"},
-        {Key = "Sourcery", Label = ResolveAbilityLabel("Sourcery"), Canonical = "Sourcery"},
-        {Key = "Leadership", Label = ResolveAbilityLabel("Leadership"), Canonical = "Leadership"},
-        {Key = "Perseverance", Label = ResolveAbilityLabel("Perseverance"), Canonical = "Perseverance"},
-        {Key = "PainReflection", Label = ResolveAbilityLabel("PainReflection"), Canonical = "PainReflection"},
-        {Key = "Telekinesis", Label = ResolveAbilityLabel("Telekinesis"), Canonical = "Telekinesis"},
-        {Key = "Sneaking", Label = ResolveAbilityLabel("Sneaking"), Canonical = "Sneaking"},
-        {Key = "Thievery", Label = ResolveAbilityLabel("Thievery"), Canonical = "Thievery"},
-        {Key = "Loremaster", Label = ResolveAbilityLabel("Loremaster"), Canonical = "Loremaster"},
-        {Key = "Barter", Label = ResolveAbilityLabel("Barter"), Canonical = "Barter"},
-        {Key = "Persuasion", Label = ResolveAbilityLabel("Persuasion"), Canonical = "Persuasion"},
-        {Key = "Luck", Label = ResolveAbilityLabel("Luck"), Canonical = "Luck"},
-        {Key = "CriticalChance", Label = "Critical Chance", Percent = true, Canonical = "CriticalChance"},
-        {Key = "CriticalDamage", Label = "Critical Damage", Percent = true, Canonical = "CriticalDamage"},
-        {Key = "AccuracyBoost", Label = "Accuracy", Percent = true, Canonical = "Accuracy"},
-        {Key = "ChanceToHitBoost", Label = "Accuracy", Percent = true, Canonical = "Accuracy"},
-        {Key = "DodgeBoost", Label = "Dodge", Percent = true, Canonical = "Dodge"},
-        {Key = "LifeSteal", Label = "Life Steal", Percent = true, Canonical = "LifeSteal"},
-        {Key = "Movement", Label = "Movement", Canonical = "Movement"},
-        {Key = "Initiative", Label = "Initiative", Canonical = "Initiative"},
-        {Key = "VitalityBoost", Label = "Vitality", Canonical = "Vitality"},
-        {Key = "MagicPointsBoost", Label = "Source Points", Canonical = "SourcePoints"},
-        {Key = "APMaximum", Label = "Maximum AP", Canonical = "MaxAP"},
-        {Key = "APStart", Label = "Starting AP", Canonical = "StartAP"},
-        {Key = "APRecovery", Label = "AP Recovery", Canonical = "APRecovery"},
-        {Key = "ArmorBoost", Label = "Physical Armour", Canonical = "ArmorBoost"},
-        {Key = "MagicArmorBoost", Label = "Magic Armour", Canonical = "MagicArmorBoost"},
-        {Key = "DamageBoost", Label = "Damage", Percent = true, Canonical = "DamageBoost"},
-        {Key = "Reflection", Label = "Reflection", Percent = true, Canonical = "Reflection"},
+        {Keys = {"Strength", "StrengthBoost"}, Label = "Strength", Canonical = "Strength"},
+        {Keys = {"Finesse", "FinesseBoost"}, Label = "Finesse", Canonical = "Finesse"},
+        {Keys = {"Intelligence", "IntelligenceBoost"}, Label = "Intelligence", Canonical = "Intelligence"},
+        {Keys = {"Constitution", "ConstitutionBoost"}, Label = "Constitution", Canonical = "Constitution"},
+        {Keys = {"Memory", "MemoryBoost"}, Label = "Memory", Canonical = "Memory"},
+        {Keys = {"Wits", "WitsBoost"}, Label = "Wits", Canonical = "Wits"},
+        {Keys = {"SingleHanded"}, Label = ResolveAbilityLabel("SingleHanded"), Canonical = "SingleHanded"},
+        {Keys = {"TwoHanded"}, Label = ResolveAbilityLabel("TwoHanded"), Canonical = "TwoHanded"},
+        {Keys = {"Ranged"}, Label = ResolveAbilityLabel("Ranged"), Canonical = "Ranged"},
+        {Keys = {"DualWielding"}, Label = ResolveAbilityLabel("DualWielding"), Canonical = "DualWielding"},
+        {Keys = {"WarriorLore"}, Label = ResolveAbilityLabel("WarriorLore"), Canonical = "WarriorLore"},
+        {Keys = {"RangerLore"}, Label = ResolveAbilityLabel("RangerLore"), Canonical = "RangerLore"},
+        {Keys = {"RogueLore"}, Label = ResolveAbilityLabel("RogueLore"), Canonical = "RogueLore"},
+        {Keys = {"FireSpecialist"}, Label = ResolveAbilityLabel("FireSpecialist"), Canonical = "FireSpecialist"},
+        {Keys = {"WaterSpecialist"}, Label = ResolveAbilityLabel("WaterSpecialist"), Canonical = "WaterSpecialist"},
+        {Keys = {"AirSpecialist"}, Label = ResolveAbilityLabel("AirSpecialist"), Canonical = "AirSpecialist"},
+        {Keys = {"EarthSpecialist"}, Label = ResolveAbilityLabel("EarthSpecialist"), Canonical = "EarthSpecialist"},
+        {Keys = {"Necromancy"}, Label = ResolveAbilityLabel("Necromancy"), Canonical = "Necromancy"},
+        {Keys = {"Summoning"}, Label = ResolveAbilityLabel("Summoning"), Canonical = "Summoning"},
+        {Keys = {"Polymorph"}, Label = ResolveAbilityLabel("Polymorph"), Canonical = "Polymorph"},
+        {Keys = {"Sourcery"}, Label = ResolveAbilityLabel("Sourcery"), Canonical = "Sourcery"},
+        {Keys = {"Leadership"}, Label = ResolveAbilityLabel("Leadership"), Canonical = "Leadership"},
+        {Keys = {"Perseverance"}, Label = ResolveAbilityLabel("Perseverance"), Canonical = "Perseverance"},
+        {Keys = {"PainReflection"}, Label = ResolveAbilityLabel("PainReflection"), Canonical = "PainReflection"},
+        {Keys = {"Telekinesis"}, Label = ResolveAbilityLabel("Telekinesis"), Canonical = "Telekinesis"},
+        {Keys = {"Sneaking"}, Label = ResolveAbilityLabel("Sneaking"), Canonical = "Sneaking"},
+        {Keys = {"Thievery"}, Label = ResolveAbilityLabel("Thievery"), Canonical = "Thievery"},
+        {Keys = {"Loremaster"}, Label = ResolveAbilityLabel("Loremaster"), Canonical = "Loremaster"},
+        {Keys = {"Barter"}, Label = ResolveAbilityLabel("Barter"), Canonical = "Barter"},
+        {Keys = {"Persuasion"}, Label = ResolveAbilityLabel("Persuasion"), Canonical = "Persuasion"},
+        {Keys = {"Luck"}, Label = ResolveAbilityLabel("Luck"), Canonical = "Luck"},
+        {Keys = {"CriticalChance"}, Label = "Critical Chance", Percent = true, Canonical = "CriticalChance"},
+        {Keys = {"CriticalDamage"}, Label = "Critical Damage", Percent = true, Canonical = "CriticalDamage"},
+        {Keys = {"AccuracyBoost", "ChanceToHitBoost"}, Label = "Accuracy", Percent = true, Canonical = "Accuracy"},
+        {Keys = {"DodgeBoost"}, Label = "Dodge", Percent = true, Canonical = "Dodge"},
+        {Keys = {"LifeSteal"}, Label = "Life Steal", Percent = true, Canonical = "LifeSteal"},
+        {Keys = {"Movement", "MovementSpeedBoost"}, Label = "Movement", Canonical = "Movement"},
+        {Keys = {"Initiative"}, Label = "Initiative", Canonical = "Initiative"},
+        {Keys = {"VitalityBoost", "Vitality"}, Label = "Vitality", Canonical = "Vitality"},
+        {Keys = {"MagicPointsBoost"}, Label = "Source Points", Canonical = "SourcePoints"},
+        {Keys = {"APMaximum"}, Label = "Maximum AP", Canonical = "MaxAP"},
+        {Keys = {"APStart"}, Label = "Starting AP", Canonical = "StartAP"},
+        {Keys = {"APRecovery"}, Label = "AP Recovery", Canonical = "APRecovery"},
+        {Keys = {"ArmorBoost"}, Label = "Physical Armour", Canonical = "ArmorBoost"},
+        {Keys = {"MagicArmorBoost"}, Label = "Magic Armour", Canonical = "MagicArmorBoost"},
+        {Keys = {"DamageBoost"}, Label = "Damage", Percent = true, Canonical = "DamageBoost"},
+        {Keys = {"Reflection"}, Label = "Reflection", Percent = true, Canonical = "Reflection"},
     }
 
     do
@@ -648,13 +647,7 @@ function ItemDetails.Create(options)
             local label = ResolveDamageTypeName(damageType) or tostring(damageType)
             local canonical = "Resist_" .. tostring(damageType)
             table.insert(STAT_FIELDS, {
-                Key = damageType,
-                Label = label .. " Resistance",
-                Percent = true,
-                Canonical = canonical,
-            })
-            table.insert(STAT_FIELDS, {
-                Key = damageType .. "Resistance",
+                Keys = {damageType, damageType .. "Resistance"},
                 Label = label .. " Resistance",
                 Percent = true,
                 Canonical = canonical,
@@ -663,26 +656,38 @@ function ItemDetails.Create(options)
     end
 
     local function GetStatLines(stats)
-        if not stats or not stats.DynamicStats then
+        if not stats then
             return {}
         end
         local totals = {}
-        for _, dyn in pairs(stats.DynamicStats) do
+        local function Accumulate(source)
+            if not source then
+                return
+            end
             for _, field in ipairs(STAT_FIELDS) do
-                local value = SafeStatsField(dyn, field.Key)
-                if type(value) == "string" then
-                    value = tonumber(value)
+                local keys = field.Keys or (field.Key and {field.Key}) or {}
+                for _, keyName in ipairs(keys) do
+                    local value = SafeStatsField(source, keyName)
+                    if type(value) == "string" then
+                        value = tonumber(value)
+                    end
+                    if type(value) == "number" and value ~= 0 then
+                        local key = field.Canonical or keyName
+                        totals[key] = (totals[key] or 0) + value
+                    end
                 end
-                if type(value) == "number" and value ~= 0 then
-                    local key = field.Canonical or field.Key
-                    totals[key] = (totals[key] or 0) + value
-                end
+            end
+        end
+        Accumulate(stats)
+        if stats.DynamicStats then
+            for _, dyn in pairs(stats.DynamicStats) do
+                Accumulate(dyn)
             end
         end
         local lines = {}
         local added = {}
         for _, field in ipairs(STAT_FIELDS) do
-            local key = field.Canonical or field.Key
+            local key = field.Canonical or field.Key or (field.Keys and field.Keys[1])
             if not added[key] then
                 local value = totals[key]
                 if value and value ~= 0 then
