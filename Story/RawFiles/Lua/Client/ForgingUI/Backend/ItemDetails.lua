@@ -704,17 +704,85 @@ function ItemDetails.Create(options)
         return lines
     end
 
+    local statusNameCache = {}
+    local statusTypeNameCache = nil
+    local statusTypeNameCacheBuilt = false
+
+    local function TranslateStatusDisplayName(stat)
+        if not stat then
+            return nil
+        end
+        if stat.DisplayName and Ext and Ext.L10N then
+            local translated = Ext.L10N.GetTranslatedStringFromKey(stat.DisplayName)
+            if translated and translated ~= "" then
+                return translated
+            end
+        end
+        if stat.DisplayNameRef and stat.DisplayNameRef ~= "" then
+            return stat.DisplayNameRef
+        end
+        return nil
+    end
+
+    local function BuildStatusTypeNameCache()
+        if statusTypeNameCacheBuilt then
+            return
+        end
+        statusTypeNameCacheBuilt = true
+        statusTypeNameCache = {}
+        if not Ext or not Ext.Stats or not Ext.Stats.GetStats or not Stats or not Stats.Get then
+            return
+        end
+        local ok, ids = pcall(Ext.Stats.GetStats, "StatusData")
+        if not ok or type(ids) ~= "table" then
+            return
+        end
+        for _, statId in ipairs(ids) do
+            local stat = Stats.Get("StatsLib_StatsEntry_StatusData", statId)
+            if stat and stat.StatusType and stat.StatusType ~= "" then
+                local key = tostring(stat.StatusType)
+                if statusTypeNameCache[key] == nil then
+                    local display = TranslateStatusDisplayName(stat)
+                    if display and display ~= "" then
+                        statusTypeNameCache[key] = display
+                    end
+                end
+            end
+        end
+    end
+
     local function ResolveStatusName(statusId)
         if not statusId then
             return ""
         end
-        if Stats and Stats.Get then
-            local stat = Stats.Get("StatsLib_StatsEntry_StatusData", statusId)
-            if stat and stat.DisplayName and Ext and Ext.L10N then
-                return Ext.L10N.GetTranslatedStringFromKey(stat.DisplayName)
+        local key = tostring(statusId)
+        if statusNameCache[key] then
+            return statusNameCache[key]
+        end
+        local name = nil
+
+        if Stats and Stats.GetStatusName then
+            local ok, result = pcall(Stats.GetStatusName, {StatusId = key, StatusType = key})
+            if ok and result and result ~= "" and result ~= key then
+                name = result
             end
         end
-        return tostring(statusId)
+
+        if not name and Stats and Stats.Get then
+            local stat = Stats.Get("StatsLib_StatsEntry_StatusData", key)
+            name = TranslateStatusDisplayName(stat)
+        end
+
+        if not name then
+            BuildStatusTypeNameCache()
+            if statusTypeNameCache then
+                name = statusTypeNameCache[key]
+            end
+        end
+
+        name = name or key
+        statusNameCache[key] = name
+        return name
     end
 
     local function FormatStatusProperty(statusId, chance, turns)
