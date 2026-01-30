@@ -238,7 +238,7 @@ Overview on how the forged item's base values are calculated:
 
 - **Output level**: always the forger's level, `Level_out = Level_player`.
 - **Output type**: always the item in the **main forge slot** (first slot).
-- **Output rarity**: decided by the **[Rarity System](rarity_system.md)**.
+- **Output rarity**: decided by the **[Rarity System](rarity_system.md)**. Rarity break (same-rarity ascension) is level-capped: it can ascend at most one rank above the designated rarity for the forger's level ([§6.4](rarity_system.md#64-level-cap-for-rarity-break-forge-context)).
 - **Base values (all items)**: upgrades do **not** overcap. They only push the output **towards the donor** for that channel (and cross-type weapon forging does not change weapon damage).
 
 #### Weapon Damage Type inheritance

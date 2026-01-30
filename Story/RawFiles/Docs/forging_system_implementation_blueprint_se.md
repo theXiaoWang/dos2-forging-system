@@ -133,6 +133,7 @@ Rule:
 ## Step 4: Decide rarity (your `rarity_system.md`)
 Inputs:
 - `rarityA`, `rarityB` (from the parent items)
+- `levelPlayer` (forger's level; used for level-capped rarity break when same rarity — see [`rarity_system.md` §6.4](rarity_system.md#64-level-cap-for-rarity-break-forge-context))
 
 Outputs:
 - `rarityOut`
@@ -140,6 +141,7 @@ Outputs:
 
 Notes:
 - Unique (ID 8) should follow your “Unique dominance” rule.
+- Rarity break can ascend at most one rank above the designated rarity for `levelPlayer`; otherwise result stays at ingredient rarity.
 - Do not mix in rollable stats yet; just compute rarity/cap.
 
 ## Step 5: Extract each parent’s rollable modifiers from the item instance
@@ -336,7 +338,16 @@ This appendix consolidates all forging-related pseudocode in one place.
 ### Rarity system pseudocode (distribution weights)
 
 ```python
-FUNCTION GetRarityDistribution(Rarity_A, Rarity_B):
+FUNCTION GetDesignatedRarity(Level_player):
+    # Level -> designated rarity index (0 Common .. 5 Divine). Used for rarity-break level cap.
+    IF Level_player <= 3:   RETURN 0
+    IF Level_player <= 8:   RETURN 1
+    IF Level_player <= 12:  RETURN 2
+    IF Level_player <= 15:  RETURN 3
+    IF Level_player <= 18:  RETURN 4
+    RETURN 5
+
+FUNCTION GetRarityDistribution(Rarity_A, Rarity_B, Level_player):
 
     UNIQUE_ID = 8
     GLOBAL_MAX_CAP = 6  # Divine Rarity ID
@@ -356,8 +367,9 @@ FUNCTION GetRarityDistribution(Rarity_A, Rarity_B):
         IF Rarity_A >= GLOBAL_MAX_CAP:
             RETURN { Rarity_A : 1.0 }
 
-        # Standard Rarity Break
-        Max_T = Rarity_A + 1
+        # Standard Rarity Break (level-capped: ascend at most 1 rank above designated rarity)
+        Cap_ascend = MIN(GetDesignatedRarity(Level_player) + 1, 5)
+        Max_T = MIN(Rarity_A + 1, Cap_ascend)
         Sigma = 0.5  # Fixed tight spread for stability
 
     # 4. HANDLING DIFF RARITY SCENARIOS
@@ -401,7 +413,7 @@ FUNCTION GetRarityDistribution(Rarity_A, Rarity_B):
 | Max stat slots | `maxAllowed` | Max stat slots allowed by rarity |
 
 ```python
-FUNCTION ExecuteForging(Item_A, Item_B):
+FUNCTION ExecuteForging(Item_A, Item_B, Level_player):
 
     # Name mapping used in this pseudocode:
     # - SharedStats: stats on both parents (guaranteed)
@@ -413,8 +425,8 @@ FUNCTION ExecuteForging(Item_A, Item_B):
     # - PlannedTotal: SharedCount + PoolPicks (before rarity cap)
     # - MaxAllowed: max stat slots allowed by the rarity system
 
-    # 1. RARITY FIRST (sets MaxAllowed)
-    rarityId = RaritySystem.Calculate(Item_A, Item_B)
+    # 1. RARITY FIRST (sets MaxAllowed). Level_player used for level-capped rarity break (same rarity).
+    rarityId = RaritySystem.Calculate(Item_A, Item_B, Level_player)
     maxAllowed = GetCap(rarityId)
 
     # 2. SPLIT STATS

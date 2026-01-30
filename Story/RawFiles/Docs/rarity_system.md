@@ -44,6 +44,8 @@ When combining two items of the exact same quality (and neither is Unique), the 
   - Cross-type (default): **5%**
   - Same-type (exact `WeaponType`): **10%**
 
+- **Level cap:** Rarity break can only ascend **at most one rank above** the **designated rarity** for the current player's level. If ascension would exceed that cap, the result stays at the ingredient rarity (no ascension). See [Section 6.4](#64-level-cap-for-rarity-break-forge-context) for the level→designated-rarity table and formula.
+
 ---
 
 ## 2. Item Classification
@@ -340,10 +342,14 @@ Let `p_break` be the Ascension probability:
 - `p_break = 5%` for cross-type (default)
 - `p_break = 10%` for same-type (exact same `WeaponType`)
 
+Let `Cap_ascend = DesignatedRarity(Level_player) + 1` (see [Section 6.4](#64-level-cap-for-rarity-break-forge-context)). Ascension is only allowed when `Rarity_A + 1 ≤ Cap_ascend`.
+
 Then (for non-Divine inputs):
 
-- `P(result = Rarity_A) = 1 - p_break`
-- `P(result = Rarity_A + 1) = p_break`
+- If `Rarity_A + 1 > Cap_ascend`: **100%** stability — `P(result = Rarity_A) = 1`, `P(result = Rarity_A + 1) = 0`.
+- Otherwise:
+  - `P(result = Rarity_A) = 1 - p_break`
+  - `P(result = Rarity_A + 1) = p_break`
 
 ### 6.3. Example Scenario (Legendary + Legendary)
 
@@ -353,6 +359,33 @@ Then (for non-Divine inputs):
 | :---------------- | -------------------: | ---------------------------: | :--------------------------- |
 | **Legendary (4)** |              **95%** |                      **90%** | **Stability** (No Change)    |
 | **Divine (5)**    |               **5%** |                      **10%** | **Ascension** (Free Upgrade) |
+
+*Assumes `Level_player` is high enough that `Cap_ascend ≥ 5` (e.g. level 16+); otherwise ascension to Divine is disallowed and the result is 100% Legendary.
+
+### 6.4. Level cap for Rarity Break (forge context)
+
+When the rarity system is used in **forge context**, the forger's level (`Level_player`) gates how high rarity break can ascend.
+
+**Designated rarity by level**
+
+The **designated rarity** for the current player's level is the maximum rarity considered "appropriate" for that level. Rarity break may ascend at most **one rank above** the designated rarity.
+
+| Level range | Designated rarity (index) | Name      | Max ascend (index) |
+| :---------- | :------------------------ | :-------- | :----------------- |
+| **1–3**     | 0                         | Common    | 1 (Uncommon)       |
+| **4–8**     | 1                         | Uncommon  | 2 (Rare)           |
+| **9–12**    | 2                         | Rare      | 3 (Epic)           |
+| **13–15**   | 3                         | Epic      | 4 (Legendary)      |
+| **16–18**   | 4                         | Legendary | 5 (Divine)         |
+| **19+**     | 5                         | Divine    | 5 (no ascension)   |
+
+**Rule:** `Cap_ascend = min(DesignatedRarity(Level_player) + 1, 5)`. For same-rarity inputs, the result **must not** exceed `Cap_ascend`. If `Rarity_A + 1 > Cap_ascend`, the outcome is **100%** `Rarity_A` (no ascension).
+
+**Examples**
+
+- **Level 1**, forge 2× Common: can ascend to Uncommon only; cannot go to Rare.
+- **Level 1**, forge 2× Uncommon: would normally ascend to Rare, but `Cap_ascend = 1` (Uncommon); result **100%** Uncommon.
+- **Level 16**, forge 2× Legendary: `Cap_ascend = 5`; can ascend to Divine (5% / 10% as usual).
 
 ---
 
