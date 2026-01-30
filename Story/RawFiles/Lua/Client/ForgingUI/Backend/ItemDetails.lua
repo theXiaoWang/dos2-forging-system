@@ -676,7 +676,7 @@ function ItemDetails.Create(options)
             return {}
         end
         local totals = {}
-        local function Accumulate(source)
+        local function Accumulate(source, mode)
             if not source then
                 return
             end
@@ -689,16 +689,37 @@ function ItemDetails.Create(options)
                     end
                     if type(value) == "number" and value ~= 0 then
                         local key = field.Canonical or keyName
-                        totals[key] = (totals[key] or 0) + value
+                        if mode == "fill" then
+                            if totals[key] == nil then
+                                totals[key] = value
+                            end
+                        else
+                            totals[key] = (totals[key] or 0) + value
+                        end
                     end
                 end
             end
         end
-        Accumulate(stats)
+        local hasDynamic = false
         if stats.DynamicStats then
-            for _, dyn in pairs(stats.DynamicStats) do
-                Accumulate(dyn)
+            local ok = pcall(function()
+                for _ in pairs(stats.DynamicStats) do
+                    hasDynamic = true
+                    break
+                end
+            end)
+            if not ok then
+                hasDynamic = false
             end
+        end
+        if hasDynamic then
+            for _, dyn in pairs(stats.DynamicStats) do
+                Accumulate(dyn, "add")
+            end
+            -- Avoid double-counting: only fill missing keys from base stats.
+            Accumulate(stats, "fill")
+        else
+            Accumulate(stats, "add")
         end
         local lines = {}
         local added = {}
