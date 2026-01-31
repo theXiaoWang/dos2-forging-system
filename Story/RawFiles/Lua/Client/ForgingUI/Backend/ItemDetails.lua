@@ -2,6 +2,9 @@
 -- Extracts item details for the forging UI panels.
 
 local ItemDetails = {}
+local loggedItemHelpersMissing = false
+local loggedItemHelpersFailed = false
+local loggedItemHelpersFallback = false
 
 ---@param options table
 function ItemDetails.Create(options)
@@ -22,13 +25,16 @@ function ItemDetails.Create(options)
         local ok, result = pcall(ItemHelpers.Create, state)
         if ok then
             helpers = result
-        elseif Ext and Ext.Print then
+        elseif Ext and Ext.Print and ShouldDebug() and not loggedItemHelpersFailed then
+            loggedItemHelpersFailed = true
             Ext.Print(string.format("[ForgingUI] ItemDetails: ItemHelpers.Create failed: %s", tostring(result)))
         end
-    elseif Ext and Ext.Print then
+    elseif Ext and Ext.Print and ShouldDebug() and not loggedItemHelpersMissing then
+        loggedItemHelpersMissing = true
         Ext.Print("[ForgingUI] ItemDetails: ItemHelpers module missing or invalid.")
     end
-    if not helpers and Ext and Ext.Print and ShouldDebug() then
+    if not helpers and Ext and Ext.Print and ShouldDebug() and not loggedItemHelpersFallback then
+        loggedItemHelpersFallback = true
         Ext.Print("[ForgingUI][ItemDetails] Falling back to local helpers (ItemHelpers unavailable).")
     end
     local function SafeStatsField(stats, field)
@@ -473,12 +479,76 @@ function ItemDetails.Create(options)
         return 0
     end
 
+    local function ForEachDynamicStat(dynamicStats, callback)
+        if not dynamicStats or not callback then
+            return false
+        end
+        local didIterate = false
+        local function handle(stat)
+            didIterate = true
+            callback(stat)
+        end
+        pcall(function()
+            for _, stat in ipairs(dynamicStats) do
+                handle(stat)
+            end
+        end)
+        if didIterate then
+            return true
+        end
+        local statType = type(dynamicStats)
+        if statType == "table" then
+            for _, stat in pairs(dynamicStats) do
+                handle(stat)
+            end
+            return didIterate
+        end
+        if statType == "userdata" then
+            if dynamicStats.Iterator then
+                local okIter = pcall(function()
+                    for stat in dynamicStats:Iterator() do
+                        handle(stat)
+                    end
+                end)
+                if okIter and didIterate then
+                    return true
+                end
+            end
+            local okLen, len = pcall(function()
+                return #dynamicStats
+            end)
+            if okLen and type(len) == "number" then
+                for i = 1, len do
+                    local okVal, stat = pcall(function()
+                        return dynamicStats[i]
+                    end)
+                    if okVal then
+                        handle(stat)
+                    end
+                end
+                if didIterate then
+                    return true
+                end
+            end
+            local okPairs, iter, state, var = pcall(pairs, dynamicStats)
+            if okPairs then
+                for _, stat in iter, state, var do
+                    handle(stat)
+                end
+                if didIterate then
+                    return true
+                end
+            end
+        end
+        return didIterate
+    end
+
     local function CollectDamageFromDynamicStats(stats, totals, order)
         if not stats or not stats.DynamicStats then
             return 0
         end
         local count = 0
-        for _, dyn in ipairs(stats.DynamicStats) do
+        ForEachDynamicStat(stats.DynamicStats, function(dyn)
             count = count + CollectDamageFromList(SafeStatsField(dyn, "DamageList"), totals, order)
             local damage = tonumber(SafeStatsField(dyn, "Damage") or SafeStatsField(dyn, "DamageFromBase") or 0)
             local range = tonumber(SafeStatsField(dyn, "Damage Range") or SafeStatsField(dyn, "DamageRange") or 0)
@@ -489,7 +559,7 @@ function ItemDetails.Create(options)
                     count = count + 1
                 end
             end
-        end
+        end)
         return count
     end
 
@@ -626,10 +696,10 @@ function ItemDetails.Create(options)
         {Keys = {"CriticalChance"}, Label = "Critical Chance", Percent = true, Canonical = "CriticalChance"},
         -- CriticalDamage is a base weapon stat (often 150%) shown in the tooltip header, not as a blue stat.
         -- It can look doubled when base + dynamic stats are summed, so keep it out of the blue stats section.
-        {Keys = {"CriticalDamage"}, Label = "Critical Damage", Percent = true, Canonical = "CriticalDamage", HideInStatsSection = true},
+        {Keys = {"CriticalDamage"}, Label = "Critical Damage", Percent = true, Canonical = "CriticalDamage", HideInStatsSection = true, BaseTypes = {weapon = true}},
         {Keys = {"AccuracyBoost", "ChanceToHitBoost"}, Label = "Accuracy", Percent = true, Canonical = "Accuracy"},
         {Keys = {"DodgeBoost"}, Label = "Dodge", Percent = true, Canonical = "Dodge"},
-        {Keys = {"LifeSteal"}, Label = "Life Steal", Percent = true, Canonical = "LifeSteal"},
+        {Keys = {"LifeSteal"}, Label = "Life Steal", Percent = true, Canonical = "LifeSteal", BaseTypes = {weapon = true}},
         {Keys = {"Movement", "MovementSpeedBoost"}, Label = "Movement", Canonical = "Movement"},
         {Keys = {"Initiative"}, Label = "Initiative", Canonical = "Initiative"},
         {Keys = {"VitalityBoost", "Vitality"}, Label = "Vitality", Canonical = "Vitality"},
@@ -637,11 +707,11 @@ function ItemDetails.Create(options)
         {Keys = {"APMaximum"}, Label = "Maximum AP", Canonical = "MaxAP"},
         {Keys = {"APStart"}, Label = "Starting AP", Canonical = "StartAP"},
         {Keys = {"APRecovery"}, Label = "AP Recovery", Canonical = "APRecovery"},
-        {Keys = {"ArmorBoost"}, Label = "Physical Armour", Canonical = "ArmorBoost"},
-        {Keys = {"MagicArmorBoost"}, Label = "Magic Armour", Canonical = "MagicArmorBoost"},
+        {Keys = {"ArmorBoost"}, Label = "Physical Armour", Canonical = "ArmorBoost", BaseTypes = {armor = true, shield = true}},
+        {Keys = {"MagicArmorBoost"}, Label = "Magic Armour", Canonical = "MagicArmorBoost", BaseTypes = {armor = true, shield = true}},
         -- DamageBoost is hidden base scaling and varies by rarity (e.g. 10/12/15% in Shared Weapon.stats).
         -- Tooltip does not show it as a blue stat, so keep it out of the blue stats section.
-        {Keys = {"DamageBoost"}, Label = "Damage", Percent = true, Canonical = "DamageBoost", HideInStatsSection = true},
+        {Keys = {"DamageBoost"}, Label = "Damage", Percent = true, Canonical = "DamageBoost", HideInStatsSection = true, BaseTypes = {weapon = true}},
         {Keys = {"Reflection"}, Label = "Reflection", Percent = true, Canonical = "Reflection"},
     }
 
@@ -650,8 +720,13 @@ function ItemDetails.Create(options)
         for _, damageType in ipairs(resistTypes) do
             local label = ResolveDamageTypeName(damageType) or tostring(damageType)
             local canonical = "Resist_" .. tostring(damageType)
+            local baseKeys = {damageType}
+            if damageType == "Shadow" then
+                baseKeys = {}
+            end
             table.insert(STAT_FIELDS, {
                 Keys = {damageType, damageType .. "Resistance"},
+                BaseKeys = baseKeys,
                 Label = label .. " Resistance",
                 Percent = true,
                 Canonical = canonical,
@@ -671,29 +746,70 @@ function ItemDetails.Create(options)
 
     local HIDDEN_STAT_LABELS = BuildHiddenStatLabelSet()
 
+    local BASE_SKIP_KEYS = {
+        Strength = true,
+        Finesse = true,
+        Intelligence = true,
+        Constitution = true,
+        Memory = true,
+        Wits = true,
+        MovementSpeedBoost = true,
+        Vitality = true,
+        Shadow = true,
+    }
+
+    local function GetKeysForField(field, mode, statsType)
+        local keys = field.Keys or (field.Key and {field.Key}) or {}
+        if mode == "base" then
+            if not statsType then
+                return nil
+            end
+            if statsType ~= "weapon" and statsType ~= "armor" and statsType ~= "shield" then
+                return nil
+            end
+            if field.BaseTypes and statsType and not field.BaseTypes[statsType] then
+                return nil
+            end
+            if field.BaseKeys then
+                if #field.BaseKeys == 0 then
+                    return nil
+                end
+                return field.BaseKeys
+            end
+            local baseKeys = {}
+            for _, keyName in ipairs(keys) do
+                if not BASE_SKIP_KEYS[keyName] and not keyName:find("Resistance", 1, true) then
+                    table.insert(baseKeys, keyName)
+                end
+            end
+            field.BaseKeys = baseKeys
+            if #baseKeys == 0 then
+                return nil
+            end
+            return baseKeys
+        end
+        return keys
+    end
+
     local function GetStatLines(stats)
         if not stats then
             return {}
         end
         local totals = {}
-        local function Accumulate(source, mode)
+        local function Accumulate(source, mode, statsType)
             if not source then
                 return
             end
             for _, field in ipairs(STAT_FIELDS) do
-                local keys = field.Keys or (field.Key and {field.Key}) or {}
-                for _, keyName in ipairs(keys) do
-                    local value = SafeStatsField(source, keyName)
-                    if type(value) == "string" then
-                        value = tonumber(value)
-                    end
-                    if type(value) == "number" and value ~= 0 then
-                        local key = field.Canonical or keyName
-                        if mode == "fill" then
-                            if totals[key] == nil then
-                                totals[key] = value
-                            end
-                        else
+                local keys = GetKeysForField(field, mode, statsType)
+                if keys then
+                    for _, keyName in ipairs(keys) do
+                        local value = SafeStatsField(source, keyName)
+                        if type(value) == "string" then
+                            value = tonumber(value)
+                        end
+                        if type(value) == "number" and value ~= 0 then
+                            local key = field.Canonical or keyName
                             totals[key] = (totals[key] or 0) + value
                         end
                     end
@@ -702,24 +818,12 @@ function ItemDetails.Create(options)
         end
         local hasDynamic = false
         if stats.DynamicStats then
-            local ok = pcall(function()
-                for _ in pairs(stats.DynamicStats) do
-                    hasDynamic = true
-                    break
-                end
+            hasDynamic = ForEachDynamicStat(stats.DynamicStats, function(dyn)
+                Accumulate(dyn, "dynamic")
             end)
-            if not ok then
-                hasDynamic = false
-            end
         end
-        if hasDynamic then
-            for _, dyn in pairs(stats.DynamicStats) do
-                Accumulate(dyn, "add")
-            end
-            -- Avoid double-counting: only fill missing keys from base stats.
-            Accumulate(stats, "fill")
-        else
-            Accumulate(stats, "add")
+        if not hasDynamic then
+            Accumulate(stats, "base", GetStatsItemType(stats))
         end
         local lines = {}
         local added = {}
@@ -812,17 +916,7 @@ function ItemDetails.Create(options)
                         AddStatusDisplayName(stat.Name, display)
                         AddStatusDisplayName(stat.StatsId, display)
                         AddStatusDisplayName(statId, display)
-                        -- Some StatusData files have multiple entries (e.g. ENRAGED + MUTED in one file).
-                        if stat.StatObjects and type(stat.StatObjects) == "table" then
-                            for _, sub in ipairs(stat.StatObjects) do
-                                if sub then
-                                    local subDisplay = GetDisplayFromStat(sub)
-                                    AddStatusDisplayName(sub.StatusType, subDisplay)
-                                    AddStatusDisplayName(sub.Name, subDisplay)
-                                    AddStatusDisplayName(sub.StatsId, subDisplay)
-                                end
-                            end
-                        end
+                        -- Some StatusData files have multiple entries; individual StatusData rows are already in ids.
                     end
                 end
             end
@@ -1215,6 +1309,10 @@ function ItemDetails.Create(options)
 
     local function CollectExtraPropertyLinesFromBoosts(stats, lines, seen)
         if not stats then
+            return
+        end
+        local statsType = GetStatsItemType(stats)
+        if statsType ~= "weapon" and statsType ~= "armor" and statsType ~= "equipment" then
             return
         end
         local boosts = SafeStatsField(stats, "Boosts")
