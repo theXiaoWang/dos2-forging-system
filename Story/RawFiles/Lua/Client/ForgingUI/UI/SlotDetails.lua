@@ -119,6 +119,15 @@ function SlotDetails.Create(options)
         local debug = ShouldDebugSlotDetails(ctx)
         local headerSize = ctx and ctx.HEADER_TEXT_SIZE or 13
         local bodySize = ctx and ctx.BODY_TEXT_SIZE or 11
+        local tuning = ctx and ctx.LayoutTuning or nil
+        local nameSize = headerSize
+        if tuning and tuning.SlotItemNameTextSize ~= nil then
+            nameSize = tuning.SlotItemNameTextSize
+        end
+        local infoSize = bodySize
+        if tuning and tuning.SlotItemInfoTextSize ~= nil then
+            infoSize = tuning.SlotItemInfoTextSize
+        end
         local name = details and details.Name or ""
         local rarity = details and details.Rarity or ""
         local level = details and details.Level
@@ -143,9 +152,9 @@ function SlotDetails.Create(options)
             ))
         end
 
-        SetLabelText(slot.NameLabel, name, headerSize)
-        SetLabelText(slot.RarityLabel, rarity, bodySize)
-        SetLabelText(slot.LevelLabel, levelText, bodySize)
+        SetLabelText(slot.NameLabel, name, nameSize)
+        SetLabelText(slot.RarityLabel, rarity, infoSize)
+        SetLabelText(slot.LevelLabel, levelText, infoSize)
         SetLabelText(slot.RuneLabel, runeText, bodySize)
 
         UpdateSectionText(slot.Sections and slot.Sections.Base, details and details.BaseValues or {})

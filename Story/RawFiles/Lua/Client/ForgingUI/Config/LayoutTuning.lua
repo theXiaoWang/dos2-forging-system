@@ -50,8 +50,17 @@ local LayoutTuning = {
     -- Gap between the inner sections inside Main/Donor panels (scaled by ScaleY).
     SlotSectionGapY = 6,
 
-    -- Gap between item name/rarity/level lines (scaled by ScaleY).
-    SlotItemInfoGapY = 0,
+    -- Gap between the item name line and the rarity/level block (scaled by ScaleY).
+    SlotItemInfoBlockGapY = 0,
+
+    -- Gap between rarity and level lines (scaled by ScaleY).
+    SlotItemInfoLineGapY = -5,
+
+    -- Font size for the item name line (base UI pixels; not scaled).
+    SlotItemNameTextSize = 13,
+
+    -- Font size for the rarity/level lines (base UI pixels; not scaled).
+    SlotItemInfoTextSize = 10,
 
     -- Width reduction applied to inner sections inside Main/Donor panels (scaled by ScaleX).
     -- Positive values make sections narrower by reducing width from both sides.

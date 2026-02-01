@@ -52,6 +52,21 @@ function ItemDetails.Create(options)
         end
         return nil
     end
+    local function SafeTemplateField(template, field)
+        if helpers and helpers.SafeTemplateField then
+            return helpers.SafeTemplateField(template, field)
+        end
+        if not template then
+            return nil
+        end
+        local ok, value = pcall(function()
+            return template[field]
+        end)
+        if ok then
+            return value
+        end
+        return nil
+    end
     local function GetItemStats(item)
         if helpers and helpers.GetItemStats then
             return helpers.GetItemStats(item)
@@ -249,6 +264,58 @@ function ItemDetails.Create(options)
         return tostring(damageType)
     end
 
+    local function GetStatsDisplayName(stats)
+        if not stats then
+            return nil
+        end
+        local displayName = SafeStatsField(stats, "DisplayName")
+            or SafeStatsField(stats, "DisplayNameRef")
+        if displayName and displayName ~= "" then
+            if Ext and Ext.L10N then
+                local ok, translated = pcall(Ext.L10N.GetTranslatedStringFromKey, displayName)
+                if ok and translated and translated ~= "" then
+                    return translated
+                end
+            end
+            local stripped = tostring(displayName):gsub("^|(.-)|$", "%1")
+            if stripped ~= "" then
+                return stripped
+            end
+        end
+        local statsName = SafeStatsField(stats, "Name")
+            or SafeStatsField(stats, "StatsId")
+            or SafeStatsField(stats, "StatsID")
+        if statsName and statsName ~= "" then
+            return tostring(statsName)
+        end
+        return nil
+    end
+    local function GetTemplateDisplayName(template)
+        if not template then
+            return nil
+        end
+        local displayName = SafeTemplateField(template, "DisplayName")
+            or SafeTemplateField(template, "DisplayNameRef")
+        if displayName and displayName ~= "" then
+            if Ext and Ext.L10N then
+                local ok, translated = pcall(Ext.L10N.GetTranslatedStringFromKey, displayName)
+                if ok and translated and translated ~= "" then
+                    return translated
+                end
+            end
+            local stripped = tostring(displayName):gsub("^|(.-)|$", "%1")
+            if stripped ~= "" then
+                return stripped
+            end
+        end
+        local templateName = SafeTemplateField(template, "Name")
+            or SafeTemplateField(template, "Id")
+        if templateName and templateName ~= "" then
+            return tostring(templateName)
+        end
+        return nil
+    end
+
     local function GetItemName(item, stats)
         if not item then
             return ""
@@ -262,6 +329,14 @@ function ItemDetails.Create(options)
         local displayName = item.DisplayName
         if displayName and displayName ~= "" then
             return displayName
+        end
+        local statsDisplay = GetStatsDisplayName(stats)
+        if statsDisplay and statsDisplay ~= "" then
+            return statsDisplay
+        end
+        local templateDisplay = GetTemplateDisplayName(item.RootTemplate)
+        if templateDisplay and templateDisplay ~= "" then
+            return templateDisplay
         end
         local statsId = item.StatsId or (stats and SafeStatsField(stats, "Name")) or ""
         return tostring(statsId or "")

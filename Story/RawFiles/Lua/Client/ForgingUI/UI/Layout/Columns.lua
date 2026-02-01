@@ -167,17 +167,21 @@ function Columns.Build(options)
             local slotY = cursorY + 4
             createDropSlot(panel, cfg.ID .. "_ItemSlot", slotX, slotY, socketSize)
             local slotBottom = slotY + socketSize
-            local infoGap = scaleY(4)
-            if layoutTuning and layoutTuning.SlotItemInfoGapY ~= nil then
-                infoGap = scaleY(layoutTuning.SlotItemInfoGapY)
+            local infoBlockGap = scaleY(4)
+            if layoutTuning and layoutTuning.SlotItemInfoBlockGapY ~= nil then
+                infoBlockGap = scaleY(layoutTuning.SlotItemInfoBlockGapY)
+            end
+            local infoLineGap = scaleY(4)
+            if layoutTuning and layoutTuning.SlotItemInfoLineGapY ~= nil then
+                infoLineGap = scaleY(layoutTuning.SlotItemInfoLineGapY)
             end
             local infoLineHeight = scaleY(16)
-            local infoBlockHeight = infoLineHeight * 3 + infoGap * 2
+            local infoBlockHeight = infoLineHeight * 3 + infoBlockGap + infoLineGap
             local infoY = slotBottom + scaleY(6)
             local itemNameLabel = createTextElement(panel, cfg.ID .. "_ItemName", "", childPanelX, infoY, childPanelWidth, infoLineHeight, "Center", true, {Size = ctx.HEADER_TEXT_SIZE})
-            local rarityY = infoY + infoLineHeight + infoGap
+            local rarityY = infoY + infoLineHeight + infoBlockGap
             local itemRarityLabel = createTextElement(panel, cfg.ID .. "_ItemRarity", "", childPanelX, rarityY, childPanelWidth, infoLineHeight, "Center", false, {Size = ctx.BODY_TEXT_SIZE})
-            local levelY = rarityY + infoLineHeight + infoGap
+            local levelY = rarityY + infoLineHeight + infoLineGap
             local itemLevelLabel = createTextElement(panel, cfg.ID .. "_ItemLevel", "", childPanelX, levelY, childPanelWidth, infoLineHeight, "Center", false, {Size = ctx.BODY_TEXT_SIZE})
 
             cursorY = infoY + infoBlockHeight + reducedGap
