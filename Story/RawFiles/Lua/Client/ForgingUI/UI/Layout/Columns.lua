@@ -168,6 +168,9 @@ function Columns.Build(options)
             createDropSlot(panel, cfg.ID .. "_ItemSlot", slotX, slotY, socketSize)
             local slotBottom = slotY + socketSize
             local infoGap = scaleY(4)
+            if layoutTuning and layoutTuning.SlotItemInfoGapY ~= nil then
+                infoGap = scaleY(layoutTuning.SlotItemInfoGapY)
+            end
             local infoLineHeight = scaleY(16)
             local infoBlockHeight = infoLineHeight * 3 + infoGap * 2
             local infoY = slotBottom + scaleY(6)

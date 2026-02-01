@@ -50,6 +50,9 @@ local LayoutTuning = {
     -- Gap between the inner sections inside Main/Donor panels (scaled by ScaleY).
     SlotSectionGapY = 6,
 
+    -- Gap between item name/rarity/level lines (scaled by ScaleY).
+    SlotItemInfoGapY = 0,
+
     -- Width reduction applied to inner sections inside Main/Donor panels (scaled by ScaleX).
     -- Positive values make sections narrower by reducing width from both sides.
     SlotSectionWidthReductionX = 70,
