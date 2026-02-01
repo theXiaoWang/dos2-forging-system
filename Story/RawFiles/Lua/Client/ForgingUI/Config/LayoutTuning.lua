@@ -57,6 +57,9 @@ local LayoutTuning = {
     -- Horizontal padding inside section bodies (scaled by ScaleX).
     SlotSectionInnerPaddingX = 8,
 
+    -- Vertical padding inside section bodies (scaled by ScaleY).
+    SlotSectionInnerPaddingY = 13,
+
     -- Trim applied to the total height budget for the four inner sections (scaled by ScaleY).
     -- Positive values make all four sections shorter.
     SlotSectionHeightTrimY = 80,
