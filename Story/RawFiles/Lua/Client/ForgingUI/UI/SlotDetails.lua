@@ -152,10 +152,10 @@ function SlotDetails.Create(options)
             ))
         end
 
-        SetLabelText(slot.NameLabel, name, nameSize)
+        SetLabelText(slot.NameLabel, name, nameSize, 0x000000)
         SetLabelText(slot.RarityLabel, rarity, infoSize)
         SetLabelText(slot.LevelLabel, levelText, infoSize)
-        SetLabelText(slot.RuneLabel, runeText, bodySize)
+        SetLabelText(slot.RuneLabel, runeText, bodySize, 0x000000)
 
         UpdateSectionText(slot.Sections and slot.Sections.Base, details and details.BaseValues or {})
         UpdateSectionText(slot.Sections and slot.Sections.Stats, details and details.Stats or {})
