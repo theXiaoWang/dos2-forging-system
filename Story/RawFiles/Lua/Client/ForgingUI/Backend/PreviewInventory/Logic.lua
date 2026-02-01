@@ -452,6 +452,8 @@ local ForgeSlotMapping = Ext.Require("Client/ForgingUI/Backend/PreviewInventory/
         return PreviewLogic.CanAcceptItem(slotId, item, obj)
     end,
     clearStaleHighlights = ClearStaleHighlights,
+    resetSlotVisualState = ResetSlotVisualState,
+    updateSlotDetails = UpdateSlotDetails,
 })
 local ClearSlotMapping = ForgeSlotMapping.ClearSlotMapping
 local SyncForgeSlots = ForgeSlotMapping.SyncForgeSlots

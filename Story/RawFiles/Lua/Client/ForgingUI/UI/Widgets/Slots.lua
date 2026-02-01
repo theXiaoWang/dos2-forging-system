@@ -125,6 +125,7 @@ function Slots.Create(options)
             slot:SetSize(frameSize, frameSize)
             slot:SetCanDrop(true)
             slot:SetEnabled(true)
+            slot._ForgingUIFancyFrame = useFancy == true
             if slot.SlotElement then
                 if slot.SlotElement.SetSizeOverride then
                     slot.SlotElement:SetSizeOverride(vector(frameSize, frameSize))

@@ -12,6 +12,26 @@ function ForgeSlotMapping.Create(options)
     local resolveSlotItemHandle = opts.resolveSlotItemHandle
     local canAcceptItem = opts.canAcceptItem
     local clearStaleHighlights = opts.clearStaleHighlights
+    local resetSlotVisualState = opts.resetSlotVisualState
+    local updateSlotDetails = opts.updateSlotDetails
+
+    local function ClearSlotVisual(slotId, slot)
+        if not slot then
+            return
+        end
+        if slot.Clear then
+            slot:Clear()
+        end
+        if slot.SetEnabled then
+            slot:SetEnabled(true)
+        end
+        if resetSlotVisualState then
+            resetSlotVisualState(slot)
+        end
+        if updateSlotDetails then
+            updateSlotDetails(slotId, nil)
+        end
+    end
 
     local function ClearSlotMapping(slotId)
         local handle = state.SlotItems[slotId]
@@ -40,11 +60,11 @@ function ForgeSlotMapping.Create(options)
                     if slot.Clear then
                         slot:Clear()
                     end
-                    if slot.SetObject then
-                        slot:SetObject(nil)
-                    end
                     if slot.SetEnabled then
                         slot:SetEnabled(true)
+                    end
+                    if resetSlotVisualState then
+                        resetSlotVisualState(slot)
                     end
                     cleared = true
                 end
@@ -78,9 +98,7 @@ function ForgeSlotMapping.Create(options)
         local existingSlotId = state.ItemToSlot[item.Handle]
         if existingSlotId and existingSlotId ~= slotId then
             local existing = state.ForgeSlots[existingSlotId]
-            if existing and existing.Clear then
-                existing:Clear()
-            end
+            ClearSlotVisual(existingSlotId, existing)
             ClearSlotMapping(existingSlotId)
         end
 

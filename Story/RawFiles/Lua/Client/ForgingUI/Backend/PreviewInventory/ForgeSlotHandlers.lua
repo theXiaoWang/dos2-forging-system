@@ -50,9 +50,6 @@ function ForgeSlotHandlers.Create(options)
                 if slot.Clear then
                     slot:Clear()
                 end
-                if slot.SetObject then
-                    slot:SetObject(nil)
-                end
                 if slot.SetEnabled then
                     slot:SetEnabled(true)
                 end
@@ -111,9 +108,6 @@ function ForgeSlotHandlers.Create(options)
                     end
                     if slot.Clear then
                         slot:Clear()
-                    end
-                    if slot.SetObject then
-                        slot:SetObject(nil)
                     end
                     if slot.SetEnabled then
                         slot:SetEnabled(true)
