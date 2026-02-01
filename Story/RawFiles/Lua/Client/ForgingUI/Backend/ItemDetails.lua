@@ -364,6 +364,22 @@ function ItemDetails.Create(options)
         return rarity and tostring(rarity) or ""
     end
 
+    local function GetItemRarityId(item, stats)
+        local rarity = nil
+        if item then
+            local ok, value = pcall(function()
+                return item.Rarity
+            end)
+            if ok then
+                rarity = value
+            end
+        end
+        if rarity == nil and stats then
+            rarity = SafeStatsField(stats, "Rarity")
+        end
+        return rarity and tostring(rarity) or ""
+    end
+
     local function GetItemLevel(item, stats)
         if not item then
             return nil
@@ -1603,6 +1619,7 @@ function ItemDetails.Create(options)
             Handle = item.Handle,
             Name = GetItemName(item, stats),
             Rarity = GetItemRarity(item, stats),
+            RarityId = GetItemRarityId(item, stats),
             Level = GetItemLevel(item, stats),
             RuneSlots = GetRuneSlots(item, stats),
             SectionLists = {

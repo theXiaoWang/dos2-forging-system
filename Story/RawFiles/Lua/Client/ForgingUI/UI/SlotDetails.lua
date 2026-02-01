@@ -34,11 +34,24 @@ function SlotDetails.Create(options)
         return fallback
     end
 
+    local function NormalizeColorValue(value)
+        if value == nil then
+            return nil
+        end
+        if type(value) == "number" then
+            return string.format("%06X", math.floor(value))
+        end
+        local text = tostring(value)
+        text = text:gsub("^0x", ""):gsub("^0X", ""):gsub("#", "")
+        return text
+    end
+
     local function FormatText(text, size, colorOverride)
         local ctx = GetContext()
         if Text and Text.Format then
+            local colorValue = NormalizeColorValue(colorOverride or (ctx and ctx.TEXT_COLOR) or 0xFFFFFF)
             return Text.Format(text or "", {
-                Color = colorOverride or (ctx and ctx.TEXT_COLOR) or 0xFFFFFF,
+                Color = colorValue,
                 Size = size or (ctx and ctx.BODY_TEXT_SIZE) or 12,
             })
         end
@@ -130,10 +143,21 @@ function SlotDetails.Create(options)
         end
         local name = details and details.Name or ""
         local rarity = details and details.Rarity or ""
+        local rarityId = details and (details.RarityId or details.Rarity) or ""
+        if Text and Text.StripFontTags then
+            rarity = Text.StripFontTags(rarity)
+        end
         local level = details and details.Level
         local levelText = level and ("Level " .. tostring(level)) or ""
         local runeSlots = details and details.RuneSlots or nil
         local runeText = runeSlots and ("Rune Slots: " .. tostring(runeSlots)) or "Rune Slots:"
+        local rarityColorOverride = nil
+        if tuning and tuning.SlotItemRarityTextColors and rarityId ~= nil and rarityId ~= "" then
+            local colors = tuning.SlotItemRarityTextColors
+            local key = tostring(rarityId)
+            local color = colors[key] or colors[string.upper(key)] or colors[string.lower(key)]
+            rarityColorOverride = color or nil
+        end
         if debug and Ext and Ext.Print then
             local baseCount = details and details.BaseValues and #details.BaseValues or 0
             local statCount = details and details.Stats and #details.Stats or 0
@@ -153,7 +177,7 @@ function SlotDetails.Create(options)
         end
 
         SetLabelText(slot.NameLabel, name, nameSize, 0x000000)
-        SetLabelText(slot.RarityLabel, rarity, infoSize)
+        SetLabelText(slot.RarityLabel, rarity, infoSize, rarityColorOverride)
         SetLabelText(slot.LevelLabel, levelText, infoSize)
         SetLabelText(slot.RuneLabel, runeText, bodySize, 0x000000)
 

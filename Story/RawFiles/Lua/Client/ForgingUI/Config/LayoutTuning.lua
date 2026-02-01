@@ -74,6 +74,18 @@ local LayoutTuning = {
     -- Font size for the rarity/level lines (base UI pixels; not scaled).
     SlotItemInfoTextSize = 12,
 
+    -- Rarity label colors (hex strings, no #).
+    SlotItemRarityTextColors = {
+        Common = "787878",
+        Uncommon = "00F27D",
+        Rare = "0078FF",
+        Epic = "8E3EC9",
+        Legendary = "C60176",
+        Divine = "cca000",
+        Unique = "907740",
+        Artifact = "A34114",
+    },
+
     -- Width reduction applied to inner sections inside Main/Donor panels (scaled by ScaleX).
     -- Positive values make sections narrower by reducing width from both sides.
     SlotSectionWidthReductionX = 70,
