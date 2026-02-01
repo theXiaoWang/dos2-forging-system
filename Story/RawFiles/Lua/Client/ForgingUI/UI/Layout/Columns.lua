@@ -176,15 +176,31 @@ function Columns.Build(options)
                 infoLineGap = scaleY(layoutTuning.SlotItemInfoLineGapY)
             end
             local infoLineHeight = scaleY(16)
-            local infoBlockHeight = infoLineHeight * 3 + infoBlockGap + infoLineGap
+            local nameLineHeight = infoLineHeight
+            if layoutTuning and layoutTuning.SlotItemNameLineHeightY ~= nil then
+                nameLineHeight = scaleY(layoutTuning.SlotItemNameLineHeightY)
+            end
+            local infoBlockHeight = nameLineHeight + (infoLineHeight * 2) + infoBlockGap + infoLineGap
+            local infoToSectionsGap = 0
+            if layoutTuning and layoutTuning.SlotItemInfoToSectionsGapY ~= nil then
+                infoToSectionsGap = scaleY(layoutTuning.SlotItemInfoToSectionsGapY)
+            end
+            local infoNameOffset = 0
+            if layoutTuning and layoutTuning.SlotItemNameOffsetY ~= nil then
+                infoNameOffset = scaleY(layoutTuning.SlotItemNameOffsetY)
+            end
+            local infoLowerLinesOffset = 0
+            if layoutTuning and layoutTuning.SlotItemInfoLowerLinesOffsetY ~= nil then
+                infoLowerLinesOffset = scaleY(layoutTuning.SlotItemInfoLowerLinesOffsetY)
+            end
             local infoY = slotBottom + scaleY(6)
-            local itemNameLabel = createTextElement(panel, cfg.ID .. "_ItemName", "", childPanelX, infoY, childPanelWidth, infoLineHeight, "Center", true, {Size = ctx.HEADER_TEXT_SIZE})
-            local rarityY = infoY + infoLineHeight + infoBlockGap
+            local itemNameLabel = createTextElement(panel, cfg.ID .. "_ItemName", "", childPanelX, infoY + infoNameOffset, childPanelWidth, nameLineHeight, "Center", true, {Size = ctx.HEADER_TEXT_SIZE})
+            local rarityY = infoY + nameLineHeight + infoBlockGap + infoLowerLinesOffset
             local itemRarityLabel = createTextElement(panel, cfg.ID .. "_ItemRarity", "", childPanelX, rarityY, childPanelWidth, infoLineHeight, "Center", false, {Size = ctx.BODY_TEXT_SIZE})
             local levelY = rarityY + infoLineHeight + infoLineGap
             local itemLevelLabel = createTextElement(panel, cfg.ID .. "_ItemLevel", "", childPanelX, levelY, childPanelWidth, infoLineHeight, "Center", false, {Size = ctx.BODY_TEXT_SIZE})
 
-            cursorY = infoY + infoBlockHeight + reducedGap
+            cursorY = infoY + infoBlockHeight + reducedGap + infoToSectionsGap
 
             local sectionHeightTrim = 0
             if layoutTuning and layoutTuning.SlotSectionHeightTrimY ~= nil then
