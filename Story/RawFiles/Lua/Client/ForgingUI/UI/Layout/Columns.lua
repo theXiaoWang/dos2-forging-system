@@ -140,6 +140,10 @@ function Columns.Build(options)
             if layoutTuning and layoutTuning.SlotSectionGapY ~= nil then
                 reducedGap = scaleY(layoutTuning.SlotSectionGapY)
             end
+            local sectionTextPaddingX = 0
+            if layoutTuning and layoutTuning.SlotSectionInnerPaddingX ~= nil then
+                sectionTextPaddingX = scaleX(layoutTuning.SlotSectionInnerPaddingX)
+            end
 
             -- Width reduction for child panels (Stats, Extra Properties, Skills, Rune Slots)
             -- Positive values make panels narrower by reducing width from both sides
@@ -195,25 +199,32 @@ function Columns.Build(options)
                 if bodyHeight < 0 then
                     bodyHeight = 0
                 end
+                local padX = sectionTextPaddingX or 0
+                local baseBodyWidth = bodyWidth or innerWidth
+                local listX = (bodyX or 0) + padX
+                local listWidth = baseBodyWidth - padX * 2
+                if listWidth < 0 then
+                    listWidth = 0
+                end
                 local list = sectionInner:AddChild(sectionId .. "_ScrollList", "GenericUI_Element_ScrollList")
-                list:SetPosition(bodyX or 0, bodyY)
+                list:SetPosition(listX, bodyY)
                 if applyElementSize then
-                    applyElementSize(list, bodyWidth or innerWidth, bodyHeight)
+                    applyElementSize(list, listWidth, bodyHeight)
                 end
                 if list.SetMouseWheelEnabled then
                     list:SetMouseWheelEnabled(true)
                 end
                 if list.SetFrame then
-                    list:SetFrame(bodyWidth or innerWidth, bodyHeight)
+                    list:SetFrame(listWidth, bodyHeight)
                 end
                 if list.SetScrollbarSpacing then
                     list:SetScrollbarSpacing(0)
                 end
-                local text = createTextElement(list, sectionId .. "_BodyText", "", 0, 0, bodyWidth or innerWidth, bodyHeight, "Left", true, {Size = ctx.BODY_TEXT_SIZE})
+                local text = createTextElement(list, sectionId .. "_BodyText", "", 0, 0, listWidth, bodyHeight, "Left", true, {Size = ctx.BODY_TEXT_SIZE})
                 return {
                     List = list,
                     Text = text,
-                    BodyWidth = bodyWidth or innerWidth,
+                    BodyWidth = listWidth,
                     BodyHeight = bodyHeight,
                 }
             end
@@ -237,7 +248,10 @@ function Columns.Build(options)
                 local slotSize = math.min(50, skillsHeight - 30)
                 if slotSize > 0 then
                     local skillsBoxWidth = childPanelWidth
-                    local slotSlotX = skillsBoxWidth - slotSize - 8
+                    local slotSlotX = skillsBoxWidth - slotSize - 8 - (sectionTextPaddingX or 0)
+                    if slotSlotX < 0 then
+                        slotSlotX = 0
+                    end
                     local skillSlotY = math.floor((skillsHeight - slotSize) / 2)
                     createDropSlot(skillsBox, "Donor_SkillbookSlot", slotSlotX, skillSlotY, slotSize)
                     reservedWidth = slotSize + 12

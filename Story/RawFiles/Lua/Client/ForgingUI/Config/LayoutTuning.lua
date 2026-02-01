@@ -54,6 +54,9 @@ local LayoutTuning = {
     -- Positive values make sections narrower by reducing width from both sides.
     SlotSectionWidthReductionX = 70,
 
+    -- Horizontal padding inside section bodies (scaled by ScaleX).
+    SlotSectionInnerPaddingX = 8,
+
     -- Trim applied to the total height budget for the four inner sections (scaled by ScaleY).
     -- Positive values make all four sections shorter.
     SlotSectionHeightTrimY = 80,
