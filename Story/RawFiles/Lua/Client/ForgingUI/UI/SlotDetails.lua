@@ -221,6 +221,11 @@ local function UpdateNameButtonsLayout(slot)
     local gap = slot.NameButtonGap or 2
     local buttonSize = slot.NameButtonSize or 12
     local buttonsWidth = buttonSize * 2 + gap
+    if slot.IsEditingName and slot.NameButtonsLocked and slot.NameButtonsLockedX ~= nil and slot.NameButtonsLockedY ~= nil then
+        editRoot:SetPosition(slot.NameButtonsLockedX, slot.NameButtonsLockedY)
+        resetRoot:SetPosition(slot.NameButtonsLockedX + buttonSize + gap, slot.NameButtonsLockedY)
+        return
+    end
     local centerX = lineX + lineWidth / 2
     local targetX = math.floor(centerX + (textWidth / 2) + gap)
     local maxX = lineX + lineWidth - buttonsWidth
@@ -232,6 +237,10 @@ local function UpdateNameButtonsLayout(slot)
     end
     local lineY = slot.NameLineY or 0
     local targetY = lineY + math.floor((lineHeight - buttonSize) / 2)
+    if not slot.IsEditingName then
+        slot.NameButtonsX = targetX
+        slot.NameButtonsY = targetY
+    end
     editRoot:SetPosition(targetX, targetY)
     resetRoot:SetPosition(targetX + buttonSize + gap, targetY)
 end
@@ -422,8 +431,28 @@ function SlotDetails.Create(options)
         if input.SetText then
             input:SetText(plain)
         end
+        local textSize = size or slot.NameTextSize or (GetContext() and GetContext().HEADER_TEXT_SIZE) or 12
         if input.SetTextFormat then
-            input:SetTextFormat({color = 0x000000, size = size or 12})
+            input:SetTextFormat({color = 0x000000, size = textSize})
+        end
+        local mc = input.GetMovieClip and input:GetMovieClip() or nil
+        if mc and mc.text_txt then
+            mc.text_txt.textColor = 0x000000
+        end
+    end
+
+    local function ApplyNameInputFormat(slot)
+        local input = slot and slot.NameInput
+        if not input then
+            return
+        end
+        local textSize = slot.NameTextSize or (GetContext() and GetContext().HEADER_TEXT_SIZE) or 12
+        if input.SetTextFormat then
+            input:SetTextFormat({color = 0x000000, size = textSize})
+        end
+        local mc = input.GetMovieClip and input:GetMovieClip() or nil
+        if mc and mc.text_txt then
+            mc.text_txt.textColor = 0x000000
         end
     end
 
@@ -485,8 +514,15 @@ function SlotDetails.Create(options)
         local current = slot.CurrentNameText or slot.BaseNameText or ""
         slot.EditBaseText = current
         slot.NameEditText = current
+        if slot.NameButtonsX == nil or slot.NameButtonsY == nil then
+            UpdateNameButtonsLayout(slot)
+        end
+        slot.NameButtonsLocked = true
+        slot.NameButtonsLockedX = slot.NameButtonsX
+        slot.NameButtonsLockedY = slot.NameButtonsY
         SetNameInputText(slot, current, slot.NameTextSize or 12)
         SetNameEditVisible(slot, true)
+        ApplyNameInputFormat(slot)
         if uiState then
             uiState.NameEditActiveSlotId = slot.SlotId
         end
@@ -521,6 +557,9 @@ function SlotDetails.Create(options)
         SetNameEditVisible(slot, false)
         slot.NameEditText = nil
         slot.EditBaseText = nil
+        slot.NameButtonsLocked = false
+        slot.NameButtonsLockedX = nil
+        slot.NameButtonsLockedY = nil
         UpdateNameButtonsLayout(slot)
         local uiState = GetUIState()
         if uiState and uiState.NameEditActiveSlotId == slot.SlotId then
@@ -551,6 +590,9 @@ function SlotDetails.Create(options)
         slot.CurrentNameText = baseName or slot.BaseNameText or ""
         slot.BaseNameText = slot.CurrentNameText
         SetLabelText(slot.NameLabel, slot.CurrentNameText, slot.NameTextSize or 12, 0x000000)
+        slot.NameButtonsLocked = false
+        slot.NameButtonsLockedX = nil
+        slot.NameButtonsLockedY = nil
         UpdateNameButtonsLayout(slot)
         if slot.IsEditingName and slot.NameInput and slot.NameInput.SetFocused then
             slot.NameEditSkipCommit = true
@@ -616,11 +658,13 @@ function SlotDetails.Create(options)
             if def.NameInput.Events.Changed then
                 def.NameInput.Events.Changed:Subscribe(function (ev)
                     def.NameEditText = ev and ev.Text or ""
+                    ApplyNameInputFormat(def)
                 end)
             end
             if def.NameInput.Events.Focused then
                 def.NameInput.Events.Focused:Subscribe(function ()
                     def.IsEditingName = true
+                    ApplyNameInputFormat(def)
                 end)
             end
             if def.NameInput.Events.Unfocused then
@@ -628,6 +672,9 @@ function SlotDetails.Create(options)
                     if def.NameEditSkipCommit then
                         def.NameEditSkipCommit = false
                         SetNameEditVisible(def, false)
+                        def.NameButtonsLocked = false
+                        def.NameButtonsLockedX = nil
+                        def.NameButtonsLockedY = nil
                         local uiState = GetUIState()
                         if uiState and uiState.NameEditActiveSlotId == def.SlotId then
                             uiState.NameEditActiveSlotId = nil
