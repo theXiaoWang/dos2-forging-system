@@ -158,6 +158,10 @@ function SlotDetails.Create(options)
             local color = colors[key] or colors[string.upper(key)] or colors[string.lower(key)]
             rarityColorOverride = color or nil
         end
+        local levelColorOverride = nil
+        if tuning and tuning.SlotItemLevelTextColorHex then
+            levelColorOverride = tuning.SlotItemLevelTextColorHex
+        end
         if debug and Ext and Ext.Print then
             local baseCount = details and details.BaseValues and #details.BaseValues or 0
             local statCount = details and details.Stats and #details.Stats or 0
@@ -178,7 +182,7 @@ function SlotDetails.Create(options)
 
         SetLabelText(slot.NameLabel, name, nameSize, 0x000000)
         SetLabelText(slot.RarityLabel, rarity, infoSize, rarityColorOverride)
-        SetLabelText(slot.LevelLabel, levelText, infoSize)
+        SetLabelText(slot.LevelLabel, levelText, infoSize, levelColorOverride)
         SetLabelText(slot.RuneLabel, runeText, bodySize, 0x000000)
 
         UpdateSectionText(slot.Sections and slot.Sections.Base, details and details.BaseValues or {})

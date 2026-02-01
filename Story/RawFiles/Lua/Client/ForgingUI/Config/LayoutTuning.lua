@@ -74,6 +74,9 @@ local LayoutTuning = {
     -- Font size for the rarity/level lines (base UI pixels; not scaled).
     SlotItemInfoTextSize = 12,
 
+    -- Level text color (hex string, no #).
+    SlotItemLevelTextColorHex = "787878",
+
     -- Rarity label colors (hex strings, no #).
     SlotItemRarityTextColors = {
         Common = "787878",
