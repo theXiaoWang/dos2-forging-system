@@ -541,12 +541,67 @@ function SlotDetails.Create(options)
         end
     end
 
+    local function ApplyNameEditBounds(slot)
+        local input = slot and slot.NameInput
+        if not input or not input.SetSize or not input.SetPosition then
+            return
+        end
+        local lineX = slot.NameLineX or 0
+        local lineY = slot.NameLineY or 0
+        local lineHeight = slot.NameLineHeight or 0
+        local gap = slot.NameButtonGap or 2
+        local buttonSize = slot.NameButtonSize or 12
+        local buttonsWidth = buttonSize * 2 + gap
+        local buttonX = slot.NameButtonsLockedX
+        if buttonX == nil then
+            local lineWidth = slot.NameLineWidth or 0
+            buttonX = lineX + lineWidth - buttonsWidth
+        end
+        local rightEdge = buttonX - gap
+        if rightEdge < lineX then
+            rightEdge = lineX
+        end
+        local textSize = slot.NameTextSize or 12
+        local windowChars = GetNameEditWindowChars(slot, textSize)
+        local approxCharWidth = math.max(5, math.floor(textSize * 0.6))
+        local desiredWidth = windowChars * approxCharWidth
+        local maxWidth = rightEdge - lineX
+        if maxWidth < 0 then
+            maxWidth = 0
+        end
+        local width = desiredWidth
+        if width > maxWidth then
+            width = maxWidth
+        end
+        if width < 0 then
+            width = 0
+        end
+        local inputX = rightEdge - width
+        if inputX < lineX then
+            inputX = lineX
+        end
+        input:SetPosition(inputX, lineY)
+        input:SetSize(width, lineHeight)
+        if input.SetType then
+            input:SetType("Right")
+        end
+        slot.NameEditWindowWidth = width
+    end
+
     local function ApplyNameEditWindow(slot)
         if not slot or not slot.NameInput then
             return
         end
         local fullText = NormalizePlainText(slot.NameEditText or "")
-        local windowChars = GetNameEditWindowChars(slot, slot.NameTextSize or 12)
+        local textSize = slot.NameTextSize or 12
+        local windowChars = GetNameEditWindowChars(slot, textSize)
+        if slot.NameEditWindowWidth and slot.NameEditWindowWidth > 0 then
+            local approxCharWidth = math.max(5, math.floor(textSize * 0.6))
+            local maxChars = math.max(1, math.floor(slot.NameEditWindowWidth / approxCharWidth))
+            if windowChars > maxChars then
+                windowChars = maxChars
+            end
+        end
         local visibleText = fullText
         if windowChars and windowChars > 0 and #fullText > windowChars then
             visibleText = fullText:sub(#fullText - windowChars + 1)
@@ -587,6 +642,7 @@ function SlotDetails.Create(options)
         slot.NameButtonsLockedX = slot.NameButtonsX
         slot.NameButtonsLockedY = slot.NameButtonsY
         SetNameEditVisible(slot, true)
+        ApplyNameEditBounds(slot)
         ApplyNameEditWindow(slot)
         if uiState then
             uiState.NameEditActiveSlotId = slot.SlotId
@@ -627,6 +683,7 @@ function SlotDetails.Create(options)
         slot.EditBaseText = nil
         slot.NameEditVisibleText = nil
         slot.NameEditUpdating = false
+        slot.NameEditWindowWidth = nil
         slot.NameButtonsLocked = false
         slot.NameButtonsLockedX = nil
         slot.NameButtonsLockedY = nil
@@ -664,6 +721,7 @@ function SlotDetails.Create(options)
         slot.EditBaseText = nil
         slot.NameEditVisibleText = nil
         slot.NameEditUpdating = false
+        slot.NameEditWindowWidth = nil
         slot.NameButtonsLocked = false
         slot.NameButtonsLockedX = nil
         slot.NameButtonsLockedY = nil
@@ -787,6 +845,7 @@ function SlotDetails.Create(options)
                         def.EditBaseText = nil
                         def.NameEditVisibleText = nil
                         def.NameEditUpdating = false
+                        def.NameEditWindowWidth = nil
                         def.NameButtonsLocked = false
                         def.NameButtonsLockedX = nil
                         def.NameButtonsLockedY = nil
