@@ -190,6 +190,51 @@ local function GetElementTextWidth(element, text, size, forceEstimate)
     return EstimateTextWidth(text, size)
 end
 
+local function GetNameEditWindowChars(slot, size)
+    local windowChars = 20
+    local ctx = GetContext()
+    local tuning = ctx and ctx.LayoutTuning or nil
+    if tuning and tuning.SlotItemNameEditWindowChars ~= nil then
+        local tuned = tonumber(tuning.SlotItemNameEditWindowChars)
+        if tuned and tuned > 0 then
+            windowChars = math.floor(tuned)
+        end
+    end
+    if not slot or not slot.NameLineWidth then
+        return windowChars
+    end
+    local gap = slot.NameButtonGap or 2
+    local buttonSize = slot.NameButtonSize or 12
+    local maxWidth = slot.NameLineWidth - (buttonSize * 2 + gap) - gap
+    if maxWidth > 0 then
+        local approxCharWidth = math.max(5, math.floor((size or 12) * 0.6))
+        local maxChars = math.max(1, math.floor(maxWidth / approxCharWidth))
+        if windowChars > maxChars then
+            windowChars = maxChars
+        end
+    end
+    if windowChars < 1 then
+        windowChars = 1
+    end
+    return windowChars
+end
+
+local function GetNameEditMaxChars(slot)
+    local maxChars = 40
+    local ctx = GetContext()
+    local tuning = ctx and ctx.LayoutTuning or nil
+    if tuning and tuning.SlotItemNameEditMaxChars ~= nil then
+        local tuned = tonumber(tuning.SlotItemNameEditMaxChars)
+        if tuned and tuned > 0 then
+            maxChars = math.floor(tuned)
+        end
+    end
+    if maxChars < 1 then
+        maxChars = 1
+    end
+    return maxChars
+end
+
 local function UpdateNameButtonsLayout(slot)
     if not slot then
         return
@@ -496,6 +541,23 @@ function SlotDetails.Create(options)
         end
     end
 
+    local function ApplyNameEditWindow(slot)
+        if not slot or not slot.NameInput then
+            return
+        end
+        local fullText = NormalizePlainText(slot.NameEditText or "")
+        local windowChars = GetNameEditWindowChars(slot, slot.NameTextSize or 12)
+        local visibleText = fullText
+        if windowChars and windowChars > 0 and #fullText > windowChars then
+            visibleText = fullText:sub(#fullText - windowChars + 1)
+        end
+        slot.NameEditVisibleText = visibleText
+        slot.NameEditUpdating = true
+        SetNameInputText(slot, visibleText, slot.NameTextSize or 12)
+        slot.NameEditUpdating = false
+        QueueNameCaret(slot, visibleText)
+    end
+
     local function BeginNameEdit(slot)
         if not slot or not slot.NameInput or not slot.LastHandle then
             return
@@ -514,22 +576,24 @@ function SlotDetails.Create(options)
         local current = slot.CurrentNameText or slot.BaseNameText or ""
         slot.EditBaseText = current
         slot.NameEditText = current
+        local maxChars = GetNameEditMaxChars(slot)
+        if maxChars and #slot.NameEditText > maxChars then
+            slot.NameEditText = slot.NameEditText:sub(1, maxChars)
+        end
         if slot.NameButtonsX == nil or slot.NameButtonsY == nil then
             UpdateNameButtonsLayout(slot)
         end
         slot.NameButtonsLocked = true
         slot.NameButtonsLockedX = slot.NameButtonsX
         slot.NameButtonsLockedY = slot.NameButtonsY
-        SetNameInputText(slot, current, slot.NameTextSize or 12)
         SetNameEditVisible(slot, true)
-        ApplyNameInputFormat(slot)
+        ApplyNameEditWindow(slot)
         if uiState then
             uiState.NameEditActiveSlotId = slot.SlotId
         end
         if slot.NameInput.SetFocused then
             slot.NameInput:SetFocused(true)
         end
-        QueueNameCaret(slot, current)
         UpdateNameButtonsLayout(slot)
     end
 
@@ -547,6 +611,10 @@ function SlotDetails.Create(options)
         if trimmed == "" then
             trimmed = slot.EditBaseText or slot.CurrentNameText or slot.BaseNameText or ""
         end
+        local maxChars = GetNameEditMaxChars(slot)
+        if maxChars and #trimmed > maxChars then
+            trimmed = trimmed:sub(1, maxChars)
+        end
         SetNameOverride(handle, trimmed)
         if trimmed ~= "" then
             ApplyItemCustomName(handle, trimmed)
@@ -557,6 +625,8 @@ function SlotDetails.Create(options)
         SetNameEditVisible(slot, false)
         slot.NameEditText = nil
         slot.EditBaseText = nil
+        slot.NameEditVisibleText = nil
+        slot.NameEditUpdating = false
         slot.NameButtonsLocked = false
         slot.NameButtonsLockedX = nil
         slot.NameButtonsLockedY = nil
@@ -590,6 +660,10 @@ function SlotDetails.Create(options)
         slot.CurrentNameText = baseName or slot.BaseNameText or ""
         slot.BaseNameText = slot.CurrentNameText
         SetLabelText(slot.NameLabel, slot.CurrentNameText, slot.NameTextSize or 12, 0x000000)
+        slot.NameEditText = nil
+        slot.EditBaseText = nil
+        slot.NameEditVisibleText = nil
+        slot.NameEditUpdating = false
         slot.NameButtonsLocked = false
         slot.NameButtonsLockedX = nil
         slot.NameButtonsLockedY = nil
@@ -657,8 +731,45 @@ function SlotDetails.Create(options)
         if def.NameInput and def.NameInput.Events then
             if def.NameInput.Events.Changed then
                 def.NameInput.Events.Changed:Subscribe(function (ev)
-                    def.NameEditText = ev and ev.Text or ""
-                    ApplyNameInputFormat(def)
+                    if def.NameEditUpdating then
+                        return
+                    end
+                    local newText = NormalizePlainText(ev and ev.Text or "")
+                    if not def.IsEditingName then
+                        def.NameEditText = newText
+                        ApplyNameInputFormat(def)
+                        return
+                    end
+                    if newText == "" then
+                        def.NameEditText = ""
+                        ApplyNameEditWindow(def)
+                        return
+                    end
+                    local fullText = NormalizePlainText(def.NameEditText or "")
+                    local prevVisible = def.NameEditVisibleText or ""
+                    local windowChars = GetNameEditWindowChars(def, def.NameTextSize or 12)
+                    local wasWindowing = windowChars and windowChars > 0 and #fullText > windowChars
+                    if not wasWindowing then
+                        fullText = newText
+                    else
+                        if #newText >= #prevVisible then
+                            local appended = newText:sub(#prevVisible + 1)
+                            if appended ~= "" then
+                                fullText = fullText .. appended
+                            end
+                        else
+                            local removed = #prevVisible - #newText
+                            if removed > 0 then
+                                fullText = fullText:sub(1, math.max(0, #fullText - removed))
+                            end
+                        end
+                    end
+                    def.NameEditText = fullText
+                    local maxChars = GetNameEditMaxChars(def)
+                    if maxChars and #def.NameEditText > maxChars then
+                        def.NameEditText = def.NameEditText:sub(1, maxChars)
+                    end
+                    ApplyNameEditWindow(def)
                 end)
             end
             if def.NameInput.Events.Focused then
@@ -672,6 +783,10 @@ function SlotDetails.Create(options)
                     if def.NameEditSkipCommit then
                         def.NameEditSkipCommit = false
                         SetNameEditVisible(def, false)
+                        def.NameEditText = nil
+                        def.EditBaseText = nil
+                        def.NameEditVisibleText = nil
+                        def.NameEditUpdating = false
                         def.NameButtonsLocked = false
                         def.NameButtonsLockedX = nil
                         def.NameButtonsLockedY = nil
