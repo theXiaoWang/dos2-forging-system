@@ -194,7 +194,48 @@ function Columns.Build(options)
                 infoLowerLinesOffset = scaleY(layoutTuning.SlotItemInfoLowerLinesOffsetY)
             end
             local infoY = slotBottom + scaleY(6)
-            local itemNameLabel = createTextElement(panel, cfg.ID .. "_ItemName", "", childPanelX, infoY + infoNameOffset, childPanelWidth, nameLineHeight, "Center", true, {Size = ctx.HEADER_TEXT_SIZE})
+            local nameButtonSize = math.max(scaleY(12), math.floor(nameLineHeight * 0.7))
+            local nameButtonGap = math.max(scaleX(2), 1)
+            local nameButtonsWidth = nameButtonSize * 2 + nameButtonGap
+            local nameLabelWidth = math.max(0, childPanelWidth - nameButtonsWidth - scaleX(2))
+            local nameLabelX = childPanelX
+            local nameLabelY = infoY + infoNameOffset
+            local itemNameLabel = createTextElement(panel, cfg.ID .. "_ItemName", "", nameLabelX, nameLabelY, nameLabelWidth, nameLineHeight, "Center", true, {Size = ctx.HEADER_TEXT_SIZE})
+            local itemNameInput = panel:AddChild(cfg.ID .. "_ItemNameInput", "GenericUI_Element_Text")
+            itemNameInput:SetPosition(nameLabelX, nameLabelY)
+            itemNameInput:SetSize(nameLabelWidth, nameLineHeight)
+            itemNameInput:SetType("Center")
+            itemNameInput:SetText("")
+            itemNameInput:SetEditable(true)
+            if itemNameInput.SetMouseEnabled then
+                itemNameInput:SetMouseEnabled(false)
+            end
+            if itemNameInput.SetMouseChildren then
+                itemNameInput:SetMouseChildren(false)
+            end
+            if itemNameInput.SetWordWrap then
+                itemNameInput:SetWordWrap(false)
+            end
+            if itemNameInput.SetTextFormat then
+                itemNameInput:SetTextFormat({color = 0x000000, size = ctx.HEADER_TEXT_SIZE})
+            end
+            if itemNameInput.SetVisible then
+                itemNameInput:SetVisible(false)
+            end
+            local nameInputMC = itemNameInput.GetMovieClip and itemNameInput:GetMovieClip() or nil
+            if nameInputMC and nameInputMC.text_txt then
+                nameInputMC.text_txt.type = "input"
+                nameInputMC.text_txt.selectable = true
+                nameInputMC.text_txt.alwaysShowSelection = true
+                nameInputMC.text_txt.multiline = false
+                nameInputMC.text_txt.wordWrap = false
+            end
+            local nameButtonsX = childPanelX + childPanelWidth - nameButtonsWidth
+            local nameButtonsY = nameLabelY + math.floor((nameLineHeight - nameButtonSize) / 2)
+            local editStyle = ctx and ctx.buttonPrefab and ctx.buttonPrefab.STYLES and ctx.buttonPrefab.STYLES.EditWide or ctx.buttonStyle
+            local resetStyle = ctx and ctx.buttonPrefab and ctx.buttonPrefab.STYLES and ctx.buttonPrefab.STYLES.CloseBackgroundless or ctx.buttonStyle
+            local itemNameEditButton = createButtonBox(panel, cfg.ID .. "_ItemNameEdit", nil, nameButtonsX, nameButtonsY, nameButtonSize, nameButtonSize, false, editStyle)
+            local itemNameResetButton = createButtonBox(panel, cfg.ID .. "_ItemNameReset", nil, nameButtonsX + nameButtonSize + nameButtonGap, nameButtonsY, nameButtonSize, nameButtonSize, false, resetStyle)
             local rarityY = infoY + nameLineHeight + infoBlockGap + infoLowerLinesOffset
             local itemRarityLabel = createTextElement(panel, cfg.ID .. "_ItemRarity", "", childPanelX, rarityY, childPanelWidth, infoLineHeight, "Center", false, {Size = ctx.BODY_TEXT_SIZE})
             local levelY = rarityY + infoLineHeight + infoLineGap
@@ -303,6 +344,9 @@ function Columns.Build(options)
                 slotDetailsUI.RegisterSlot({
                     SlotId = cfg.ID .. "_ItemSlot",
                     NameLabel = itemNameLabel,
+                    NameInput = itemNameInput,
+                    NameEditButton = itemNameEditButton,
+                    NameResetButton = itemNameResetButton,
                     RarityLabel = itemRarityLabel,
                     LevelLabel = itemLevelLabel,
                     RuneLabel = runeLabel,

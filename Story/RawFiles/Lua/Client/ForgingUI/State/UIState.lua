@@ -19,6 +19,8 @@ function UIState.Create()
         WarningBackground = nil,
         DragBoundsWidth = 0,
         DragBoundsHeight = 0,
+        ItemNameOverrides = {},
+        NameEditActiveSlotId = nil,
     }
 end
 
