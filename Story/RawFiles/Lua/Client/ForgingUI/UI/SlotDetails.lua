@@ -5,6 +5,8 @@ local SlotDetails = {}
 local getContextCallback = nil
 local tooltipHooked = false
 local RENAME_NET_CHANNEL = "ForgingUI_RenameItem"
+local slotsRef = nil
+local globalBlurHooked = false
 
 local function GetContext()
     return getContextCallback and getContextCallback() or nil
@@ -84,6 +86,154 @@ local function EnsureTooltipHook()
         Client.Tooltip.Hooks.RenderItemTooltip:Subscribe(ApplyTooltipNameOverride, {StringID = "ForgingUI_NameOverrideTooltip"})
         tooltipHooked = true
     end
+end
+
+local function GetElementScreenBounds(element)
+    if not element or not element.GetScreenPosition or not element.GetSize then
+        return nil
+    end
+    local pos = element:GetScreenPosition(false)
+    if not pos then
+        return nil
+    end
+    local size = element:GetSize()
+    local uiObj = element.UI and element.UI.GetUI and element.UI:GetUI() or nil
+    local scale = uiObj and uiObj:GetUIScaleMultiplier() or 1
+    return pos[1], pos[2], (size[1] or 0) * scale, (size[2] or 0) * scale
+end
+
+local function IsPointInsideElement(element, x, y)
+    local ex, ey, ew, eh = GetElementScreenBounds(element)
+    if not ex then
+        return false
+    end
+    return x >= ex and x <= (ex + ew) and y >= ey and y <= (ey + eh)
+end
+
+local function HandleGlobalNameEditClick()
+    local ctx = GetContext()
+    local uiState = ctx and ctx.UIState or nil
+    if not uiState or not uiState.IsVisible then
+        return
+    end
+    local slotId = uiState.NameEditActiveSlotId
+    if not slotId or not slotsRef then
+        return
+    end
+    local slot = slotsRef[slotId]
+    if not slot or not slot.NameInput or not slot.NameInput.SetFocused then
+        return
+    end
+    local isFocused = slot.NameInput.IsFocused and slot.NameInput:IsFocused()
+    if not isFocused then
+        return
+    end
+    if not Client or not Client.GetMousePosition then
+        slot.NameInput:SetFocused(false)
+        return
+    end
+    local x, y = Client.GetMousePosition()
+    if not x or not y then
+        slot.NameInput:SetFocused(false)
+        return
+    end
+    if IsPointInsideElement(slot.NameInput, x, y) then
+        return
+    end
+    slot.NameInput:SetFocused(false)
+end
+
+local function EnsureGlobalBlurHook()
+    if globalBlurHooked then
+        return
+    end
+    if Ext and Ext.Events and Ext.Events.RawInput then
+        Ext.Events.RawInput:Subscribe(function(ev)
+            local inputEvent = ev and ev.Input or nil
+            local input = inputEvent and inputEvent.Input or nil
+            local value = inputEvent and inputEvent.Value or nil
+            if not input or not value then
+                return
+            end
+            if value.State ~= "Pressed" then
+                return
+            end
+            local id = tostring(input.InputId or "")
+            if id == "" then
+                return
+            end
+            if id == "left2" or id == "right2" or id == "middle" then
+                HandleGlobalNameEditClick()
+            end
+        end, {StringID = "ForgingUI_NameEditGlobalBlur"})
+        globalBlurHooked = true
+    end
+end
+
+local function EstimateTextWidth(text, size)
+    local plain = NormalizePlainText(text)
+    local approxCharWidth = math.max(5, math.floor((size or 12) * 0.6))
+    return #plain * approxCharWidth
+end
+
+local function GetElementTextWidth(element, text, size, forceEstimate)
+    if not forceEstimate and element and element.GetMovieClip then
+        local mc = element:GetMovieClip()
+        local field = mc and mc.text_txt or nil
+        if field then
+            local width = field.textWidth or field._width or field.width
+            if type(width) == "number" and width > 0 then
+                return width
+            end
+        end
+    end
+    return EstimateTextWidth(text, size)
+end
+
+local function UpdateNameButtonsLayout(slot)
+    if not slot then
+        return
+    end
+    local editRoot = slot.NameEditButton and (slot.NameEditButton.Root or (slot.NameEditButton.GetRootElement and slot.NameEditButton:GetRootElement()) or nil) or nil
+    local resetRoot = slot.NameResetButton and (slot.NameResetButton.Root or (slot.NameResetButton.GetRootElement and slot.NameResetButton:GetRootElement()) or nil) or nil
+    if not editRoot or not resetRoot or not editRoot.SetPosition or not resetRoot.SetPosition then
+        return
+    end
+    local lineX = slot.NameLineX
+    local lineWidth = slot.NameLineWidth
+    if lineX == nil or lineWidth == nil then
+        return
+    end
+    local lineHeight = slot.NameLineHeight or 0
+    local size = slot.NameTextSize or 12
+    local textValue = nil
+    if slot.IsEditingName and slot.EditBaseText ~= nil then
+        textValue = slot.EditBaseText
+    else
+        textValue = slot.CurrentNameText or ""
+    end
+    if textValue == "" then
+        textValue = slot.BaseNameText or ""
+    end
+    local sourceElement = slot.IsEditingName and slot.NameInput or slot.NameLabel
+    local forceEstimate = slot.IsEditingName == true
+    local textWidth = GetElementTextWidth(sourceElement, textValue, size, forceEstimate)
+    local gap = slot.NameButtonGap or 2
+    local buttonSize = slot.NameButtonSize or 12
+    local buttonsWidth = buttonSize * 2 + gap
+    local centerX = lineX + lineWidth / 2
+    local targetX = math.floor(centerX + (textWidth / 2) + gap)
+    local maxX = lineX + lineWidth - buttonsWidth
+    if targetX > maxX then
+        targetX = maxX
+    end
+    if targetX < lineX then
+        targetX = lineX
+    end
+    local lineY = slot.NameLineY or 0
+    local targetY = lineY + math.floor((lineHeight - buttonSize) / 2)
+    editRoot:SetPosition(targetX, targetY)
+    resetRoot:SetPosition(targetX + buttonSize + gap, targetY)
 end
 
 local function GetItemByHandle(handle)
@@ -169,7 +319,9 @@ function SlotDetails.Create(options)
     getContextCallback = opts.getContext or getContextCallback
 
     local slots = {}
+    slotsRef = slots
     EnsureTooltipHook()
+    EnsureGlobalBlurHook()
 
     local function GetUIState()
         local ctx = GetContext()
@@ -331,6 +483,7 @@ function SlotDetails.Create(options)
             end
         end
         local current = slot.CurrentNameText or slot.BaseNameText or ""
+        slot.EditBaseText = current
         slot.NameEditText = current
         SetNameInputText(slot, current, slot.NameTextSize or 12)
         SetNameEditVisible(slot, true)
@@ -341,6 +494,7 @@ function SlotDetails.Create(options)
             slot.NameInput:SetFocused(true)
         end
         QueueNameCaret(slot, current)
+        UpdateNameButtonsLayout(slot)
     end
 
     local function CommitNameEdit(slot)
@@ -355,23 +509,35 @@ function SlotDetails.Create(options)
         end
         local trimmed = TrimText(slot.NameEditText or "")
         if trimmed == "" then
-            SetNameOverride(handle, nil)
-            local item = ApplyItemCustomName(handle, "")
-            local baseName = item and GetItemDisplayName(item) or nil
-            trimmed = baseName or slot.BaseNameText or ""
-            slot.BaseNameText = trimmed
-        else
-            SetNameOverride(handle, trimmed)
-            ApplyItemCustomName(handle, trimmed)
-            slot.BaseNameText = trimmed
+            trimmed = slot.EditBaseText or slot.CurrentNameText or slot.BaseNameText or ""
         end
+        SetNameOverride(handle, trimmed)
+        if trimmed ~= "" then
+            ApplyItemCustomName(handle, trimmed)
+        end
+        slot.BaseNameText = trimmed
         slot.CurrentNameText = trimmed
         SetLabelText(slot.NameLabel, trimmed, slot.NameTextSize or 12, 0x000000)
         SetNameEditVisible(slot, false)
         slot.NameEditText = nil
+        slot.EditBaseText = nil
+        UpdateNameButtonsLayout(slot)
         local uiState = GetUIState()
         if uiState and uiState.NameEditActiveSlotId == slot.SlotId then
             uiState.NameEditActiveSlotId = nil
+        end
+    end
+
+    local function UnfocusNameEdit()
+        for _, slot in pairs(slots) do
+            if slot and slot.IsEditingName and slot.NameInput and slot.NameInput.SetFocused then
+                local isFocused = slot.NameInput.IsFocused and slot.NameInput:IsFocused()
+                if isFocused == false then
+                    CommitNameEdit(slot)
+                else
+                    slot.NameInput:SetFocused(false)
+                end
+            end
         end
     end
 
@@ -385,6 +551,7 @@ function SlotDetails.Create(options)
         slot.CurrentNameText = baseName or slot.BaseNameText or ""
         slot.BaseNameText = slot.CurrentNameText
         SetLabelText(slot.NameLabel, slot.CurrentNameText, slot.NameTextSize or 12, 0x000000)
+        UpdateNameButtonsLayout(slot)
         if slot.IsEditingName and slot.NameInput and slot.NameInput.SetFocused then
             slot.NameEditSkipCommit = true
             slot.NameInput:SetFocused(false)
@@ -575,6 +742,7 @@ function SlotDetails.Create(options)
             SetNameInputText(slot, name, nameSize)
             SetNameEditVisible(slot, false)
         end
+        UpdateNameButtonsLayout(slot)
         SetLabelText(slot.RarityLabel, rarity, infoSize, rarityColorOverride)
         SetLabelText(slot.LevelLabel, levelText, infoSize, levelColorOverride)
         SetLabelText(slot.RuneLabel, runeText, bodySize, 0x000000)
@@ -583,6 +751,11 @@ function SlotDetails.Create(options)
         UpdateSectionText(slot.Sections and slot.Sections.Stats, details and details.Stats or {})
         UpdateSectionText(slot.Sections and slot.Sections.Extra, details and details.ExtraProperties or {})
         UpdateSectionText(slot.Sections and slot.Sections.Skills, details and details.Skills or {})
+    end
+
+    local ctx = GetContext()
+    if ctx and ctx.Widgets then
+        ctx.Widgets.UnfocusNameEdit = UnfocusNameEdit
     end
 
     return {

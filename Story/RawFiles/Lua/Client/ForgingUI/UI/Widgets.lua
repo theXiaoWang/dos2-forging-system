@@ -237,6 +237,18 @@ end
 
 function Widgets.RegisterSearchBlur(element)
     RegisterSearchBlur(element)
+    if not element or not element.Events or not element.Events.MouseDown then
+        return
+    end
+    if element._NameEditBlurHooked then
+        return
+    end
+    element._NameEditBlurHooked = true
+    element.Events.MouseDown:Subscribe(function ()
+        if Widgets.UnfocusNameEdit then
+            Widgets.UnfocusNameEdit()
+        end
+    end)
 end
 
 function Widgets.SetPreviewInventoryMode(mode)

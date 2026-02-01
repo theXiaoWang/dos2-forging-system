@@ -197,7 +197,7 @@ function Columns.Build(options)
             local nameButtonSize = math.max(scaleY(12), math.floor(nameLineHeight * 0.7))
             local nameButtonGap = math.max(scaleX(2), 1)
             local nameButtonsWidth = nameButtonSize * 2 + nameButtonGap
-            local nameLabelWidth = math.max(0, childPanelWidth - nameButtonsWidth - scaleX(2))
+            local nameLabelWidth = childPanelWidth
             local nameLabelX = childPanelX
             local nameLabelY = infoY + infoNameOffset
             local itemNameLabel = createTextElement(panel, cfg.ID .. "_ItemName", "", nameLabelX, nameLabelY, nameLabelWidth, nameLineHeight, "Center", true, {Size = ctx.HEADER_TEXT_SIZE})
@@ -236,6 +236,14 @@ function Columns.Build(options)
             local resetStyle = ctx and ctx.buttonPrefab and ctx.buttonPrefab.STYLES and ctx.buttonPrefab.STYLES.CloseBackgroundless or ctx.buttonStyle
             local itemNameEditButton = createButtonBox(panel, cfg.ID .. "_ItemNameEdit", nil, nameButtonsX, nameButtonsY, nameButtonSize, nameButtonSize, false, editStyle)
             local itemNameResetButton = createButtonBox(panel, cfg.ID .. "_ItemNameReset", nil, nameButtonsX + nameButtonSize + nameButtonGap, nameButtonsY, nameButtonSize, nameButtonSize, false, resetStyle)
+            local editRoot = itemNameEditButton and (itemNameEditButton.Root or (itemNameEditButton.GetRootElement and itemNameEditButton:GetRootElement()) or nil) or nil
+            if editRoot and editRoot.SetVisible then
+                editRoot:SetVisible(false)
+            end
+            local resetRoot = itemNameResetButton and (itemNameResetButton.Root or (itemNameResetButton.GetRootElement and itemNameResetButton:GetRootElement()) or nil) or nil
+            if resetRoot and resetRoot.SetVisible then
+                resetRoot:SetVisible(false)
+            end
             local rarityY = infoY + nameLineHeight + infoBlockGap + infoLowerLinesOffset
             local itemRarityLabel = createTextElement(panel, cfg.ID .. "_ItemRarity", "", childPanelX, rarityY, childPanelWidth, infoLineHeight, "Center", false, {Size = ctx.BODY_TEXT_SIZE})
             local levelY = rarityY + infoLineHeight + infoLineGap
@@ -347,6 +355,12 @@ function Columns.Build(options)
                     NameInput = itemNameInput,
                     NameEditButton = itemNameEditButton,
                     NameResetButton = itemNameResetButton,
+                    NameLineX = nameLabelX,
+                    NameLineY = nameLabelY,
+                    NameLineWidth = nameLabelWidth,
+                    NameLineHeight = nameLineHeight,
+                    NameButtonSize = nameButtonSize,
+                    NameButtonGap = nameButtonGap,
                     RarityLabel = itemRarityLabel,
                     LevelLabel = itemLevelLabel,
                     RuneLabel = runeLabel,
