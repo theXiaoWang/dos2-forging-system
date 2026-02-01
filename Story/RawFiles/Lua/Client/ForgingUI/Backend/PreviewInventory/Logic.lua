@@ -63,11 +63,6 @@ local function V(...)
     return ctx and ctx.V and ctx.V(...) or Vector.Create(...)
 end
 
-local function ShouldDebugSlotDetails(currentCtx)
-    local tuning = currentCtx and currentCtx.LayoutTuning or nil
-    return tuning and tuning.DebugSlotDetails == true
-end
-
 function PreviewLogic.SetContext(nextCtx)
     ctx = nextCtx
 end
@@ -290,18 +285,9 @@ local function UpdateSlotDetails(slotId, item)
     if slotKey ~= "" and slotKey:find("skillbook", 1, true) then
         return
     end
-    local debug = ShouldDebugSlotDetails(currentCtx)
     local detailsUI = currentCtx.SlotDetailsUI
     local detailsProvider = currentCtx.ItemDetails
     if not detailsUI or not detailsUI.UpdateSlot or not detailsProvider or not detailsProvider.GetItemDetails then
-        if debug and Ext and Ext.Print then
-            Ext.Print(string.format(
-                "[ForgingUI][SlotDetails] Update skipped slot=%s detailsUI=%s provider=%s",
-                tostring(slotId),
-                tostring(detailsUI ~= nil),
-                tostring(detailsProvider ~= nil)
-            ))
-        end
         return
     end
     local slotMap = currentCtx.ForgingUI and currentCtx.ForgingUI.Slots or nil
@@ -345,34 +331,6 @@ local function UpdateSlotDetails(slotId, item)
         return
     end
     State.SlotDetailHandles[slotId] = handle
-    if debug and Ext and Ext.Print then
-        Ext.Print(string.format(
-            "[ForgingUI][SlotDetails] Update request slot=%s handle=%s hasItem=%s",
-            tostring(slotId),
-            tostring(handle),
-            tostring(item ~= nil)
-        ))
-        if not item and hasSlotObject and obj then
-            State.SlotDetailDebug = State.SlotDetailDebug or {}
-            local signature = table.concat({
-                tostring(obj.Type),
-                tostring(obj.ItemHandle),
-                tostring(obj.TemplateID),
-                tostring(obj.StatsID)
-            }, "|")
-            if State.SlotDetailDebug[slotId] ~= signature then
-                State.SlotDetailDebug[slotId] = signature
-                Ext.Print(string.format(
-                    "[ForgingUI][SlotDetails] slot=%s objType=%s itemHandle=%s template=%s stats=%s",
-                    tostring(slotId),
-                    tostring(obj.Type),
-                    tostring(obj.ItemHandle),
-                    tostring(obj.TemplateID),
-                    tostring(obj.StatsID)
-                ))
-            end
-        end
-    end
     local details = nil
     if item then
         local ok, result = pcall(detailsProvider.GetItemDetails, item)
@@ -381,13 +339,6 @@ local function UpdateSlotDetails(slotId, item)
         elseif Ext and Ext.Print then
             Ext.Print(string.format("[ForgingUI] ItemDetails.GetItemDetails failed: %s", tostring(result)))
         end
-    end
-    if debug and Ext and Ext.Print then
-        Ext.Print(string.format(
-            "[ForgingUI][SlotDetails] Update apply slot=%s details=%s",
-            tostring(slotId),
-            tostring(details ~= nil)
-        ))
     end
     detailsUI.UpdateSlot(slotId, details)
 end

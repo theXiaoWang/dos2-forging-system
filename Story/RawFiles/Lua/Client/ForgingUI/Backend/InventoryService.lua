@@ -5,7 +5,6 @@ local ForgingUI = Client.ForgingUI or {}
 Client.ForgingUI = ForgingUI
 
 local Inventory = {}
-Inventory.DEBUG = true
 
 local function SafeStatsField(stats, field)
     if not stats then
@@ -241,69 +240,8 @@ function Inventory.GetInventoryItems()
         end
     end
 
-    if Inventory.DEBUG then
-        local function DebugPrint(msg)
-            if Ext and Ext.Print then
-                Ext.Print(msg)
-            else
-                print(msg)
-            end
-        end
-        DebugPrint(string.format(
-            "[ForgingUI] Inventory debug: party=%d raw=%d equipped=%d total=%d",
-            partyItemsCount,
-            rawItemsCount,
-            equippedCount,
-            #items
-        ))
-        Inventory.DEBUG = false
-    end
-
     return items
-end
-
-function Inventory.DebugDump()
-    local function DebugPrint(msg)
-        if Ext and Ext.Print then
-            Ext.Print(msg)
-        else
-            print(msg)
-        end
-    end
-
-    local char = GetLocalCharacter()
-    if not char then
-        DebugPrint("[ForgingUI] Inventory debug: local character not available")
-        return
-    end
-
-    local rawCount = 0
-    if char.GetInventoryItems then
-        rawCount = #char:GetInventoryItems()
-    end
-
-    local items = Inventory.GetInventoryItems()
-    local equip = 0
-    local magical = 0
-    for _, item in ipairs(items) do
-        if Inventory.IsEquipmentItem(item) then
-            equip = equip + 1
-        end
-        if Inventory.IsMagicalItem(item) then
-            magical = magical + 1
-        end
-    end
-
-    DebugPrint(string.format(
-        "[ForgingUI] Inventory debug: raw=%d total=%d equipment=%d magical=%d char=%s",
-        rawCount,
-        #items,
-        equip,
-        magical,
-        tostring(char.MyGuid or char.Guid or char.NetID or char.Handle or "n/a")
-    ))
 end
 
 ForgingUI.Inventory = Inventory
 return Inventory
-

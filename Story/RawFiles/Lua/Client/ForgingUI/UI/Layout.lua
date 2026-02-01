@@ -40,7 +40,6 @@ local function GetDisplayModes()
     return ctx and ctx.DISPLAY_MODES or {Combine = "Combine", Preview = "Preview"}
 end
 
-local Diagnostics = Ext.Require("Client/ForgingUI/UI/Layout/Diagnostics.lua")
 local Viewport = Ext.Require("Client/ForgingUI/UI/Layout/Viewport.lua")
 local TopBar = Ext.Require("Client/ForgingUI/UI/Layout/TopBar.lua")
 local WarningBanner = Ext.Require("Client/ForgingUI/UI/Layout/WarningBanner.lua")
@@ -50,14 +49,6 @@ local SideInventory = Ext.Require("Client/ForgingUI/UI/Layout/SideInventory.lua"
 local BottomPanels = Ext.Require("Client/ForgingUI/UI/Layout/BottomPanels.lua")
 local Base = Ext.Require("Client/ForgingUI/UI/Layout/Base.lua")
 local Geometry = Ext.Require("Client/ForgingUI/UI/Layout/Geometry.lua")
-
-local diagnostics = Diagnostics.Create({
-    getContext = GetContext,
-})
-Layout.PrintUIState = diagnostics.PrintUIState
-Layout.PrintElementInfo = diagnostics.PrintElementInfo
-Layout.DumpElementTree = diagnostics.DumpElementTree
-Layout.DumpFillElements = diagnostics.DumpFillElements
 
 local viewport = Viewport.Create({
     getContext = GetContext,

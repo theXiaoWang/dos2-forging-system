@@ -382,11 +382,6 @@ function SlotDetails.Create(options)
         return ctx and ctx.UIState or nil
     end
 
-    local function ShouldDebugSlotDetails(ctx)
-        local tuning = ctx and ctx.LayoutTuning or nil
-        return tuning and tuning.DebugSlotDetails == true
-    end
-
     local function ParseHexColor(value, fallback)
         if not value then
             return fallback
@@ -876,14 +871,9 @@ function SlotDetails.Create(options)
     local function UpdateSlot(slotId, details)
         local slot = slots[slotId]
         if not slot then
-            local ctx = GetContext()
-            if ShouldDebugSlotDetails(ctx) and Ext and Ext.Print then
-                Ext.Print(string.format("[ForgingUI][SlotDetailsUI] Slot not registered: %s", tostring(slotId)))
-            end
             return
         end
         local ctx = GetContext()
-        local debug = ShouldDebugSlotDetails(ctx)
         local headerSize = ctx and ctx.HEADER_TEXT_SIZE or 13
         local bodySize = ctx and ctx.BODY_TEXT_SIZE or 11
         local tuning = ctx and ctx.LayoutTuning or nil

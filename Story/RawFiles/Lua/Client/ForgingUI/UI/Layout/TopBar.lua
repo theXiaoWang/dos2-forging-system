@@ -27,12 +27,6 @@ function TopBar.Create(options)
     local layoutTuning = ctx.LayoutTuning or nil
     local useTransparentButtons = layoutTuning and layoutTuning.TopBarTransparentButtons
     local transparentStyle = useTransparentButtons and ctx.styleTransparentLong or nil
-    local topBarDebug = layoutTuning and layoutTuning.TopBarDebug
-    local function DebugPrint(message)
-        if topBarDebug and ctx and ctx.Ext and ctx.Ext.Print then
-            ctx.Ext.Print(message)
-        end
-    end
     local clamp = opts.clamp or function(value, minValue, maxValue)
         if value < minValue then
             return minValue
@@ -115,17 +109,6 @@ function TopBar.Create(options)
                 or ctx.slicedTexturePrefab.STYLES.ContextMenu
         end
     end
-    DebugPrint(string.format(
-        "[ForgingUI] TopBar: size=%sx%s useSliced=%s hasPrefab=%s style=%s frameAlpha=%.2f centerAlpha=%.2f bgAlpha=%.2f",
-        tostring(topBarWidth),
-        tostring(topBarHeight),
-        tostring(ctx and ctx.USE_SLICED_FRAMES),
-        tostring(ctx and ctx.slicedTexturePrefab ~= nil),
-        tostring(layoutTuning and layoutTuning.TopBarFrameStyle),
-        tonumber(topBarFrameAlpha) or 0,
-        tonumber(topBarFrameCenterAlpha) or 0,
-        tonumber(topBarAlpha) or 0
-    ))
     local topBarFrameTex = nil
     if createFrame and topBarFrameStyle then
         local frame, inner, _, _, frameTex = createFrame(
@@ -159,7 +142,6 @@ function TopBar.Create(options)
             inner:SetMouseChildren(false)
         end
         ApplyFrameAlphas(topBarFrameTex, topBarFrameAlpha, topBarFrameCenterAlpha)
-        DebugPrint(string.format("[ForgingUI] TopBar: frame via CreateFrame=%s", tostring(topBarFrameTex ~= nil)))
     end
     if not topBarFrameTex and topBarFrameStyle and ctx and ctx.slicedTexturePrefab and ctx.uiInstance then
         local frameTex = ctx.slicedTexturePrefab.Create(ctx.uiInstance, "TopBar_ContextMenu_Frame", topBar, topBarFrameStyle, vector(topBarWidth, topBarHeight))
@@ -204,7 +186,6 @@ function TopBar.Create(options)
         end
         topBarFrameTex = frameTex
         ApplyFrameAlphas(topBarFrameTex, topBarFrameAlpha, topBarFrameCenterAlpha)
-        DebugPrint(string.format("[ForgingUI] TopBar: frame via direct prefab=%s", tostring(topBarFrameTex ~= nil)))
     end
     if topBar.SetChildIndex and topBarBackground then
         topBar:SetChildIndex(topBarBackground, 0)
@@ -214,7 +195,6 @@ function TopBar.Create(options)
         for _, child in ipairs(topBarFrameTex.Root:GetChildren() or {}) do
             table.insert(childIds, tostring(child and child.ID))
         end
-        DebugPrint(string.format("[ForgingUI] TopBar: frame children=%s", table.concat(childIds, ", ")))
     end
 
     local dragArea = nil
@@ -257,13 +237,6 @@ function TopBar.Create(options)
             registerSearchBlur(dragArea)
         end
     end
-    DebugPrint(string.format(
-        "[ForgingUI] TopBar: dragAreaAlpha=%.2f framePresent=%s type=%s",
-        dragArea and dragArea.GetAlpha and dragArea:GetAlpha() or dragAreaAlpha,
-        tostring(topBarFrameTex ~= nil),
-        tostring(dragAreaType)
-    ))
-
     local topButtonHeight = nil
     if layoutTuning and layoutTuning.TopBarButtonHeight ~= nil then
         topButtonHeight = scaleY(layoutTuning.TopBarButtonHeight)

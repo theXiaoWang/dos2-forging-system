@@ -2,40 +2,19 @@
 -- Extracts item details for the forging UI panels.
 
 local ItemDetails = {}
-local loggedItemHelpersMissing = false
-local loggedItemHelpersFailed = false
-local loggedItemHelpersFallback = false
 
 ---@param options table
 function ItemDetails.Create(options)
     local opts = options or {}
     local getContext = opts.getContext
     local state = {}
-    local function GetContext()
-        return getContext and getContext() or nil
-    end
-    local function ShouldDebug()
-        local ctx = GetContext()
-        local tuning = ctx and ctx.LayoutTuning or nil
-        return tuning and tuning.DebugSlotDetails == true
-    end
     local ItemHelpers = Ext.Require("Client/ForgingUI/Backend/PreviewInventory/ItemHelpers.lua")
     local helpers = nil
     if ItemHelpers and ItemHelpers.Create then
         local ok, result = pcall(ItemHelpers.Create, state)
         if ok then
             helpers = result
-        elseif Ext and Ext.Print and ShouldDebug() and not loggedItemHelpersFailed then
-            loggedItemHelpersFailed = true
-            Ext.Print(string.format("[ForgingUI] ItemDetails: ItemHelpers.Create failed: %s", tostring(result)))
         end
-    elseif Ext and Ext.Print and ShouldDebug() and not loggedItemHelpersMissing then
-        loggedItemHelpersMissing = true
-        Ext.Print("[ForgingUI] ItemDetails: ItemHelpers module missing or invalid.")
-    end
-    if not helpers and Ext and Ext.Print and ShouldDebug() and not loggedItemHelpersFallback then
-        loggedItemHelpersFallback = true
-        Ext.Print("[ForgingUI][ItemDetails] Falling back to local helpers (ItemHelpers unavailable).")
     end
     local function SafeStatsField(stats, field)
         if helpers and helpers.SafeStatsField then
@@ -1481,22 +1460,6 @@ function ItemDetails.Create(options)
                 end
             end
         end
-        if ShouldDebug() and Ext and Ext.Print and #lines == 0 then
-            local statsId = SafeStatsField(stats, "Name")
-                or SafeStatsField(stats, "StatsId")
-                or SafeStatsField(stats, "StatsID")
-            state._ExtraPropsLogged = state._ExtraPropsLogged or {}
-            if statsId and not state._ExtraPropsLogged[statsId] then
-                state._ExtraPropsLogged[statsId] = true
-                local extraRaw = SafeStatsField(stats, "ExtraProperties")
-                Ext.Print(string.format(
-                    "[ForgingUI][ItemDetails] ExtraProperties empty stats=%s extraType=%s listType=%s",
-                    tostring(statsId),
-                    tostring(type(extraRaw)),
-                    tostring(type(listRaw))
-                ))
-            end
-        end
         return lines
     end
 
@@ -1598,22 +1561,6 @@ function ItemDetails.Create(options)
             return nil
         end
         local stats = GetItemStats(item)
-        if not stats and ShouldDebug() then
-            local handle = item.Handle or item.ItemHandle
-            state._MissingStatsLogged = state._MissingStatsLogged or {}
-            if handle and not state._MissingStatsLogged[handle] then
-                state._MissingStatsLogged[handle] = true
-                if Ext and Ext.Print then
-                    local templateId = item.RootTemplate and item.RootTemplate.Id or nil
-                    Ext.Print(string.format(
-                        "[ForgingUI][ItemDetails] Missing stats for handle=%s statsId=%s template=%s",
-                        tostring(handle),
-                        tostring(item.StatsId or item.StatsID),
-                        tostring(templateId)
-                    ))
-                end
-            end
-        end
         local rawSections, cleanSections = BuildSectionLists(stats)
         local details = {
             Handle = item.Handle,

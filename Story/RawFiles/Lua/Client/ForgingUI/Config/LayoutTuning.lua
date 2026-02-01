@@ -10,11 +10,47 @@
 -- - Ratios/multipliers are unitless and should not be scaled.
 --
 -- If you are adjusting spacing:
--- - Prefer small increments (2–6) and test in-game at multiple resolutions.
+-- - Prefer small increments (2-6) and test in-game at multiple resolutions.
 -- - When increasing `SlotPanelHeightBoostY`, the code keeps the bottom edge stable
 --   by moving the panel up by the same amount.
 
 local LayoutTuning = {
+    -- Overall Layout
+    -- Override UI target width ratio (0-1). Lower values shrink the overall forge panel width.
+    TargetWidthRatioOverride = 0.76,
+
+    -- Horizontal gap between Main/Preview/Donor panels (scaled by ScaleX).
+    -- Negative values overlap panels to remove seams.
+    ColumnGapX = -20,
+
+    -- Offset the full canvas horizontally (scaled by ScaleX).
+    CanvasOffsetX = -14,
+
+    -- Left Info Panel
+    -- Hide the left info panel and collapse its space.
+    HideInfoPanel = true,
+
+    -- Adjust the left info panel width to free space for Main/Donor panels (scaled by ScaleX).
+    -- Negative values make the info panel narrower.
+    InfoPanelWidthAdjustX = -120,
+
+    -- Preview Panel
+    -- Base vertical offset for the Preview panel (scaled by ScaleY).
+    -- Positive values move the Preview panel downward; negative values move it up.
+    PreviewPanelOffsetY = 0,
+
+    -- Main/Donor Panels
+    -- Width ratio for Main/Donor slot panels within the mid column (unitless).
+    SlotPanelWidthRatio = 0.28,
+
+    -- Main/Donor panel width expansion (scaled by ScaleX).
+    -- This expands both sides by default to close the gaps between panels.
+    SlotPanelWidthBoostX = 8,
+
+    -- Extra width applied to the Donor panel only, on its outer (right) edge (scaled by ScaleX).
+    -- Use this to close any remaining gap against the right-side container border.
+    DonorRightEdgeBoostX = 4,
+
     -- Main/Donor panel height behavior:
     -- 1.0 = same height as Preview panel (before boost).
     SlotPanelHeightMultiplier = 1.1,
@@ -30,37 +66,21 @@ local LayoutTuning = {
     -- Smaller values move the label upward.
     SlotPanelHeaderOffsetY = 25,
 
-    -- Base vertical offset for the Preview panel (scaled by ScaleY).
-    -- Positive values move the Preview panel downward; negative values move it up.
-    PreviewPanelOffsetY = 0,
+    -- Extra height added to Main/Donor panels only (scaled by ScaleY).
+    SlotPanelExtraBottomY = 20,
 
-    -- Override UI target width ratio (0-1). Lower values shrink the overall forge panel width.
-    TargetWidthRatioOverride = 0.76,
+    -- Main/Donor Item Header (Name, Rarity, Level)
+    -- Offset the item name line downward without moving rarity/level or sections (scaled by ScaleY).
+    SlotItemNameOffsetY = 0,
 
-    -- Hide the left info panel and collapse its space.
-    HideInfoPanel = true,
-
-    -- Adjust the left info panel width to free space for Main/Donor panels (scaled by ScaleX).
-    -- Negative values make the info panel narrower.
-    InfoPanelWidthAdjustX = -120,
-
-    -- Width ratio for Main/Donor slot panels within the mid column (unitless).
-    SlotPanelWidthRatio = 0.28,
-
-    -- Gap between the inner sections inside Main/Donor panels (scaled by ScaleY).
-    SlotSectionGapY = 6,
+    -- Height of the item name line (scaled by ScaleY).
+    SlotItemNameLineHeightY = 20,
 
     -- Gap between the item name line and the rarity/level block (scaled by ScaleY).
     SlotItemInfoBlockGapY = -10,
 
     -- Gap between rarity and level lines (scaled by ScaleY).
     SlotItemInfoLineGapY = -4,
-
-    -- Offset the item name line downward without moving rarity/level or sections (scaled by ScaleY).
-    SlotItemNameOffsetY = 0,
-
-    -- Height of the item name line (scaled by ScaleY).
-    SlotItemNameLineHeightY = 20,
 
     -- Offset the rarity/level lines downward without moving the inner sections (scaled by ScaleY).
     SlotItemInfoLowerLinesOffsetY = 10,
@@ -89,6 +109,10 @@ local LayoutTuning = {
         Artifact = "A34114",
     },
 
+    -- Main/Donor Inner Sections
+    -- Gap between the inner sections inside Main/Donor panels (scaled by ScaleY).
+    SlotSectionGapY = 6,
+
     -- Width reduction applied to inner sections inside Main/Donor panels (scaled by ScaleX).
     -- Positive values make sections narrower by reducing width from both sides.
     SlotSectionWidthReductionX = 70,
@@ -113,21 +137,11 @@ local LayoutTuning = {
     -- Vertical margin reserved around the Donor skillbook slot (scaled by ScaleY).
     SlotSectionSkillbookSlotMarginY = 16,
 
-    -- Horizontal gap between Main/Preview/Donor panels (scaled by ScaleX).
-    -- Negative values overlap panels to remove seams.
-    ColumnGapX = -20,
+    -- Text color for inner section bodies (Base/Stats/Extra/Skills).
+    -- Hex string without alpha; e.g. "000000" for black.
+    InnerSectionTextColorHex = "000000",
 
-    -- Main/Donor panel width expansion (scaled by ScaleX).
-    -- This expands both sides by default to close the gaps between panels.
-    SlotPanelWidthBoostX = 8,
-
-    -- Extra width applied to the Donor panel only, on its outer (right) edge (scaled by ScaleX).
-    -- Use this to close any remaining gap against the right-side container border.
-    DonorRightEdgeBoostX = 4,
-
-    -- Keep TopBar above other panels so buttons always receive input.
-    RaiseTopBarToFront = true,
-
+    -- Base Frame / Background
     -- Extra padding added below the lowest child panel when sizing the base frame (scaled by ScaleY).
     -- Negative values lift the bottom edge upward.
     BaseFrameBottomPaddingY = -25,
@@ -135,11 +149,11 @@ local LayoutTuning = {
     -- Align the base frame bottom to the Main/Donor panels (padding still applies).
     BaseFrameAlignToSlotPanels = true,
 
-    -- Extra height added to Main/Donor panels only (scaled by ScaleY).
-    SlotPanelExtraBottomY = 20,
-
     -- Shrink (positive) or expand (negative) the base frame horizontally (scaled by ScaleX).
     BaseFrameTrimX = 0,
+
+    -- Uniform scale applied to the base frame size (unitless).
+    BaseFrameScale = 1.03,
 
     -- Base panel texture key from Client.Textures.GenericUI.TEXTURES.PANELS.
     BasePanelTexture = "SETTINGS_RIGHT",
@@ -150,24 +164,15 @@ local LayoutTuning = {
     -- Hide the base panel/background entirely without changing child layout.
     HideBasePanel = true,
 
-    -- Uniform scale applied to the base frame size (unitless).
-    BaseFrameScale = 1.03,
+    -- Top Bar (Navbar)
+    -- Keep TopBar above other panels so buttons always receive input.
+    RaiseTopBarToFront = true,
 
     -- Use transparent button textures for the top bar (navbar).
     TopBarTransparentButtons = false,
 
     -- Sliced frame style for the top bar (see SlicedTexture.STYLES).
     TopBarFrameStyle = "SimpleTooltip",
-
-    -- Debug logging for top bar frame construction.
-    TopBarDebug = true,
-
-    -- Debug logging for slot details updates (item name/sections).
-    DebugSlotDetails = true,
-
-    -- Text color for inner section bodies (Base/Stats/Extra/Skills).
-    -- Hex string without alpha; e.g. "000000" for black.
-    InnerSectionTextColorHex = "000000",
 
     -- Top bar background fill (navbar). Set alpha to 0 to disable.
     TopBarBackgroundColorHex = "000000",
@@ -196,9 +201,6 @@ local LayoutTuning = {
 
     -- Shrink the draggable bounds horizontally (scaled by ScaleX).
     DragBoundsTrimX = 10,
-
-    -- Offset the full canvas horizontally (scaled by ScaleX).
-    CanvasOffsetX = -14,
 }
 
 return LayoutTuning

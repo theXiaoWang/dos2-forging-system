@@ -58,7 +58,6 @@ local topBarBackgroundColor = nil
 local panelFrameStyle = nil
 local sectionFrameStyle = nil
 local backgroundTexture = nil
-local backgroundTextureName = nil
 local basePanelTexture = nil
 local introPanelTexture = nil
 local wikiPanelTexture = nil
@@ -215,7 +214,6 @@ local function RefreshContext()
     Context.panelFrameStyle = panelFrameStyle
     Context.sectionFrameStyle = sectionFrameStyle
     Context.backgroundTexture = backgroundTexture
-    Context.backgroundTextureName = backgroundTextureName
     Context.basePanelTexture = basePanelTexture
     Context.introPanelTexture = introPanelTexture
     Context.wikiPanelTexture = wikiPanelTexture
@@ -343,10 +341,6 @@ local function StopPreviewInventoryRefresh()
 end
 local HasLayout = Layout.HasLayout
 local PositionUI = Layout.PositionUI
-local PrintUIState = Layout.PrintUIState
-local PrintElementInfo = Layout.PrintElementInfo
-local DumpElementTree = Layout.DumpElementTree
-local DumpFillElements = Layout.DumpFillElements
 local UpdateUISizeFromViewport = Layout.UpdateUISizeFromViewport
 local EnsureToggleButton = Layout.EnsureToggleButton
 local EnsureViewportListener = Layout.EnsureViewportListener
@@ -356,22 +350,6 @@ local ScheduleUIInputRefresh = Layout.ScheduleUIInputRefresh
 local ScheduleToggleReady = Layout.ScheduleToggleReady
 local GetClientGameState = Layout.GetClientGameState
 local IsGameStateRunning = Layout.IsGameStateRunning
-
-local function DebugShowState(tag)
-    if not Ext then
-        return
-    end
-    local uiObject = uiInstance and uiInstance.GetUI and uiInstance:GetUI() or nil
-    local visible = uiInstance and uiInstance.IsVisible and uiInstance:IsVisible() or false
-    Ext.Print(string.format(
-        "[ForgingUI] %s: uiInstance=%s hasLayout=%s uiObject=%s visible=%s",
-        tostring(tag),
-        tostring(uiInstance ~= nil),
-        tostring(HasLayout()),
-        tostring(uiObject ~= nil),
-        tostring(visible)
-    ))
-end
 
 local function InitTextureStyles()
     if panelFrameStyle ~= nil then
@@ -387,7 +365,6 @@ local function InitTextureStyles()
     if textures.PANELS then
         -- Panels stretch at runtime; avoid panel textures entirely and rely on sliced assets.
         backgroundTexture = nil
-        backgroundTextureName = nil
         introPanelTexture = nil
         wikiPanelTexture = nil
         slotPanelTexture = nil
@@ -403,10 +380,6 @@ local function InitTextureStyles()
         slotPanelTexture = textures.PANELS.CLIPBOARD_THIN or textures.PANELS.TALL_PAGE
     end
 
-    if backgroundTextureName then
-        Ext.Print(string.format("[ForgingUI] Background panel set to %s", backgroundTextureName))
-    end
-
     if not backgroundTexture and textures.BACKGROUNDS then
         backgroundTexture = textures.BACKGROUNDS.NOTEBOOK or textures.BACKGROUNDS.PAGE
     end
@@ -419,17 +392,10 @@ local function InitTextureStyles()
         -- Use WHITE_SHADED frame for used items in preview inventory
         previewUsedFrameTexture = textures.FRAMES.WHITE_SHADED
         -- Fancy silver frame for Main/Donor slots
-        Ext.Print("[ForgingUI] Checking textures.FRAMES.SLOT: " .. tostring(textures.FRAMES.SLOT ~= nil))
         if textures.FRAMES.SLOT then
-            Ext.Print("[ForgingUI] SLOT.SILVER_HIGHLIGHTED: " .. tostring(textures.FRAMES.SLOT.SILVER_HIGHLIGHTED ~= nil))
-            Ext.Print("[ForgingUI] SLOT.SILVER: " .. tostring(textures.FRAMES.SLOT.SILVER ~= nil))
             mainSlotFrameBaseTexture = textures.FRAMES.SLOT.SILVER
             mainSlotFrameHighlightTexture = textures.FRAMES.SLOT.SILVER_HIGHLIGHTED
                 or mainSlotFrameBaseTexture
-            Ext.Print("[ForgingUI] mainSlotFrameBaseTexture loaded: " .. tostring(mainSlotFrameBaseTexture ~= nil))
-            Ext.Print("[ForgingUI] mainSlotFrameHighlightTexture loaded: " .. tostring(mainSlotFrameHighlightTexture ~= nil))
-        else
-            Ext.Print("[ForgingUI] WARNING: textures.FRAMES.SLOT is nil!")
         end
     end
 
@@ -673,7 +639,6 @@ function ForgingUI.Show()
     end
 
     if not uiInstance or not HasLayout() then
-        DebugShowState("Show: layout missing after init")
         QueueLayoutBuild(true)
         Ext.Print("[ForgingUI] UI layout not ready; will show after build.")
         return false
@@ -759,17 +724,6 @@ end
 function ForgingUI.OnForgeButtonClicked()
     Ext.Print("[ForgingUI] Forge button clicked - implement forging logic here")
 end
-
--- Debug helpers used by forgeuistatus.
-ForgingUI.Debug = {
-    PrintUIState = PrintUIState,
-    PrintElementInfo = PrintElementInfo,
-    DumpElementTree = DumpElementTree,
-    DumpFillElements = DumpFillElements,
-    GetBackgroundPanelName = function()
-        return backgroundTextureName
-    end,
-}
 
 Ext.Events.SessionLoaded:Subscribe(function()
     if isEditorBuild then
