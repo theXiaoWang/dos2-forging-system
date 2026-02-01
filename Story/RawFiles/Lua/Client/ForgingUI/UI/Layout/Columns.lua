@@ -189,13 +189,19 @@ function Columns.Build(options)
             local statsHeight = math.floor(sectionAvailable * (statsRatio / ratioSum))
             local extraHeight = math.floor(sectionAvailable * (extraRatio / ratioSum))
             local skillsHeight = sectionAvailable - baseHeight - statsHeight - extraHeight
+            if layoutTuning and layoutTuning.SlotSectionSkillsHeightScale ~= nil then
+                skillsHeight = math.floor(skillsHeight * layoutTuning.SlotSectionSkillsHeightScale)
+                if skillsHeight < 0 then
+                    skillsHeight = 0
+                end
+            end
 
-            local function CreateScrollableSection(sectionId, sectionInner, innerWidth, innerHeight, bodyX, bodyWidth)
+            local function CreateScrollableSection(sectionId, sectionInner, innerWidth, innerHeight, bodyX, bodyWidth, clampContentHeight)
                 if not sectionInner then
                     return nil
                 end
                 local bodyY = 16
-                local bodyHeight = innerHeight - 32
+                local bodyHeight = innerHeight - 16
                 if bodyHeight < 0 then
                     bodyHeight = 0
                 end
@@ -206,26 +212,12 @@ function Columns.Build(options)
                 if listWidth < 0 then
                     listWidth = 0
                 end
-                local list = sectionInner:AddChild(sectionId .. "_ScrollList", "GenericUI_Element_ScrollList")
-                list:SetPosition(listX, bodyY)
-                if applyElementSize then
-                    applyElementSize(list, listWidth, bodyHeight)
-                end
-                if list.SetMouseWheelEnabled then
-                    list:SetMouseWheelEnabled(true)
-                end
-                if list.SetFrame then
-                    list:SetFrame(listWidth, bodyHeight)
-                end
-                if list.SetScrollbarSpacing then
-                    list:SetScrollbarSpacing(0)
-                end
-                local text = createTextElement(list, sectionId .. "_BodyText", "", 0, 0, listWidth, bodyHeight, "Left", true, {Size = ctx.BODY_TEXT_SIZE})
+                local text = createTextElement(sectionInner, sectionId .. "_BodyText", "", listX, bodyY, listWidth, bodyHeight, "Left", true, {Size = ctx.BODY_TEXT_SIZE})
                 return {
-                    List = list,
                     Text = text,
                     BodyWidth = listWidth,
                     BodyHeight = bodyHeight,
+                    ClampContentHeight = clampContentHeight == true,
                 }
             end
 
@@ -245,7 +237,16 @@ function Columns.Build(options)
             local skillsBox, skillsInnerW, skillsInnerH = createSectionBox(panel, cfg.ID .. "_Skills", childPanelX, cursorY, childPanelWidth, skillsHeight, skillsTitle, "", "")
             local reservedWidth = 0
             if cfg.Mode == "Donor" then
-                local slotSize = math.min(50, skillsHeight - 30)
+                local slotMaxSize = 50
+                local slotMarginY = 30
+                if layoutTuning and layoutTuning.SlotSectionSkillbookSlotMaxSizeY ~= nil then
+                    slotMaxSize = scaleY(layoutTuning.SlotSectionSkillbookSlotMaxSizeY)
+                end
+                if layoutTuning and layoutTuning.SlotSectionSkillbookSlotMarginY ~= nil then
+                    slotMarginY = scaleY(layoutTuning.SlotSectionSkillbookSlotMarginY)
+                end
+                local slotSize = math.min(slotMaxSize, skillsHeight - slotMarginY)
+                slotSize = math.floor(slotSize)
                 if slotSize > 0 then
                     local skillsBoxWidth = childPanelWidth
                     local slotSlotX = skillsBoxWidth - slotSize - 8 - (sectionTextPaddingX or 0)
@@ -261,7 +262,8 @@ function Columns.Build(options)
             if skillsBodyWidth < 0 then
                 skillsBodyWidth = 0
             end
-            local skillsSection = CreateScrollableSection(cfg.ID .. "_Skills", skillsBox, skillsInnerW or childPanelWidth, skillsInnerH or skillsHeight, 0, skillsBodyWidth)
+            local clampSkillsContent = cfg.Mode == "Donor"
+            local skillsSection = CreateScrollableSection(cfg.ID .. "_Skills", skillsBox, skillsInnerW or childPanelWidth, skillsInnerH or skillsHeight, 0, skillsBodyWidth, clampSkillsContent)
 
             local runeY = cursorY + skillsHeight + reducedGap
             local runeLabel = createTextElement(panel, cfg.ID .. "_Runes", "Rune Slots:", childPanelX + 4, runeY, childPanelWidth - 8, runeHeight, "Left")

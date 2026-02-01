@@ -61,6 +61,16 @@ local LayoutTuning = {
     -- Positive values make all four sections shorter.
     SlotSectionHeightTrimY = 80,
 
+    -- Scale applied to the Granted Skills section height (unitless).
+    -- Lower values make the Skills section shorter.
+    SlotSectionSkillsHeightScale = 0.8,
+
+    -- Max size for the Donor skillbook slot (scaled by ScaleY).
+    SlotSectionSkillbookSlotMaxSizeY = 70,
+
+    -- Vertical margin reserved around the Donor skillbook slot (scaled by ScaleY).
+    SlotSectionSkillbookSlotMarginY = 16,
+
     -- Horizontal gap between Main/Preview/Donor panels (scaled by ScaleX).
     -- Negative values overlap panels to remove seams.
     ColumnGapX = -20,

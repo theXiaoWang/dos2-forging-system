@@ -85,6 +85,9 @@ function SlotDetails.Create(options)
         local lineCount = EstimateLineCount(lines or {}, bodyWidth, textSize)
         local lineHeight = math.max(12, textSize + 3)
         local contentHeight = math.max(bodyHeight, lineCount * lineHeight)
+        if section.ClampContentHeight or section.List == nil then
+            contentHeight = bodyHeight
+        end
         if text.SetSize then
             text:SetSize(bodyWidth, contentHeight)
         end
