@@ -11,6 +11,7 @@ function ForgeSlotHandlers.Create(options)
     local resolveForgeSlotId = opts.resolveForgeSlotId
     local resolveForgeSlotMode = opts.resolveForgeSlotMode
     local resolveDraggedItem = opts.resolveDraggedItem
+    local resolveSlotItemHandle = opts.resolveSlotItemHandle
     local canAcceptItem = opts.canAcceptItem
     local clearSlotMapping = opts.clearSlotMapping
     local resetSlotVisualState = opts.resetSlotVisualState
@@ -83,9 +84,15 @@ function ForgeSlotHandlers.Create(options)
             if state then
                 state.PreviewDragItemHandle = nil
                 state.PreviewDragSourceIndex = nil
+                state.ForgeDragItemHandle = nil
+                state.ForgeDragSourceSlotId = nil
             end
             return
         end
+
+        local forgeSourceSlotId = state and state.ForgeDragSourceSlotId or nil
+        local forgeSourceHandle = state and state.ForgeDragItemHandle or nil
+        local isForgeDrag = forgeSourceSlotId ~= nil and forgeSourceHandle ~= nil and forgeSourceHandle == dropHandle
 
         if canAcceptItem and not canAcceptItem(slotId, item, dropObj) then
             if showDropWarning then
@@ -147,6 +154,8 @@ function ForgeSlotHandlers.Create(options)
             if state then
                 state.PreviewDragItemHandle = nil
                 state.PreviewDragSourceIndex = nil
+                state.ForgeDragItemHandle = nil
+                state.ForgeDragSourceSlotId = nil
             end
             return
         end
@@ -165,6 +174,59 @@ function ForgeSlotHandlers.Create(options)
                 assignSlotItem(slotId, slot, {Handle = dropHandle})
             end
         end
+        if isForgeDrag and forgeSourceSlotId ~= slotId then
+            local sourceSlot = state and state.ForgeSlots and state.ForgeSlots[forgeSourceSlotId] or nil
+            if sourceSlot then
+                local targetHandle = previousHandle
+                if targetHandle and targetHandle ~= dropHandle then
+                    local targetItem = getItemFromHandle and getItemFromHandle(targetHandle) or nil
+                    local canSwap = targetItem ~= nil
+                    if canSwap and canAcceptItem and not canAcceptItem(forgeSourceSlotId, targetItem, nil) then
+                        canSwap = false
+                    end
+                    if canSwap then
+                        if sourceSlot.SetItem then
+                            sourceSlot:SetItem(targetItem)
+                            if sourceSlot.SetEnabled then
+                                sourceSlot:SetEnabled(true)
+                            end
+                        end
+                        if assignSlotItem then
+                            assignSlotItem(forgeSourceSlotId, sourceSlot, targetItem)
+                        end
+                        if updateSlotDetails then
+                            updateSlotDetails(forgeSourceSlotId, targetItem)
+                        end
+                    else
+                        if sourceSlot.Clear then
+                            sourceSlot:Clear()
+                            if sourceSlot.SetEnabled then
+                                sourceSlot:SetEnabled(true)
+                            end
+                        end
+                        if assignSlotItem then
+                            assignSlotItem(forgeSourceSlotId, sourceSlot, nil)
+                        end
+                        if updateSlotDetails then
+                            updateSlotDetails(forgeSourceSlotId, nil)
+                        end
+                    end
+                else
+                    if sourceSlot.Clear then
+                        sourceSlot:Clear()
+                        if sourceSlot.SetEnabled then
+                            sourceSlot:SetEnabled(true)
+                        end
+                    end
+                    if assignSlotItem then
+                        assignSlotItem(forgeSourceSlotId, sourceSlot, nil)
+                    end
+                    if updateSlotDetails then
+                        updateSlotDetails(forgeSourceSlotId, nil)
+                    end
+                end
+            end
+        end
         if clearSlotHighlight then
             clearSlotHighlight(slot)
         end
@@ -178,11 +240,23 @@ function ForgeSlotHandlers.Create(options)
         if state then
             state.PreviewDragItemHandle = nil
             state.PreviewDragSourceIndex = nil
+            state.ForgeDragItemHandle = nil
+            state.ForgeDragSourceSlotId = nil
         end
     end
 
-    local function HandleForgeSlotDragStarted(slotId, _)
+    local function HandleForgeSlotDragStarted(slotId, slotRef)
         slotId = resolveForgeSlotId and resolveForgeSlotId(slotId, state and state.ForgeSlots and state.ForgeSlots[slotId]) or slotId
+        local handle = state and state.SlotItems and state.SlotItems[slotId] or nil
+        if not handle and resolveSlotItemHandle then
+            handle = resolveSlotItemHandle(slotRef)
+        end
+        if state then
+            state.ForgeDragItemHandle = handle
+            state.ForgeDragSourceSlotId = slotId
+            state.PreviewDragItemHandle = nil
+            state.PreviewDragSourceIndex = nil
+        end
         if clearSlotMapping then
             clearSlotMapping(slotId)
         end

@@ -21,6 +21,8 @@ local State = {
     CurrentPreviewFilter = nil,
     PreviewDragItemHandle = nil,
     PreviewDragSourceIndex = nil,
+    ForgeDragItemHandle = nil,
+    ForgeDragSourceSlotId = nil,
     LastWarningTime = nil,
     LastPreviewHoverSlot = nil,
     LastForgeHoverSlot = nil,
@@ -84,6 +86,8 @@ function PreviewLogic.SetPreviewFilter(filterKey)
     State.CurrentPreviewFilter = key
     State.PreviewDragItemHandle = nil
     State.PreviewDragSourceIndex = nil
+    State.ForgeDragItemHandle = nil
+    State.ForgeDragSourceSlotId = nil
 end
 
 function PreviewLogic.SetPreviewSortMode(mode, resetLayout)
@@ -472,6 +476,12 @@ local PreviewSlotHandlers = Ext.Require("Client/ForgingUI/Backend/PreviewInvento
     getDropClassification = GetDropClassification,
     assignPreviewSlot = PreviewLogic.AssignPreviewSlot,
     clearPreviewSlot = PreviewLogic.ClearPreviewSlot,
+    assignSlotItem = PreviewLogic.AssignSlotItem,
+    getItemFromHandle = GetItemFromHandle,
+    canAcceptItem = function(slotId, item, obj)
+        return PreviewLogic.CanAcceptItem(slotId, item, obj)
+    end,
+    updateSlotDetails = UpdateSlotDetails,
     resolveDraggedItem = ResolveDraggedItem,
     resolveSlotItemHandle = ResolveSlotItemHandle,
     syncForgeSlots = function()
@@ -500,6 +510,7 @@ local ForgeSlotHandlers = Ext.Require("Client/ForgingUI/Backend/PreviewInventory
     resolveForgeSlotId = ResolveForgeSlotId,
     resolveForgeSlotMode = ResolveForgeSlotMode,
     resolveDraggedItem = ResolveDraggedItem,
+    resolveSlotItemHandle = ResolveSlotItemHandle,
     canAcceptItem = function(slotId, item, obj)
         return PreviewLogic.CanAcceptItem(slotId, item, obj)
     end,
@@ -570,6 +581,8 @@ function PreviewLogic.Bind(slots, previewInventory)
         State.CurrentPreviewFilter = nil
         State.PreviewDragItemHandle = nil
         State.PreviewDragSourceIndex = nil
+        State.ForgeDragItemHandle = nil
+        State.ForgeDragSourceSlotId = nil
         State.SlotDetailHandles = {}
     end
     State.PreviewInventory = previewInventory
